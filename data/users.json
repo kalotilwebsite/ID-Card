@@ -1,10 +1,10 @@
 [
   {
     "id": "user-admin-1",
-    "username": "admin",
-    "passwordHash": "ad1982518f978feeda4b890c1c4e2c8eae62989c6ccd0c4876e6c92443bcb313",
+    "username": "Idcard@nuralam.com",
+    "passwordHash": "62d5d09139b702f810bf037010437b96b56c708942199baaf316ae798a863f37",
     "name": "System Administrator",
-    "email": "ajkerpage@gmail.com",
+    "email": "Idcard@nuralam.com",
     "role": "admin",
     "status": "active",
     "createdAt": "2026-10-20T06:44:11.376Z"

@@ -63,18 +63,9 @@ async function request<T>(endpoint: string, options: RequestInit = {}, retryOn40
   const data = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    // If unauthorized or session expired on an operational route, attempt transparent session recovery once
-    if (response.status === 401 && retryOn401 && !endpoint.startsWith('/api/auth/')) {
+    if (response.status === 401) {
       setStoredToken(null);
       setStoredUser(null);
-      try {
-        const loginRes = await apiService.login('admin', 'admin123');
-        if (loginRes?.token) {
-          return await request<T>(endpoint, options, false);
-        }
-      } catch (err) {
-        console.warn('Auto session restoration failed:', err);
-      }
     }
 
     const errorMsg = data?.error || `Request failed with status ${response.status}`;
@@ -184,12 +175,49 @@ export const apiService = {
 
   async importMasterEmployees(
     employees: Partial<MasterEmployee>[]
-  ): Promise<{ success: boolean; message: string; totalRecords: number }> {
-    return request<{ success: boolean; message: string; totalRecords: number }>(
+  ): Promise<{
+    success: boolean;
+    message: string;
+    totalRecords: number;
+    summary?: {
+      total: number;
+      successful: number;
+      duplicates: number;
+      failed: number;
+    };
+    sampleDuplicates?: string[];
+    sampleFailed?: string[];
+  }> {
+    return request<{
+      success: boolean;
+      message: string;
+      totalRecords: number;
+      summary?: {
+        total: number;
+        successful: number;
+        duplicates: number;
+        failed: number;
+      };
+      sampleDuplicates?: string[];
+      sampleFailed?: string[];
+    }>(
       '/api/master-employees/import',
       {
         method: 'POST',
         body: JSON.stringify({ employees }),
+      }
+    );
+  },
+
+  async updateMasterEmployee(
+    enrollId: string,
+    data: Partial<MasterEmployee>
+  ): Promise<{ success: boolean; message: string; employee: MasterEmployee }> {
+    return request<{ success: boolean; message: string; employee: MasterEmployee }>(
+      `/api/master-employees/${encodeURIComponent(enrollId)}`,
+      {
+        method: 'PUT',
+        body: JSON.stringify(data),
       }
     );
   },
@@ -273,16 +301,51 @@ export const apiService = {
   },
 
   // Settings
-  async getPublicSettings(): Promise<{ supervisorSuccessMessage: string }> {
-    return request<{ supervisorSuccessMessage: string }>('/api/settings/public');
+  async getPublicSettings(): Promise<{
+    supervisorSuccessMessage: string;
+    supervisorFormEnabled: boolean;
+    supervisorFormDisabledMessage: string;
+    pdfPrintLayout: 'side_by_side' | 'top_bottom';
+  }> {
+    return request<{
+      supervisorSuccessMessage: string;
+      supervisorFormEnabled: boolean;
+      supervisorFormDisabledMessage: string;
+      pdfPrintLayout: 'side_by_side' | 'top_bottom';
+    }>('/api/settings/public');
   },
 
-  async getAdminSettings(): Promise<{ supervisorSuccessMessage: string }> {
-    return request<{ supervisorSuccessMessage: string }>('/api/settings');
+  async getAdminSettings(): Promise<{
+    supervisorSuccessMessage: string;
+    supervisorFormEnabled: boolean;
+    supervisorFormDisabledMessage: string;
+    pdfPrintLayout: 'side_by_side' | 'top_bottom';
+  }> {
+    return request<{
+      supervisorSuccessMessage: string;
+      supervisorFormEnabled: boolean;
+      supervisorFormDisabledMessage: string;
+      pdfPrintLayout: 'side_by_side' | 'top_bottom';
+    }>('/api/settings');
   },
 
-  async updateAdminSettings(settings: { supervisorSuccessMessage?: string }): Promise<{ supervisorSuccessMessage: string }> {
-    return request<{ supervisorSuccessMessage: string }>('/api/settings', {
+  async updateAdminSettings(settings: {
+    supervisorSuccessMessage?: string;
+    supervisorFormEnabled?: boolean;
+    supervisorFormDisabledMessage?: string;
+    pdfPrintLayout?: 'side_by_side' | 'top_bottom';
+  }): Promise<{
+    supervisorSuccessMessage: string;
+    supervisorFormEnabled: boolean;
+    supervisorFormDisabledMessage: string;
+    pdfPrintLayout: 'side_by_side' | 'top_bottom';
+  }> {
+    return request<{
+      supervisorSuccessMessage: string;
+      supervisorFormEnabled: boolean;
+      supervisorFormDisabledMessage: string;
+      pdfPrintLayout: 'side_by_side' | 'top_bottom';
+    }>('/api/settings', {
       method: 'PUT',
       body: JSON.stringify(settings),
     });

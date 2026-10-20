@@ -40,5 +40,38 @@
     "bloodGroup": "B+",
     "nationalId": "",
     "importedAt": "2026-10-20T06:44:11.440Z"
+  },
+  "BULK-TEST-001": {
+    "enrollId": "BULK-TEST-001",
+    "name": "Bulk Worker One",
+    "designation": "Senior Lead Technician",
+    "department": "Maintenance",
+    "jobType": "Permanent",
+    "joiningDate": "01/03/2026",
+    "cardIssue": "19/10/2026",
+    "emergencyContact": "01700-112233",
+    "permanentAddress": "",
+    "bloodGroup": "AB+",
+    "nationalId": "1998543210123",
+    "photo": "",
+    "signature": "",
+    "importedAt": "2026-10-20T09:27:04.467Z",
+    "updatedAt": "2026-10-20T09:27:04.470Z"
+  },
+  "BULK-TEST-002": {
+    "enrollId": "BULK-TEST-002",
+    "name": "Bulk Worker Two",
+    "designation": "Operator",
+    "department": "Packaging",
+    "jobType": "Permanent",
+    "joiningDate": "01/03/2026",
+    "cardIssue": "19/10/2026",
+    "emergencyContact": "",
+    "permanentAddress": "",
+    "bloodGroup": "O+",
+    "nationalId": "",
+    "photo": "",
+    "signature": "",
+    "importedAt": "2026-10-20T09:27:04.467Z"
   }
 }

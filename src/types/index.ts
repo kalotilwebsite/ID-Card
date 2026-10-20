@@ -233,7 +233,7 @@ export interface PrintSettings {
   };
   columnsPerPage: number;
   rowsPerPage: number;
-  layoutMode: 'duplex' | 'side-by-side' | 'front-only' | 'back-only';
+  layoutMode: 'duplex' | 'side-by-side' | 'top-and-bottom' | 'front-only' | 'back-only';
   showCutMarks: boolean;
   cardBorderRadiusMm: number;
 }
@@ -277,10 +277,14 @@ export interface MasterEmployee {
   joiningDate: string;
   cardIssue: string;
   emergencyContact: string;
+  contactNumber?: string;
   permanentAddress: string;
   bloodGroup: string;
   nationalId?: string;
+  photo?: string;
+  signature?: string;
   importedAt?: string;
+  updatedAt?: string;
 }
 
 export interface PrintHistoryItem {
@@ -311,7 +315,19 @@ export interface SubmissionRecord {
   reprintHistory?: PrintHistoryItem[];
 }
 
+export type PdfPrintLayout = 'side_by_side' | 'top_bottom';
+
 export interface AppSettings {
   supervisorSuccessMessage: string;
+  supervisorFormEnabled: boolean;
+  supervisorFormDisabledMessage: string;
+  pdfPrintLayout: PdfPrintLayout;
+}
+
+export interface ImportResultSummary {
+  total: number;
+  successful: number;
+  duplicates: number;
+  failed: number;
 }
 

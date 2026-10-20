@@ -1,3 +1,6 @@
 {
-  "supervisorSuccessMessage": "Card data successfully recorded for Shift A! Admin office will print by 4:00 PM."
+  "supervisorSuccessMessage": "Employee ID Card data has been submitted successfully and queued for administrative review and printing. Thank you!",
+  "supervisorFormEnabled": true,
+  "supervisorFormDisabledMessage": "Maintenance Mode: ID Card submissions are currently disabled.",
+  "pdfPrintLayout": "side_by_side"
 }

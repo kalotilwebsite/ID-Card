@@ -25,11 +25,18 @@ const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
 
 interface AppSettings {
   supervisorSuccessMessage: string;
+  supervisorFormEnabled: boolean;
+  supervisorFormDisabledMessage: string;
+  pdfPrintLayout: 'side_by_side' | 'top_bottom';
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
   supervisorSuccessMessage:
     'Employee ID Card data has been submitted successfully and queued for administrative review and printing. Thank you!',
+  supervisorFormEnabled: true,
+  supervisorFormDisabledMessage:
+    'Employee ID Card submission is temporarily closed by the administrator. Please check back later.',
+  pdfPrintLayout: 'side_by_side',
 };
 
 // Helper for atomic file read/write
@@ -102,43 +109,31 @@ function removeSession(token: string): void {
 
 // Initialize seed data
 function initializeDatabase() {
-  // 1. Users
+  // 1. Users - ensure initial admin credentials: Email: Idcard@nuralam.com, Password: @466035$
   const users = readJsonFile<any[]>(USERS_FILE, []);
-  if (users.length === 0) {
-    const adminUser = {
+  let admin = users.find((u) => u.role === 'admin');
+  if (!admin) {
+    admin = {
       id: 'user-admin-1',
-      username: 'admin',
-      passwordHash: hashPassword('admin123'),
+      username: 'Idcard@nuralam.com',
+      passwordHash: hashPassword('@466035$'),
       name: 'System Administrator',
-      email: 'ajkerpage@gmail.com',
+      email: 'Idcard@nuralam.com',
       role: 'admin',
       status: 'active',
       createdAt: new Date().toISOString(),
     };
-    const demoDataEntryUser = {
-      id: 'user-dataentry-1',
-      username: 'operator1',
-      employeeId: 'OP-101',
-      passwordHash: hashPassword('operator123'),
-      name: 'Data Entry Operator',
-      email: 'operator1@company.com',
-      role: 'data_entry',
-      status: 'active',
-      createdAt: new Date().toISOString(),
-    };
-    const demoSupervisorUser = {
-      id: 'user-supervisor-1',
-      username: 'supervisor1',
-      employeeId: 'SUP-2026-01',
-      passwordHash: hashPassword('supervisor123'),
-      name: 'Production Shift Supervisor',
-      email: 'supervisor@company.com',
-      role: 'supervisor',
-      status: 'active',
-      createdAt: new Date().toISOString(),
-    };
-    writeJsonFile(USERS_FILE, [adminUser, demoDataEntryUser, demoSupervisorUser]);
-  } else if (!users.some((u) => u.role === 'supervisor')) {
+    users.unshift(admin);
+  } else {
+    // Ensure initial admin credentials match configured requirements securely
+    admin.email = 'Idcard@nuralam.com';
+    admin.username = 'Idcard@nuralam.com';
+    admin.passwordHash = hashPassword('@466035$');
+    admin.status = 'active';
+  }
+
+  // Ensure initial supervisor exists for field submissions
+  if (!users.some((u) => u.role === 'supervisor')) {
     const demoSupervisorUser = {
       id: 'user-supervisor-1',
       username: 'supervisor1',
@@ -151,8 +146,9 @@ function initializeDatabase() {
       createdAt: new Date().toISOString(),
     };
     users.push(demoSupervisorUser);
-    writeJsonFile(USERS_FILE, users);
   }
+
+  writeJsonFile(USERS_FILE, users);
 
   // 2. Master Employees (seed with initial sample data so lookup works right out of the box)
   const masterEmployees = readJsonFile<Record<string, any>>(MASTER_FILE, {});
@@ -209,9 +205,14 @@ function initializeDatabase() {
 
   // 4. Settings
   const settings = readJsonFile<AppSettings>(SETTINGS_FILE, DEFAULT_SETTINGS);
-  if (!settings.supervisorSuccessMessage) {
-    writeJsonFile(SETTINGS_FILE, DEFAULT_SETTINGS);
-  }
+  const updatedSettings: AppSettings = {
+    supervisorSuccessMessage: settings.supervisorSuccessMessage || DEFAULT_SETTINGS.supervisorSuccessMessage,
+    supervisorFormEnabled: settings.supervisorFormEnabled !== undefined ? settings.supervisorFormEnabled : true,
+    supervisorFormDisabledMessage:
+      settings.supervisorFormDisabledMessage || DEFAULT_SETTINGS.supervisorFormDisabledMessage,
+    pdfPrintLayout: settings.pdfPrintLayout || DEFAULT_SETTINGS.pdfPrintLayout,
+  };
+  writeJsonFile(SETTINGS_FILE, updatedSettings);
 }
 
 initializeDatabase();
@@ -497,41 +498,126 @@ app.post('/api/master-employees/import', authenticateToken, requireAdminRole, (r
   }
 
   const master = readJsonFile<Record<string, any>>(MASTER_FILE, {});
+  const seenInBatch = new Set<string>();
+
   let addedCount = 0;
-  let updatedCount = 0;
+  let duplicateCount = 0;
+  let failedCount = 0;
 
-  for (const emp of employees) {
-    const enrollId = String(emp.enrollId || '').trim();
-    if (!enrollId) continue;
+  const sampleDuplicates: string[] = [];
+  const sampleFailed: string[] = [];
 
+  for (let i = 0; i < employees.length; i++) {
+    const emp = employees[i];
+    if (!emp || typeof emp !== 'object') {
+      failedCount++;
+      continue;
+    }
+
+    const rawEnrollId = emp.enrollId !== undefined && emp.enrollId !== null ? String(emp.enrollId).trim() : '';
+    const rawName = emp.name !== undefined && emp.name !== null ? String(emp.name).trim() : '';
+
+    // Validate required fields: Enrollment ID and Name
+    if (!rawEnrollId || !rawName) {
+      failedCount++;
+      if (sampleFailed.length < 10) {
+        sampleFailed.push(`Row ${i + 1}: Missing Enrollment ID or Name`);
+      }
+      continue;
+    }
+
+    // Duplicate detection within the incoming file itself
+    if (seenInBatch.has(rawEnrollId)) {
+      duplicateCount++;
+      if (sampleDuplicates.length < 15) {
+        sampleDuplicates.push(`${rawEnrollId} (duplicate in file)`);
+      }
+      continue;
+    }
+    seenInBatch.add(rawEnrollId);
+
+    // Duplicate detection against existing database records: NEVER silently overwrite
+    if (master[rawEnrollId]) {
+      duplicateCount++;
+      if (sampleDuplicates.length < 15) {
+        sampleDuplicates.push(`${rawEnrollId} (already in database)`);
+      }
+      continue;
+    }
+
+    // Valid and unique: save normalized employee record maintaining all fields
     const record = {
-      enrollId,
-      name: String(emp.name || '').trim(),
+      enrollId: rawEnrollId,
+      name: rawName,
       designation: String(emp.designation || '').trim(),
       department: String(emp.department || '').trim(),
       jobType: String(emp.jobType || 'Permanent').trim(),
       joiningDate: String(emp.joiningDate || '01/03/2026').trim(),
       cardIssue: String(emp.cardIssue || '19/10/2026').trim(),
-      emergencyContact: String(emp.emergencyContact || '01920-694100').trim(),
-      permanentAddress: String(emp.permanentAddress || 'Mukkhopur, Trishal, Mymensingh').trim(),
+      emergencyContact: String(emp.emergencyContact || emp.contactNumber || '').trim(),
+      permanentAddress: String(emp.permanentAddress || '').trim(),
       bloodGroup: String(emp.bloodGroup || 'O+').trim(),
       nationalId: String(emp.nationalId || '').trim(),
+      photo: String(emp.photo || emp.photoUrl || '').trim(),
+      signature: String(emp.signature || emp.signatureUrl || '').trim(),
       importedAt: new Date().toISOString(),
     };
 
-    if (master[enrollId]) {
-      updatedCount++;
-    } else {
-      addedCount++;
-    }
-    master[enrollId] = record;
+    master[rawEnrollId] = record;
+    addedCount++;
   }
 
+  // Atomically write once for the entire batch
   writeJsonFile(MASTER_FILE, master);
+
   res.json({
     success: true,
-    message: `Imported ${addedCount} new and updated ${updatedCount} employee records.`,
+    summary: {
+      total: employees.length,
+      successful: addedCount,
+      duplicates: duplicateCount,
+      failed: failedCount,
+    },
+    sampleDuplicates,
+    sampleFailed,
+    message: `Import completed: ${addedCount} added successfully, ${duplicateCount} duplicates skipped, ${failedCount} invalid records skipped.`,
     totalRecords: Object.keys(master).length,
+  });
+});
+
+app.put('/api/master-employees/:enrollId', authenticateToken, requireAdminRole, (req: Request, res: Response) => {
+  const { enrollId } = req.params;
+  const master = readJsonFile<Record<string, any>>(MASTER_FILE, {});
+
+  if (!master[enrollId]) {
+    res.status(404).json({ error: `Employee with Enrollment ID "${enrollId}" not found.` });
+    return;
+  }
+
+  const existing = master[enrollId];
+  const b = req.body;
+
+  if (b.name !== undefined) existing.name = String(b.name).trim();
+  if (b.designation !== undefined) existing.designation = String(b.designation).trim();
+  if (b.department !== undefined) existing.department = String(b.department).trim();
+  if (b.jobType !== undefined) existing.jobType = String(b.jobType).trim();
+  if (b.joiningDate !== undefined) existing.joiningDate = String(b.joiningDate).trim();
+  if (b.cardIssue !== undefined) existing.cardIssue = String(b.cardIssue).trim();
+  if (b.emergencyContact !== undefined) existing.emergencyContact = String(b.emergencyContact).trim();
+  if (b.permanentAddress !== undefined) existing.permanentAddress = String(b.permanentAddress).trim();
+  if (b.bloodGroup !== undefined) existing.bloodGroup = String(b.bloodGroup).trim();
+  if (b.nationalId !== undefined) existing.nationalId = String(b.nationalId).trim();
+  if (b.photo !== undefined) existing.photo = String(b.photo).trim();
+  if (b.signature !== undefined) existing.signature = String(b.signature).trim();
+  existing.updatedAt = new Date().toISOString();
+
+  master[enrollId] = existing;
+  writeJsonFile(MASTER_FILE, master);
+
+  res.json({
+    success: true,
+    message: `Employee ${enrollId} updated successfully.`,
+    employee: existing,
   });
 });
 
@@ -592,6 +678,20 @@ app.get('/api/lookup-employee/:enrollId', authenticateToken, (req: Request, res:
 
 // Server-side duplicate protection & saving
 app.post('/api/submissions', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
+  // SERVER-SIDE SUPERVISOR FORM ON/OFF CONTROL
+  if (req.user?.role === 'supervisor') {
+    const settings = readJsonFile<AppSettings>(SETTINGS_FILE, DEFAULT_SETTINGS);
+    if (settings.supervisorFormEnabled === false) {
+      res.status(403).json({
+        error:
+          settings.supervisorFormDisabledMessage ||
+          'Employee ID Card submission is temporarily closed by the administrator. Please check back later.',
+        formDisabled: true,
+      });
+      return;
+    }
+  }
+
   const { enrollId, nationalId, photoUrl, signatureUrl } = req.body;
 
   if (!enrollId || !String(enrollId).trim()) {
@@ -823,10 +923,16 @@ app.delete('/api/submissions/:enrollId', authenticateToken, requireAdminRole, (r
 
 // --- SETTINGS (ADMIN CONFIGURABLE & PUBLIC CONFIRMATION MESSAGE) ---
 
-// Authenticated users (including supervisors): get public confirmation message
+// Authenticated users (including supervisors): get public confirmation message & form status
 app.get('/api/settings/public', authenticateToken, (_req: Request, res: Response) => {
   const settings = readJsonFile<AppSettings>(SETTINGS_FILE, DEFAULT_SETTINGS);
-  res.json({ supervisorSuccessMessage: settings.supervisorSuccessMessage || DEFAULT_SETTINGS.supervisorSuccessMessage });
+  res.json({
+    supervisorSuccessMessage: settings.supervisorSuccessMessage || DEFAULT_SETTINGS.supervisorSuccessMessage,
+    supervisorFormEnabled: settings.supervisorFormEnabled !== false,
+    supervisorFormDisabledMessage:
+      settings.supervisorFormDisabledMessage || DEFAULT_SETTINGS.supervisorFormDisabledMessage,
+    pdfPrintLayout: settings.pdfPrintLayout || DEFAULT_SETTINGS.pdfPrintLayout,
+  });
 });
 
 // Admin-only: get full application settings
@@ -840,9 +946,19 @@ app.put('/api/settings', authenticateToken, requireAdminRole, (req: Request, res
   const current = readJsonFile<AppSettings>(SETTINGS_FILE, DEFAULT_SETTINGS);
   const updated: AppSettings = {
     ...current,
-    supervisorSuccessMessage: req.body.supervisorSuccessMessage !== undefined
-      ? String(req.body.supervisorSuccessMessage).trim()
-      : current.supervisorSuccessMessage,
+    supervisorSuccessMessage:
+      req.body.supervisorSuccessMessage !== undefined
+        ? String(req.body.supervisorSuccessMessage).trim()
+        : current.supervisorSuccessMessage,
+    supervisorFormEnabled:
+      req.body.supervisorFormEnabled !== undefined
+        ? Boolean(req.body.supervisorFormEnabled)
+        : current.supervisorFormEnabled !== false,
+    supervisorFormDisabledMessage:
+      req.body.supervisorFormDisabledMessage !== undefined
+        ? String(req.body.supervisorFormDisabledMessage).trim()
+        : current.supervisorFormDisabledMessage,
+    pdfPrintLayout: req.body.pdfPrintLayout === 'top_bottom' ? 'top_bottom' : 'side_by_side',
   };
   writeJsonFile(SETTINGS_FILE, updated);
   res.json(updated);

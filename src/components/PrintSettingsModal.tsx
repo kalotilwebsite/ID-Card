@@ -309,6 +309,26 @@ export const PrintSettingsModal: React.FC<PrintSettingsModalProps> = ({
 
               <button
                 type="button"
+                onClick={() => update({ layoutMode: 'top-and-bottom' })}
+                className={`p-3 rounded-xl border text-left transition-all ${
+                  settings.layoutMode === 'top-and-bottom'
+                    ? 'border-rose-600 bg-rose-50/60 text-rose-950 ring-1 ring-rose-500'
+                    : 'border-gray-200 hover:border-gray-300 text-gray-700 bg-white'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold">Top and Bottom</span>
+                  {settings.layoutMode === 'top-and-bottom' && (
+                    <Check className="w-4 h-4 text-rose-600" />
+                  )}
+                </div>
+                <p className="text-[11px] text-gray-500 mt-1">
+                  Front at top and Back at bottom for each card printed on the same sheet.
+                </p>
+              </button>
+
+              <button
+                type="button"
                 onClick={() => update({ layoutMode: 'front-only' })}
                 className={`p-3 rounded-xl border text-left transition-all ${
                   settings.layoutMode === 'front-only'

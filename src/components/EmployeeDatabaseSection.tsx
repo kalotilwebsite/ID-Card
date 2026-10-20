@@ -5,19 +5,22 @@ import {
   Search,
   Trash2,
   RefreshCw,
-  FileSpreadsheet,
   Download,
   AlertTriangle,
   CheckCircle,
-  Building,
-  User,
-  Hash,
-  Filter,
+  Pencil,
+  X,
+  Save,
+  Camera,
+  Image as ImageIcon,
+  Check,
 } from 'lucide-react';
 import { apiService } from '../services/apiService';
 import { MasterEmployee, ColumnMapping } from '../types';
 import { parseExcelFile } from '../services/excelService';
 import { ColumnMappingModal } from './ColumnMappingModal';
+import { CameraCaptureModal } from './CameraCaptureModal';
+import { SignaturePadModal } from './SignaturePadModal';
 
 interface EmployeeDatabaseSectionProps {
   onRefreshData?: () => void;
@@ -37,6 +40,28 @@ export function EmployeeDatabaseSection({ onRefreshData }: EmployeeDatabaseSecti
   const [rawRows, setRawRows] = useState<Record<string, any>[]>([]);
   const [currentFileName, setCurrentFileName] = useState('');
   const [importWarnings, setImportWarnings] = useState<string[]>([]);
+
+  // Import Results Modal State
+  const [importResult, setImportResult] = useState<{
+    isOpen: boolean;
+    total: number;
+    successful: number;
+    duplicates: number;
+    failed: number;
+    sampleDuplicates?: string[];
+  } | null>(null);
+
+  // Edit Employee Modal State
+  const [editingEmployee, setEditingEmployee] = useState<MasterEmployee | null>(null);
+  const [editFormData, setEditFormData] = useState<Partial<MasterEmployee>>({});
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+
+  // Modals for editing photo & signature
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [cameraTarget, setCameraTarget] = useState<'photo' | 'signature'>('photo');
+  const [isSignaturePadOpen, setIsSignaturePadOpen] = useState(false);
+  const editPhotoInputRef = useRef<HTMLInputElement>(null);
+  const editSigInputRef = useRef<HTMLInputElement>(null);
 
   const loadMasterEmployees = async () => {
     setIsLoading(true);
@@ -108,6 +133,8 @@ export function EmployeeDatabaseSection({ onRefreshData }: EmployeeDatabaseSecti
           permanentAddress: getVal('permanentAddress') || 'Mukkhopur, Trishal, Mymensingh',
           bloodGroup: getVal('bloodGroup') || 'O+',
           nationalId: getVal('nationalId') || '',
+          photo: getVal('photoUrl') || '',
+          signature: getVal('signatureUrl') || '',
         };
       });
 
@@ -123,7 +150,15 @@ export function EmployeeDatabaseSection({ onRefreshData }: EmployeeDatabaseSecti
       }
 
       const res = await apiService.importMasterEmployees(validRecords);
-      setStatusMessage({ type: 'success', text: res.message });
+      setImportResult({
+        isOpen: true,
+        total: res.summary?.total || validRecords.length,
+        successful: res.summary?.successful || 0,
+        duplicates: res.summary?.duplicates || 0,
+        failed: res.summary?.failed || 0,
+        sampleDuplicates: res.sampleDuplicates,
+      });
+
       await loadMasterEmployees();
       if (onRefreshData) onRefreshData();
     } catch (err: any) {
@@ -131,6 +166,31 @@ export function EmployeeDatabaseSection({ onRefreshData }: EmployeeDatabaseSecti
       setStatusMessage({ type: 'error', text: err.message || 'Failed to import records into master database.' });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleOpenEdit = (emp: MasterEmployee) => {
+    setEditingEmployee(emp);
+    setEditFormData({ ...emp });
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingEmployee) return;
+
+    setIsSavingEdit(true);
+    try {
+      const res = await apiService.updateMasterEmployee(editingEmployee.enrollId, editFormData);
+      setEmployees((prev) =>
+        prev.map((item) => (item.enrollId === editingEmployee.enrollId ? res.employee : item))
+      );
+      setStatusMessage({ type: 'success', text: `Employee "${editingEmployee.enrollId}" updated successfully.` });
+      setEditingEmployee(null);
+      if (onRefreshData) onRefreshData();
+    } catch (err: any) {
+      setStatusMessage({ type: 'error', text: err.message || 'Failed to update employee.' });
+    } finally {
+      setIsSavingEdit(false);
     }
   };
 
@@ -158,10 +218,53 @@ export function EmployeeDatabaseSection({ onRefreshData }: EmployeeDatabaseSecti
     try {
       await apiService.clearMasterEmployees();
       setEmployees([]);
-      setStatusMessage({ type: 'success', text: 'All master employee records have been cleared.' });
+      setStatusMessage({ type: 'success', text: 'Master employee database has been cleared.' });
+      if (onRefreshData) onRefreshData();
     } catch (err: any) {
-      setStatusMessage({ type: 'error', text: err.message || 'Failed to clear master database.' });
+      setStatusMessage({ type: 'error', text: err.message || 'Failed to clear database.' });
     }
+  };
+
+  const handleExportCSV = () => {
+    if (employees.length === 0) return;
+
+    const headers = [
+      'Enroll ID',
+      'Name',
+      'Designation',
+      'Department',
+      'Job Type',
+      'Join Date',
+      'Card Issue',
+      'Contact',
+      'Address',
+      'Blood Group',
+      'NID',
+    ];
+
+    const rows = employees.map((e) => [
+      `"${e.enrollId || ''}"`,
+      `"${e.name || ''}"`,
+      `"${e.designation || ''}"`,
+      `"${e.department || ''}"`,
+      `"${e.jobType || ''}"`,
+      `"${e.joiningDate || ''}"`,
+      `"${e.cardIssue || ''}"`,
+      `"${e.emergencyContact || ''}"`,
+      `"${e.permanentAddress || ''}"`,
+      `"${e.bloodGroup || ''}"`,
+      `"${e.nationalId || ''}"`,
+    ]);
+
+    const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `Master_Employees_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const departments = Array.from(new Set(employees.map((e) => e.department).filter(Boolean))).sort();
@@ -169,78 +272,26 @@ export function EmployeeDatabaseSection({ onRefreshData }: EmployeeDatabaseSecti
   const filteredEmployees = employees.filter((emp) => {
     const matchesSearch =
       !searchQuery.trim() ||
-      emp.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      emp.enrollId.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      emp.designation.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      emp.department.toLowerCase().includes(searchQuery.toLowerCase());
+      emp.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      emp.enrollId?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      emp.designation?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      emp.department?.toLowerCase().includes(searchQuery.toLowerCase());
 
     const matchesDept = selectedDept === 'all' || emp.department === selectedDept;
-
     return matchesSearch && matchesDept;
   });
 
-  const handleExportCSV = () => {
-    if (employees.length === 0) return;
-    const headers = [
-      'Enrollment ID',
-      'Name',
-      'Designation',
-      'Department',
-      'Job Type',
-      'Joining Date',
-      'Card Issue',
-      'Emergency Contact',
-      'Permanent Address',
-      'Blood Group',
-      'National ID',
-    ];
-
-    const rows = employees.map((e) => [
-      `"${e.enrollId}"`,
-      `"${e.name}"`,
-      `"${e.designation}"`,
-      `"${e.department}"`,
-      `"${e.jobType || ''}"`,
-      `"${e.joiningDate || ''}"`,
-      `"${e.cardIssue || ''}"`,
-      `"${e.emergencyContact || ''}"`,
-      `"${(e.permanentAddress || '').replace(/"/g, '""')}"`,
-      `"${e.bloodGroup || ''}"`,
-      `"${e.nationalId || ''}"`,
-    ]);
-
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `Master_Employee_Database_${Date.now()}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
   return (
-    <div className="max-w-7xl mx-auto p-4 sm:p-6 space-y-6">
-      {/* Header Banner */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-4">
+      {/* Top Action Bar */}
+      <div className="bg-white border border-slate-200 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
         <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-rose-50 text-rose-700 border border-rose-200">
-              Admin Only
-            </span>
-            <h2 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight flex items-center gap-2">
-              <Database className="w-5 h-5 text-rose-600" />
-              <span>Master Employee Database</span>
-            </h2>
-          </div>
-          <p className="text-xs text-slate-600 max-w-2xl">
-            Import and maintain master employee records from Excel with column mapping. The
-            <strong className="text-slate-900"> Enrollment ID</strong> serves as the unique lookup key
-            for supervisors. This master data is strictly kept separate from submitted cards.
+          <h2 className="text-sm font-bold text-slate-900">Master Employee Database</h2>
+          <p className="text-xs text-slate-500 mt-0.5">
+            {employees.length} records total. Enrollment ID is used as unique key.
           </p>
         </div>
 
-        {/* Action Buttons */}
         <div className="flex items-center gap-2 flex-wrap">
           <input
             type="file"
@@ -252,16 +303,16 @@ export function EmployeeDatabaseSection({ onRefreshData }: EmployeeDatabaseSecti
 
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-2"
+            className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5"
           >
             <Upload className="w-3.5 h-3.5" />
-            <span>Import from Excel</span>
+            <span>Import Excel</span>
           </button>
 
           <button
             onClick={handleExportCSV}
             disabled={employees.length === 0}
-            className="px-3 py-2 bg-white hover:bg-slate-100 border border-slate-300 disabled:opacity-50 text-slate-700 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors"
+            className="px-3 py-1.5 bg-white hover:bg-slate-50 border border-slate-300 disabled:opacity-50 text-slate-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
           >
             <Download className="w-3.5 h-3.5 text-slate-500" />
             <span>Export CSV</span>
@@ -269,19 +320,19 @@ export function EmployeeDatabaseSection({ onRefreshData }: EmployeeDatabaseSecti
 
           <button
             onClick={loadMasterEmployees}
-            className="p-2 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 rounded-xl transition-colors"
+            className="p-1.5 bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 rounded-lg transition-colors"
             title="Refresh database"
           >
-            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
           </button>
 
           {employees.length > 0 && (
             <button
               onClick={handleClearAll}
-              className="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors"
+              className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors"
             >
               <Trash2 className="w-3.5 h-3.5" />
-              <span>Clear All</span>
+              <span>Clear</span>
             </button>
           )}
         </div>
@@ -290,10 +341,10 @@ export function EmployeeDatabaseSection({ onRefreshData }: EmployeeDatabaseSecti
       {/* Status Alert */}
       {statusMessage && (
         <div
-          className={`p-3.5 rounded-xl text-xs flex items-center justify-between gap-2.5 ${
+          className={`p-3 rounded-lg text-xs flex items-center justify-between gap-2 border ${
             statusMessage.type === 'success'
-              ? 'bg-emerald-50 border border-emerald-200 text-emerald-800'
-              : 'bg-rose-50 border border-rose-200 text-rose-800'
+              ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+              : 'bg-rose-50 border-rose-200 text-rose-800'
           }`}
         >
           <div className="flex items-center gap-2">
@@ -308,32 +359,30 @@ export function EmployeeDatabaseSection({ onRefreshData }: EmployeeDatabaseSecti
             onClick={() => setStatusMessage(null)}
             className="text-slate-400 hover:text-slate-700 font-bold"
           >
-            Dismiss
+            ×
           </button>
         </div>
       )}
 
       {/* Filter and Search Bar */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xs">
+      <div className="bg-white border border-slate-200 rounded-xl p-3 flex flex-col sm:flex-row items-center justify-between gap-2.5 shadow-xs">
         <div className="flex items-center gap-2 w-full sm:w-auto">
-          {/* Search */}
           <div className="relative flex-1 sm:w-72">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search by name, ID, department..."
-              className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-rose-500 focus:bg-white"
+              placeholder="Search name, ID, department..."
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-900 placeholder-slate-400 focus:outline-hidden focus:border-slate-900 focus:bg-white"
             />
           </div>
 
-          {/* Department Filter */}
           <div className="relative">
             <select
               value={selectedDept}
               onChange={(e) => setSelectedDept(e.target.value)}
-              className="bg-slate-50 border border-slate-300 text-xs text-slate-700 rounded-xl px-3 py-2 focus:outline-none focus:border-rose-500"
+              className="bg-slate-50 border border-slate-300 text-xs text-slate-700 rounded-lg px-2.5 py-1.5 focus:outline-hidden focus:border-slate-900"
             >
               <option value="all">All Departments ({employees.length})</option>
               {departments.map((dept) => (
@@ -347,70 +396,72 @@ export function EmployeeDatabaseSection({ onRefreshData }: EmployeeDatabaseSecti
 
         <div className="text-xs text-slate-500 font-medium">
           Showing <span className="text-slate-900 font-bold">{filteredEmployees.length}</span> of{' '}
-          <span className="text-rose-600 font-bold">{employees.length}</span> Master Records
+          <span className="text-slate-900 font-bold">{employees.length}</span>
         </div>
       </div>
 
       {/* Master Employees Table */}
-      <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
+      <div className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
         {filteredEmployees.length === 0 ? (
-          <div className="p-12 text-center">
-            <Database className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-            <h3 className="text-sm font-bold text-slate-800 mb-1">No Master Records Found</h3>
-            <p className="text-xs text-slate-500 max-w-sm mx-auto mb-4">
+          <div className="p-8 text-center">
+            <Database className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+            <h3 className="text-xs font-bold text-slate-800 mb-1">No Records Found</h3>
+            <p className="text-xs text-slate-500 max-w-sm mx-auto mb-3">
               {employees.length === 0
-                ? 'Import employee records from an Excel worksheet to get started. Enrollment ID will be used as the unique key.'
-                : 'No employees match the current search query or department filter.'}
+                ? 'Import employee records from an Excel worksheet to get started.'
+                : 'No employees match the current filter.'}
             </p>
-            {employees.length === 0 && (
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs inline-flex items-center gap-2"
-              >
-                <Upload className="w-3.5 h-3.5" />
-                <span>Import Excel Spreadsheet</span>
-              </button>
-            )}
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
-                <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-bold uppercase tracking-wider text-slate-600">
-                  <th className="py-3 px-4">Enroll ID</th>
-                  <th className="py-3 px-4">Employee Name</th>
-                  <th className="py-3 px-4">Designation</th>
-                  <th className="py-3 px-4">Department</th>
-                  <th className="py-3 px-4">Job Type</th>
-                  <th className="py-3 px-4">Join Date</th>
-                  <th className="py-3 px-4">Contact</th>
-                  <th className="py-3 px-4">Blood</th>
-                  <th className="py-3 px-4 text-right">Actions</th>
+                <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-600">
+                  <th className="py-2.5 px-3">Enroll ID</th>
+                  <th className="py-2.5 px-3">Name</th>
+                  <th className="py-2.5 px-3">Designation</th>
+                  <th className="py-2.5 px-3">Department</th>
+                  <th className="py-2.5 px-3">Job Type</th>
+                  <th className="py-2.5 px-3">Join Date</th>
+                  <th className="py-2.5 px-3">Card Issue</th>
+                  <th className="py-2.5 px-3">Contact</th>
+                  <th className="py-2.5 px-3">Blood</th>
+                  <th className="py-2.5 px-3 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filteredEmployees.map((emp) => (
-                  <tr key={emp.enrollId} className="hover:bg-slate-50/80 transition-colors">
-                    <td className="py-3 px-4 font-mono font-bold text-purple-700">{emp.enrollId}</td>
-                    <td className="py-3 px-4 font-bold text-slate-900 whitespace-nowrap">{emp.name}</td>
-                    <td className="py-3 px-4 text-slate-700">{emp.designation}</td>
-                    <td className="py-3 px-4">
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
+                  <tr key={emp.enrollId} className="hover:bg-slate-50/70 transition-colors">
+                    <td className="py-2.5 px-3 font-mono font-bold text-slate-900">{emp.enrollId}</td>
+                    <td className="py-2.5 px-3 font-semibold text-slate-900 whitespace-nowrap">{emp.name}</td>
+                    <td className="py-2.5 px-3 text-slate-700">{emp.designation}</td>
+                    <td className="py-2.5 px-3">
+                      <span className="px-1.5 py-0.5 rounded text-[10px] bg-slate-100 text-slate-700 border border-slate-200">
                         {emp.department}
                       </span>
                     </td>
-                    <td className="py-3 px-4 text-slate-600">{emp.jobType}</td>
-                    <td className="py-3 px-4 font-mono text-slate-600">{emp.joiningDate}</td>
-                    <td className="py-3 px-4 font-mono text-slate-600">{emp.emergencyContact}</td>
-                    <td className="py-3 px-4 font-bold text-rose-600">{emp.bloodGroup}</td>
-                    <td className="py-3 px-4 text-right">
-                      <button
-                        onClick={() => handleDeleteEmployee(emp.enrollId)}
-                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                        title="Delete from master database"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                    <td className="py-2.5 px-3 text-slate-600">{emp.jobType}</td>
+                    <td className="py-2.5 px-3 font-mono text-slate-600">{emp.joiningDate}</td>
+                    <td className="py-2.5 px-3 font-mono text-slate-600">{emp.cardIssue}</td>
+                    <td className="py-2.5 px-3 font-mono text-slate-600">{emp.emergencyContact}</td>
+                    <td className="py-2.5 px-3 font-bold text-slate-800">{emp.bloodGroup}</td>
+                    <td className="py-2.5 px-3 text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => handleOpenEdit(emp)}
+                          className="p-1 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded transition-colors"
+                          title="Edit employee record"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteEmployee(emp.enrollId)}
+                          className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
+                          title="Delete from master database"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -419,6 +470,322 @@ export function EmployeeDatabaseSection({ onRefreshData }: EmployeeDatabaseSecti
           </div>
         )}
       </div>
+
+      {/* Import Results Modal */}
+      {importResult?.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs">
+          <div className="bg-white border border-slate-200 w-full max-w-md rounded-xl shadow-xl overflow-hidden p-5 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-sm font-bold text-slate-900">Import Results</h3>
+              <button
+                onClick={() => setImportResult(null)}
+                className="p-1 text-slate-400 hover:text-slate-700 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
+                <div className="text-base font-bold text-emerald-800">{importResult.successful}</div>
+                <div className="text-[10px] text-emerald-700 font-semibold uppercase">Added</div>
+              </div>
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                <div className="text-base font-bold text-amber-800">{importResult.duplicates}</div>
+                <div className="text-[10px] text-amber-700 font-semibold uppercase">Duplicates Skipped</div>
+              </div>
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
+                <div className="text-base font-bold text-slate-800">{importResult.failed}</div>
+                <div className="text-[10px] text-slate-600 font-semibold uppercase">Invalid Skipped</div>
+              </div>
+            </div>
+
+            <div className="text-xs text-slate-600 leading-relaxed bg-slate-50 p-3 rounded-lg border border-slate-100">
+              Total {importResult.total} records processed. Existing records and duplicate Enrollment IDs were preserved without overwriting.
+            </div>
+
+            {importResult.sampleDuplicates && importResult.sampleDuplicates.length > 0 && (
+              <div className="space-y-1">
+                <div className="text-[10px] font-bold text-slate-500 uppercase">Sample Duplicates Skipped</div>
+                <div className="max-h-24 overflow-y-auto text-xs font-mono text-slate-700 bg-slate-50 p-2 rounded border border-slate-200 space-y-0.5">
+                  {importResult.sampleDuplicates.map((dup, idx) => (
+                    <div key={idx}>{dup}</div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <button
+              onClick={() => setImportResult(null)}
+              className="w-full py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold transition-colors"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Employee Modal */}
+      {editingEmployee && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs">
+          <div className="bg-white border border-slate-200 w-full max-w-lg rounded-xl shadow-xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">Edit Employee Record</h3>
+                <span className="text-xs font-mono text-slate-500">ID: {editingEmployee.enrollId}</span>
+              </div>
+              <button
+                onClick={() => setEditingEmployee(null)}
+                className="p-1 text-slate-400 hover:text-slate-700 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEdit} className="p-5 overflow-y-auto space-y-3.5">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">Name</label>
+                  <input
+                    type="text"
+                    value={editFormData.name || ''}
+                    onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
+                    className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-900"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">Designation</label>
+                  <input
+                    type="text"
+                    value={editFormData.designation || ''}
+                    onChange={(e) => setEditFormData({ ...editFormData, designation: e.target.value })}
+                    className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">Department</label>
+                  <input
+                    type="text"
+                    value={editFormData.department || ''}
+                    onChange={(e) => setEditFormData({ ...editFormData, department: e.target.value })}
+                    className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">Job Type</label>
+                  <input
+                    type="text"
+                    value={editFormData.jobType || ''}
+                    onChange={(e) => setEditFormData({ ...editFormData, jobType: e.target.value })}
+                    className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">Joining Date</label>
+                  <input
+                    type="text"
+                    value={editFormData.joiningDate || ''}
+                    onChange={(e) => setEditFormData({ ...editFormData, joiningDate: e.target.value })}
+                    className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">Card Issue Date</label>
+                  <input
+                    type="text"
+                    value={editFormData.cardIssue || ''}
+                    onChange={(e) => setEditFormData({ ...editFormData, cardIssue: e.target.value })}
+                    className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">Contact Number</label>
+                  <input
+                    type="text"
+                    value={editFormData.emergencyContact || ''}
+                    onChange={(e) => setEditFormData({ ...editFormData, emergencyContact: e.target.value })}
+                    className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">Blood Group</label>
+                  <input
+                    type="text"
+                    value={editFormData.bloodGroup || ''}
+                    onChange={(e) => setEditFormData({ ...editFormData, bloodGroup: e.target.value })}
+                    className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 font-bold"
+                  />
+                </div>
+
+                <div className="col-span-2">
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">National ID (NID)</label>
+                  <input
+                    type="text"
+                    value={editFormData.nationalId || ''}
+                    onChange={(e) => setEditFormData({ ...editFormData, nationalId: e.target.value })}
+                    className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 font-mono"
+                  />
+                </div>
+
+                <div className="col-span-2">
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">Permanent Address</label>
+                  <input
+                    type="text"
+                    value={editFormData.permanentAddress || ''}
+                    onChange={(e) => setEditFormData({ ...editFormData, permanentAddress: e.target.value })}
+                    className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-900"
+                  />
+                </div>
+              </div>
+
+              {/* Photo & Signature Section */}
+              <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-100">
+                {/* Photo */}
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">Photo</label>
+                  <div className="flex items-center gap-2">
+                    {editFormData.photo ? (
+                      <img src={editFormData.photo} alt="Photo" className="w-12 h-14 object-cover rounded border border-slate-200" />
+                    ) : (
+                      <div className="w-12 h-14 bg-slate-100 rounded border border-dashed border-slate-300 flex items-center justify-center text-slate-400">
+                        <ImageIcon className="w-4 h-4" />
+                      </div>
+                    )}
+                    <div className="flex flex-col gap-1">
+                      <input
+                        type="file"
+                        ref={editPhotoInputRef}
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onload = (ev) => setEditFormData({ ...editFormData, photo: ev.target?.result as string });
+                            reader.readAsDataURL(file);
+                          }
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => editPhotoInputRef.current?.click()}
+                        className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-[10px] font-semibold"
+                      >
+                        Upload
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCameraTarget('photo');
+                          setIsCameraOpen(true);
+                        }}
+                        className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-[10px] font-semibold"
+                      >
+                        Camera
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Signature */}
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">Signature</label>
+                  <div className="flex items-center gap-2">
+                    {editFormData.signature ? (
+                      <img src={editFormData.signature} alt="Signature" className="w-20 h-10 object-contain rounded border border-slate-200 bg-white" />
+                    ) : (
+                      <div className="w-20 h-10 bg-slate-100 rounded border border-dashed border-slate-300 flex items-center justify-center text-slate-400">
+                        <ImageIcon className="w-4 h-4" />
+                      </div>
+                    )}
+                    <div className="flex flex-col gap-1">
+                      <input
+                        type="file"
+                        ref={editSigInputRef}
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onload = (ev) => setEditFormData({ ...editFormData, signature: ev.target?.result as string });
+                            reader.readAsDataURL(file);
+                          }
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => editSigInputRef.current?.click()}
+                        className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-[10px] font-semibold"
+                      >
+                        Upload
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setIsSignaturePadOpen(true)}
+                        className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-[10px] font-semibold"
+                      >
+                        Draw
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-slate-200 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingEmployee(null)}
+                  className="px-3 py-1.5 border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-lg text-xs font-semibold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingEdit}
+                  className="px-4 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold disabled:opacity-50"
+                >
+                  {isSavingEdit ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Camera Capture Modal for editing */}
+      <CameraCaptureModal
+        isOpen={isCameraOpen}
+        onClose={() => setIsCameraOpen(false)}
+        title={cameraTarget === 'photo' ? 'Capture Employee Photo' : 'Capture Employee Signature'}
+        type={cameraTarget}
+        onCapture={(dataUrl: string) => {
+          if (cameraTarget === 'photo') {
+            setEditFormData((prev) => ({ ...prev, photo: dataUrl }));
+          } else {
+            setEditFormData((prev) => ({ ...prev, signature: dataUrl }));
+          }
+          setIsCameraOpen(false);
+        }}
+      />
+
+      {/* Signature Pad Modal for editing */}
+      <SignaturePadModal
+        isOpen={isSignaturePadOpen}
+        onClose={() => setIsSignaturePadOpen(false)}
+        onSave={(dataUrl: string) => {
+          setEditFormData((prev) => ({ ...prev, signature: dataUrl }));
+          setIsSignaturePadOpen(false);
+        }}
+      />
 
       {/* Column Mapping Modal for Master Import */}
       <ColumnMappingModal

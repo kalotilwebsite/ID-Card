@@ -59,28 +59,10 @@ export function SubmissionsSection({
       setStatusMessage(null);
     } catch (err: any) {
       console.error('Failed to load submissions:', err);
-      const isAuthError =
-        err.status === 401 ||
-        err.message?.includes('Session expired') ||
-        err.message?.includes('Authentication required');
       setStatusMessage({
         type: 'error',
-        text: isAuthError
-          ? 'Session reconnecting...'
-          : err.message || 'Failed to load submitted records.',
+        text: err.message || 'Failed to load submitted records.',
       });
-      if (isAuthError) {
-        setTimeout(async () => {
-          try {
-            await apiService.login('admin', 'admin123');
-            const data = await apiService.getSubmissions();
-            setSubmissions(data);
-            setStatusMessage(null);
-          } catch {
-            // Silently retain error state
-          }
-        }, 600);
-      }
     } finally {
       setIsLoading(false);
     }

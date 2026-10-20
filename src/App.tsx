@@ -155,20 +155,20 @@ export default function App() {
           } else if (user.role === 'data_entry') {
             setActiveNavTab('data_entry_form');
           }
-          setIsAuthLoading(false);
-          return;
         }
       }
 
-      // Default quick auto-login as admin for instant ready-to-test experience
+      // Sync saved print layout settings
       try {
-        const loginRes = await apiService.login('admin', 'admin123');
-        setCurrentUser(loginRes.user);
-      } catch (err) {
-        console.error('Initial auto-login error:', err);
-      } finally {
-        setIsAuthLoading(false);
-      }
+        const settings = await apiService.getPublicSettings();
+        if (settings?.pdfPrintLayout === 'top_bottom') {
+          setPrintSettings((prev) => ({ ...prev, layoutMode: 'top-and-bottom' }));
+        } else {
+          setPrintSettings((prev) => ({ ...prev, layoutMode: 'side-by-side' }));
+        }
+      } catch (e) {}
+
+      setIsAuthLoading(false);
     };
 
     initAuth();
@@ -184,29 +184,6 @@ export default function App() {
       setActiveNavTab('supervisor_submission');
     }
   }, [currentUser, activeNavTab]);
-
-  const handleSwitchAccount = async (targetRole: UserRole) => {
-    try {
-      setIsAuthLoading(true);
-      if (targetRole === 'admin') {
-        const res = await apiService.login('admin', 'admin123');
-        setCurrentUser(res.user);
-        setActiveNavTab('submissions');
-      } else if (targetRole === 'supervisor') {
-        const res = await apiService.supervisorLogin('SUP-2026-01', 'supervisor123');
-        setCurrentUser(res.user);
-        setActiveNavTab('supervisor_submission');
-      } else {
-        const res = await apiService.login('operator1', 'operator123');
-        setCurrentUser(res.user);
-        setActiveNavTab('data_entry_form');
-      }
-    } catch (err) {
-      console.error('Switch account error:', err);
-    } finally {
-      setIsAuthLoading(false);
-    }
-  };
 
   const handleLogout = () => {
     apiService.logout();
@@ -372,33 +349,55 @@ export default function App() {
   const isDataEntry = currentUser?.role === 'data_entry';
   const isSupervisor = currentUser?.role === 'supervisor';
 
+  if (isAuthLoading) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <div className="w-6 h-6 border-2 border-slate-900 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!currentUser) {
+    return (
+      <LoginModal
+        isOpen={true}
+        forced={true}
+        onLoginSuccess={(user) => {
+          setCurrentUser(user);
+          if (user.role === 'supervisor') {
+            setActiveNavTab('supervisor_submission');
+          } else if (user.role === 'data_entry') {
+            setActiveNavTab('data_entry_form');
+          } else {
+            setActiveNavTab('submissions');
+          }
+        }}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900 flex flex-col font-sans">
       {/* Top Application Bar - Clean White Professional Header */}
       <header className="bg-white border-b border-slate-200 backdrop-blur sticky top-0 z-30 px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 shadow-xs">
         {/* Brand and Title */}
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-rose-600 to-rose-500 flex items-center justify-center text-white shadow-xs">
+          <div className="w-9 h-9 rounded-xl bg-slate-900 flex items-center justify-center text-white shadow-xs">
             <Layers className="w-5 h-5" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-sm sm:text-base font-black tracking-tight text-slate-900">
-                Bulk Employee ID Card Generator
-              </h1>
-              <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
-                EXACT REFERENCE TEMPLATES
-              </span>
-            </div>
+            <h1 className="text-sm sm:text-base font-bold tracking-tight text-slate-900">
+              Bulk Employee ID Card Generator
+            </h1>
             <p className="text-[11px] text-slate-500 font-medium">
-              Akij Ceramics &amp; Rosa Sanitary Ware Bangladesh
+              Employee ID Card Management &amp; Printing
             </p>
           </div>
         </div>
 
         {/* User Account, Settings & Authentication Controls */}
         <div className="flex items-center gap-2.5 flex-wrap">
-          {currentUser ? (
+          {currentUser && (
             <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl">
               <div className="flex flex-col text-right">
                 <span className="text-xs font-bold text-slate-900">{currentUser.name}</span>
@@ -408,16 +407,16 @@ export default function App() {
               </div>
 
               {isAdmin ? (
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 flex items-center gap-1">
-                  <Shield className="w-3 h-3 text-rose-600" /> Admin
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-900 text-white flex items-center gap-1">
+                  <Shield className="w-3 h-3" /> Admin
                 </span>
               ) : isSupervisor ? (
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200 flex items-center gap-1">
-                  <Briefcase className="w-3 h-3 text-purple-600" /> Supervisor
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-800 text-white flex items-center gap-1">
+                  <Briefcase className="w-3 h-3" /> Supervisor
                 </span>
               ) : (
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-50 text-sky-700 border border-sky-200 flex items-center gap-1">
-                  <Lock className="w-3 h-3 text-sky-600" /> Data Entry
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-700 text-white flex items-center gap-1">
+                  <Lock className="w-3 h-3" /> Data Entry
                 </span>
               )}
 
@@ -427,55 +426,22 @@ export default function App() {
                   type="button"
                   onClick={() => setIsAdminSettingsOpen(true)}
                   className="px-2 py-1 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-[11px] font-semibold rounded-lg transition-colors flex items-center gap-1"
-                  title="Configure Admin Settings & Supervisor Confirmation Message"
+                  title="Configure Admin Settings"
                 >
-                  <Settings className="w-3.5 h-3.5 text-rose-600" />
+                  <Settings className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">Settings</span>
                 </button>
-              )}
-
-              {/* Developer/Admin Role Switcher: Only accessible for Administrators to quickly verify workflows */}
-              {isAdmin && (
-                <>
-                  <div className="h-5 w-[1px] bg-slate-200 mx-1" />
-                  <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => handleSwitchAccount('supervisor')}
-                      className="px-2 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 text-[10px] font-semibold rounded-lg transition-colors"
-                      title="Switch to Supervisor view (Employee ID: SUP-2026-01)"
-                    >
-                      Supervisor Portal
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleSwitchAccount('data_entry')}
-                      className="px-2 py-1 bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 text-[10px] font-semibold rounded-lg transition-colors"
-                      title="Switch to Data Entry Operator view"
-                    >
-                      Operator View
-                    </button>
-                  </div>
-                </>
               )}
 
               <button
                 type="button"
                 onClick={handleLogout}
-                className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors ml-1"
+                className="p-1 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors ml-1"
                 title="Sign out"
               >
                 <LogOut className="w-3.5 h-3.5" />
               </button>
             </div>
-          ) : (
-            <button
-              onClick={() => setIsLoginModalOpen(true)}
-              className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5"
-            >
-              <Lock className="w-3.5 h-3.5" />
-              <span>Sign In</span>
-            </button>
           )}
         </div>
       </header>
@@ -1150,10 +1116,17 @@ export default function App() {
         getCardElement={getCardElement}
       />
 
-      {/* Admin Settings Modal (Configures supervisor submission confirmation message & settings) */}
+      {/* Admin Settings Modal */}
       <AdminSettingsModal
         isOpen={isAdminSettingsOpen}
         onClose={() => setIsAdminSettingsOpen(false)}
+        onSettingsSaved={(newSettings) => {
+          if (newSettings.pdfPrintLayout === 'top_bottom') {
+            setPrintSettings((prev) => ({ ...prev, layoutMode: 'top-and-bottom' }));
+          } else {
+            setPrintSettings((prev) => ({ ...prev, layoutMode: 'side-by-side' }));
+          }
+        }}
       />
     </div>
   );

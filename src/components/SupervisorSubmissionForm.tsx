@@ -77,18 +77,32 @@ export function SupervisorSubmissionForm({
     'Employee ID Card data has been submitted successfully and queued for administrative review and printing. Thank you!'
   );
 
+  // Form status state
+  const [formEnabled, setFormEnabled] = useState(true);
+  const [disabledMessage, setDisabledMessage] = useState(
+    'Employee ID Card submission is temporarily closed by the administrator. Please check back later.'
+  );
+
   // Hidden file inputs
   const photoFileInputRef = useRef<HTMLInputElement>(null);
   const sigFileInputRef = useRef<HTMLInputElement>(null);
   const enrollInputRef = useRef<HTMLInputElement>(null);
 
-  // Fetch admin configured success message on mount
+  // Fetch admin configured settings on mount
   useEffect(() => {
     const fetchPublicSettings = async () => {
       try {
         const settings = await apiService.getPublicSettings();
-        if (settings?.supervisorSuccessMessage) {
-          setAdminConfiguredMessage(settings.supervisorSuccessMessage);
+        if (settings) {
+          if (settings.supervisorSuccessMessage) {
+            setAdminConfiguredMessage(settings.supervisorSuccessMessage);
+          }
+          if (settings.supervisorFormEnabled !== undefined) {
+            setFormEnabled(settings.supervisorFormEnabled);
+          }
+          if (settings.supervisorFormDisabledMessage) {
+            setDisabledMessage(settings.supervisorFormDisabledMessage);
+          }
         }
       } catch (e) {
         // Fallback to default
@@ -255,6 +269,10 @@ export function SupervisorSubmissionForm({
       }
     } catch (err: any) {
       console.error('Supervisor submit error:', err);
+      if (err.data?.formDisabled) {
+        setFormEnabled(false);
+        if (err.message) setDisabledMessage(err.message);
+      }
       if (err.status === 409 || err.message?.includes('Already submitted')) {
         setAlreadySubmitted(true);
         setSubmitError(
@@ -280,54 +298,28 @@ export function SupervisorSubmissionForm({
     }, 100);
   };
 
+  if (currentUser?.role === 'supervisor' && !formEnabled) {
+    return (
+      <div className="max-w-xl mx-auto my-12 p-8 bg-white border border-slate-200 rounded-xl text-center space-y-3 shadow-xs">
+        <h2 className="text-base font-bold text-slate-900">Form Closed</h2>
+        <p className="text-xs text-slate-600 leading-relaxed max-w-md mx-auto">{disabledMessage}</p>
+      </div>
+    );
+  }
+
   return (
-    <div className="max-w-4xl mx-auto p-4 sm:p-6 space-y-6">
-      {/* Top Banner with Supervisor Identity */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-purple-50 text-purple-700 border border-purple-200 flex items-center gap-1">
-              <Briefcase className="w-3 h-3 text-purple-600" />
-              Supervisor Portal
-            </span>
-            {currentUser && (
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200 flex items-center gap-1 font-mono">
-                <IdCard className="w-3 h-3 text-purple-600" />
-                Supervisor ID: {currentUser.employeeId || currentUser.username}
-              </span>
-            )}
-            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
-              <Check className="w-3 h-3 text-emerald-600" />
-              Authorized Session
-            </span>
-          </div>
-
-          <h2 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight">
-            Add New Employee ID Card
-          </h2>
-          <p className="text-xs text-slate-600 max-w-2xl mt-0.5">
-            Enter the employee&apos;s Enrollment ID to retrieve their official master database record, then submit their National ID, portrait photo, and signature.
-          </p>
-        </div>
-
+    <div className="max-w-4xl mx-auto p-4 sm:p-6 space-y-5">
+      {/* Clean Header */}
+      <div className="bg-white border border-slate-200 rounded-xl p-4 flex items-center justify-between">
+        <h2 className="text-sm font-bold text-slate-900">Data Entry → Add New Employee ID Card</h2>
         <button
           type="button"
           onClick={handleResetForm}
-          className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold flex items-center gap-2 self-start sm:self-auto transition-colors border border-slate-200"
+          className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors border border-slate-200"
         >
           <RotateCcw className="w-3.5 h-3.5" />
-          <span>Clear Form / Next ID</span>
+          <span>Reset Form</span>
         </button>
-      </div>
-
-      {/* Role Notice */}
-      <div className="bg-purple-50/70 border border-purple-200 rounded-xl px-4 py-2.5 flex items-center justify-between text-xs text-purple-900">
-        <div className="flex items-center gap-2">
-          <Shield className="w-4 h-4 text-purple-600 shrink-0" />
-          <span>
-            <strong>Access Level:</strong> You have authorized access to submit new employee ID card data. Card previewing and printing are exclusively handled by the system administrator.
-          </span>
-        </div>
       </div>
 
       {/* Error Notification */}

@@ -152,9 +152,9 @@ export const exportCardsToPdf = async (
       });
     }
   } else if (settings.layoutMode === 'side-by-side') {
-    // Side by side: Front and Back adjacent on the same page
-    // Each pair takes 2 slots
-    const pairsPerPage = Math.floor(cardsPerPage / 2) || 1;
+    // Side by side: Front on left, Back on right for each card
+    const colsOfPairs = Math.max(1, Math.floor(cols / 2));
+    const pairsPerPage = colsOfPairs * rows;
     const totalBatches = Math.ceil(employees.length / pairsPerPage);
 
     for (let batchIdx = 0; batchIdx < totalBatches; batchIdx++) {
@@ -163,20 +163,52 @@ export const exportCardsToPdf = async (
       const batch = employees.slice(batchIdx * pairsPerPage, (batchIdx + 1) * pairsPerPage);
 
       batch.forEach((emp, pairIdx) => {
-        const slotFront = pairIdx * 2;
-        const slotBack = pairIdx * 2 + 1;
+        const colPair = pairIdx % colsOfPairs;
+        const row = Math.floor(pairIdx / colsOfPairs);
 
-        // Front
-        const colF = slotFront % cols;
-        const rowF = Math.floor(slotFront / cols);
-        const xF = marginLeft + colF * (cardW + gapX);
-        const yF = marginTop + rowF * (cardH + gapY);
+        // Front (Left)
+        const xF = marginLeft + colPair * (cardW * 2 + gapX * 2);
+        const yF = marginTop + row * (cardH + gapY);
 
-        // Back
-        const colB = slotBack % cols;
-        const rowB = Math.floor(slotBack / cols);
-        const xB = marginLeft + colB * (cardW + gapX);
-        const yB = marginTop + rowB * (cardH + gapY);
+        // Back (Right)
+        const xB = xF + cardW + gapX;
+        const yB = yF;
+
+        const imgFront = renderedImages[emp.id]?.front;
+        if (imgFront) {
+          pdf.addImage(imgFront, 'JPEG', xF, yF, cardW, cardH);
+          drawCropMarks(xF, yF, cardW, cardH);
+        }
+
+        const imgBack = renderedImages[emp.id]?.back;
+        if (imgBack) {
+          pdf.addImage(imgBack, 'JPEG', xB, yB, cardW, cardH);
+          drawCropMarks(xB, yB, cardW, cardH);
+        }
+      });
+    }
+  } else if (settings.layoutMode === 'top-and-bottom') {
+    // Top and Bottom: Front at top, Back at bottom for each card
+    const rowsOfPairs = Math.max(1, Math.floor(rows / 2));
+    const pairsPerPage = cols * rowsOfPairs;
+    const totalBatches = Math.ceil(employees.length / pairsPerPage);
+
+    for (let batchIdx = 0; batchIdx < totalBatches; batchIdx++) {
+      if (batchIdx > 0) pdf.addPage([pageWidthMm, pageHeightMm], settings.orientation);
+
+      const batch = employees.slice(batchIdx * pairsPerPage, (batchIdx + 1) * pairsPerPage);
+
+      batch.forEach((emp, pairIdx) => {
+        const col = pairIdx % cols;
+        const rowPair = Math.floor(pairIdx / cols);
+
+        // Front (Top)
+        const xF = marginLeft + col * (cardW + gapX);
+        const yF = marginTop + rowPair * (cardH * 2 + gapY * 2);
+
+        // Back (Bottom)
+        const xB = xF;
+        const yB = yF + cardH + gapY;
 
         const imgFront = renderedImages[emp.id]?.front;
         if (imgFront) {

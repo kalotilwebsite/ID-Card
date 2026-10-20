@@ -10,7 +10,7 @@
 // Paste your deployed Google Apps Script Web App URL below:
 // (You can also configure this dynamically from the Admin Settings tab in the app)
 // -----------------------------------------------------------------------------
-let APPS_SCRIPT_URL = 'YOUR_DEPLOYED_URL_HERE';
+let APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwabtc-_vs0LxYoqF7-VDxj-g4I6vRGKgiXu8uS8NZ7XV-nnOxU5BA63AmMxvMyjyl5sQ/exec';
 
 // Check if user previously saved a custom URL in localStorage
 const storedUrl = localStorage.getItem("id_card_apps_script_url");

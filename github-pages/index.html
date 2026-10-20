@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ID Card Generator & Portal</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- =========================================================================
+       APP HEADER / NAVBAR
+       ========================================================================= -->
+  <header class="app-header" id="appHeader" style="display: none;">
+    <div class="header-inner">
+      <div class="brand-wrapper">
+        <span class="brand-badge">ID SYSTEM</span>
+        <span class="brand-title" id="headerTitle">ID Card Portal</span>
+      </div>
+      <div class="header-user">
+        <div class="user-badge" id="userBadge">
+          <span class="role-pill" id="userRolePill">Admin</span>
+          <span id="userNameDisplay">Idcard@nuralam.com</span>
+        </div>
+        <button class="btn btn-secondary btn-sm" id="logoutBtn">Logout</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- =========================================================================
+       1. LOGIN SCREEN (Clean, Minimal, White Background)
+       ========================================================================= -->
+  <main class="login-screen" id="loginScreen">
+    <div class="login-card">
+      <div class="login-header">
+        <span class="brand-badge" style="margin-bottom: 0.5rem; display: inline-block;">SECURITY ACCESS</span>
+        <h1>ID Card System</h1>
+      </div>
+
+      <div class="login-tabs">
+        <button type="button" class="login-tab active" id="tabAdminLogin">Admin Login</button>
+        <button type="button" class="login-tab" id="tabSupervisorLogin">Supervisor Login</button>
+      </div>
+
+      <form id="loginForm">
+        <div class="form-group" id="loginUserGroup">
+          <label class="form-label" for="loginUsername" id="loginUserLabel">Email Address</label>
+          <input type="text" id="loginUsername" class="input-control" placeholder="Enter email address" required autocomplete="username">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="loginPassword">Password</label>
+          <input type="password" id="loginPassword" class="input-control" placeholder="Enter password" required autocomplete="current-password">
+        </div>
+
+        <div class="form-error" id="loginErrorMsg"></div>
+
+        <div style="margin-top: 1.5rem;">
+          <button type="submit" class="btn btn-primary" style="width: 100%;" id="loginSubmitBtn">
+            <span>Login to Portal</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </main>
+
+  <!-- =========================================================================
+       MAIN APPLICATION WORKSPACE
+       ========================================================================= -->
+  <div class="main-container" id="appWorkspace" style="display: none;">
+
+    <!-- =======================================================================
+         VIEW A: SUPERVISOR DATA ENTRY FORM
+         ======================================================================= -->
+    <section class="view-section" id="supervisorView">
+      
+      <!-- Notice when Form is Disabled by Admin -->
+      <div class="disabled-notice" id="supervisorDisabledNotice" style="display: none;">
+        <h3>Submissions Temporarily Disabled</h3>
+        <p id="supervisorDisabledMsgText">Employee ID Card submissions are currently closed by the administrator.</p>
+      </div>
+
+      <!-- Active Entry Form -->
+      <div class="supervisor-card" id="supervisorActiveCard">
+        <div class="card-topbar">
+          <div>
+            <h2>Data Entry &rarr; Add New Employee ID Card</h2>
+          </div>
+          <span class="status-badge status-pending" id="connectionStatusBadge">Sheets Backend</span>
+        </div>
+
+        <form class="form-body" id="supervisorEntryForm">
+          <!-- Step 1: Enrollment ID Search -->
+          <div class="form-group" style="max-width: 450px;">
+            <label class="form-label" for="supEnrollId">Enrollment ID *</label>
+            <div class="enroll-search-group">
+              <input type="text" id="supEnrollId" class="input-control" placeholder="Enter Employee Enrollment ID (e.g. 586665)" required>
+              <button type="button" class="btn btn-secondary" id="lookupMasterBtn">Search</button>
+            </div>
+            <small style="color: var(--text-muted); font-size: 0.75rem; margin-top: 0.25rem; display: block;">
+              Press Search or Tab to auto-fill employee details from Master Database.
+            </small>
+          </div>
+
+          <!-- Step 2: Read-Only Auto-Filled Details -->
+          <div class="form-grid-3" style="margin-top: 1.5rem;">
+            <div class="form-group">
+              <label class="form-label">Full Name</label>
+              <input type="text" id="supName" class="input-control" readonly placeholder="Auto-populated">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Designation</label>
+              <input type="text" id="supDesignation" class="input-control" readonly placeholder="Auto-populated">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Department</label>
+              <input type="text" id="supDepartment" class="input-control" readonly placeholder="Auto-populated">
+            </div>
+          </div>
+
+          <div class="form-grid-3">
+            <div class="form-group">
+              <label class="form-label">Job Type</label>
+              <input type="text" id="supJobType" class="input-control" readonly placeholder="Auto-populated">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Joining Date</label>
+              <input type="text" id="supJoiningDate" class="input-control" readonly placeholder="Auto-populated">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Card Issue Date</label>
+              <input type="text" id="supCardIssueDate" class="input-control" readonly placeholder="Auto-populated">
+            </div>
+          </div>
+
+          <div class="form-grid-3">
+            <div class="form-group">
+              <label class="form-label" for="supNidNumber">NID Number *</label>
+              <input type="text" id="supNidNumber" class="input-control" placeholder="Enter National ID" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Blood Group</label>
+              <input type="text" id="supBloodGroup" class="input-control" readonly placeholder="Auto-populated">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Contact / Emergency Number</label>
+              <input type="text" id="supEmergencyContact" class="input-control" readonly placeholder="Auto-populated">
+            </div>
+          </div>
+
+          <!-- Step 3: Photo & Signature Captures -->
+          <div class="form-grid-2" style="margin-top: 1.5rem;">
+            
+            <!-- Employee Photo Box -->
+            <div class="capture-box">
+              <label class="form-label" style="margin-bottom: 0.5rem;">Passport-Size Employee Photo *</label>
+              <div class="photo-preview-wrap">
+                <img id="supPhotoPreview" class="photo-preview-img" src="" alt="Photo Preview" style="display: none;">
+                <span id="supPhotoPlaceholder" style="font-size: 0.75rem; color: #94a3b8; font-weight: 700;">NO PHOTO</span>
+              </div>
+              <div class="capture-actions">
+                <button type="button" class="btn btn-secondary btn-sm" id="openCameraBtn">Capture Camera</button>
+                <label class="btn btn-secondary btn-sm" style="cursor: pointer;">
+                  Upload File
+                  <input type="file" id="supPhotoFile" accept="image/*" style="display: none;">
+                </label>
+                <button type="button" class="btn btn-secondary btn-sm" id="clearPhotoBtn">Clear</button>
+              </div>
+            </div>
+
+            <!-- Narrow Employee Signature Box -->
+            <div class="capture-box">
+              <label class="form-label" style="margin-bottom: 0.5rem;">Employee Signature (Narrow Horizontal) *</label>
+              <div class="signature-canvas-wrap">
+                <canvas id="supSignatureCanvas" class="signature-canvas" width="320" height="100"></canvas>
+              </div>
+              <div class="capture-actions">
+                <button type="button" class="btn btn-secondary btn-sm" id="clearSignatureBtn">Clear Pad</button>
+                <label class="btn btn-secondary btn-sm" style="cursor: pointer;">
+                  Upload Signature
+                  <input type="file" id="supSignatureFile" accept="image/*" style="display: none;">
+                </label>
+              </div>
+              <small style="color: var(--text-muted); font-size: 0.7rem; margin-top: 0.35rem;">
+                Draw signature with mouse/finger or upload transparent PNG
+              </small>
+            </div>
+          </div>
+
+          <!-- Submission Feedback -->
+          <div class="form-error" id="supFormError"></div>
+
+          <!-- Submit Button -->
+          <div style="margin-top: 2rem; display: flex; justify-content: flex-end;">
+            <button type="submit" class="btn btn-primary" id="supSubmitBtn">
+              Submit Employee ID Card
+            </button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <!-- =======================================================================
+         VIEW B: ADMIN DASHBOARD
+         ======================================================================= -->
+    <section class="view-section" id="adminView">
+      
+      <!-- Admin Top Tabs -->
+      <div class="admin-tabs">
+        <button type="button" class="admin-tab active" id="tabSubmissions">Submissions Queue</button>
+        <button type="button" class="admin-tab" id="tabMasterDatabase">Master Database</button>
+        <button type="button" class="admin-tab" id="tabAdminSettings">Settings</button>
+      </div>
+
+      <!-- TAB 1: SUBMISSIONS MANAGEMENT -->
+      <div id="submissionsTabPane">
+        <div class="table-wrapper">
+          <div class="table-toolbar">
+            <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+              <select id="filterPrintStatus" class="input-control" style="width: 160px;">
+                <option value="all">All Submissions</option>
+                <option value="pending" selected>Pending Print</option>
+                <option value="printed">Printed</option>
+              </select>
+              <input type="text" id="searchSubmissions" class="input-control" placeholder="Search by ID or Name" style="width: 220px;">
+            </div>
+            <div style="display: flex; gap: 0.5rem;">
+              <button type="button" class="btn btn-secondary btn-sm" id="refreshSubmissionsBtn">Refresh</button>
+              <button type="button" class="btn btn-accent btn-sm" id="batchPrintBtn">Print Selected Cards</button>
+            </div>
+          </div>
+
+          <div style="overflow-x: auto;">
+            <table class="data-table" id="submissionsTable">
+              <thead>
+                <tr>
+                  <th style="width: 36px;"><input type="checkbox" id="selectAllSubmissions"></th>
+                  <th>ID</th>
+                  <th>Enrollment ID</th>
+                  <th>Name</th>
+                  <th>Designation</th>
+                  <th>Department</th>
+                  <th>Submitted At</th>
+                  <th>Status</th>
+                  <th>Prints</th>
+                  <th style="text-align: right;">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="submissionsTableBody">
+                <!-- Injected via JavaScript -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 2: MASTER DATABASE MANAGEMENT -->
+      <div id="masterDatabaseTabPane" style="display: none;">
+        <div class="table-wrapper">
+          <div class="table-toolbar">
+            <input type="text" id="searchMasterDb" class="input-control" placeholder="Search Master Database..." style="width: 250px;">
+            <div style="display: flex; gap: 0.5rem;">
+              <button type="button" class="btn btn-secondary btn-sm" id="refreshMasterBtn">Refresh</button>
+              <button type="button" class="btn btn-secondary btn-sm" id="openAddMasterModalBtn">Add Employee</button>
+              <label class="btn btn-primary btn-sm" style="cursor: pointer;">
+                Bulk Import CSV
+                <input type="file" id="masterCsvFileInput" accept=".csv" style="display: none;">
+              </label>
+            </div>
+          </div>
+
+          <div style="overflow-x: auto;">
+            <table class="data-table" id="masterTable">
+              <thead>
+                <tr>
+                  <th>Enroll ID</th>
+                  <th>Name</th>
+                  <th>Designation</th>
+                  <th>Department</th>
+                  <th>Job Type</th>
+                  <th>Joining Date</th>
+                  <th>Card Issue</th>
+                  <th>Blood</th>
+                  <th>Contact</th>
+                  <th style="text-align: right;">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="masterTableBody">
+                <!-- Injected via JavaScript -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 3: ADMIN SETTINGS -->
+      <div id="adminSettingsTabPane" style="display: none;">
+        <div class="supervisor-card" style="max-width: 750px; margin: 0 auto;">
+          <div class="card-topbar">
+            <h2>System & Print Settings</h2>
+          </div>
+          <form class="form-body" id="adminSettingsForm">
+            <!-- Setting 1: Supervisor Form Toggle -->
+            <div class="form-group" style="padding-bottom: 1.25rem; border-bottom: 1px solid var(--border-color);">
+              <label class="form-label" style="font-size: 0.95rem;">Supervisor Data Entry Form</label>
+              <div style="display: flex; align-items: center; gap: 0.75rem; margin-top: 0.5rem;">
+                <input type="checkbox" id="settingFormEnabled" style="width: 20px; height: 20px; cursor: pointer;">
+                <label for="settingFormEnabled" style="cursor: pointer; font-weight: 600;">Enable Supervisor Submissions</label>
+              </div>
+            </div>
+
+            <!-- Setting 2: Messages -->
+            <div class="form-group" style="margin-top: 1.25rem;">
+              <label class="form-label" for="settingSuccessMsg">Confirmation Popup Message</label>
+              <input type="text" id="settingSuccessMsg" class="input-control" required>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="settingDisabledMsg">Form Disabled Notice Message</label>
+              <input type="text" id="settingDisabledMsg" class="input-control" required>
+            </div>
+
+            <!-- Setting 3: PDF Print Layout -->
+            <div class="form-group" style="padding-top: 1.25rem; border-top: 1px solid var(--border-color);">
+              <label class="form-label">Front and Back PDF Printing Arrangement</label>
+              <div style="display: flex; gap: 2rem; margin-top: 0.5rem;">
+                <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                  <input type="radio" name="settingPrintLayout" value="side_by_side" checked>
+                  <span>Side by Side (Front Left & Back Right)</span>
+                </label>
+                <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                  <input type="radio" name="settingPrintLayout" value="top_bottom">
+                  <span>Top and Bottom (Front Top & Back Bottom)</span>
+                </label>
+              </div>
+            </div>
+
+            <!-- Setting 4: Backend Apps Script Endpoint -->
+            <div class="form-group" style="padding-top: 1.25rem; border-top: 1px solid var(--border-color);">
+              <label class="form-label" for="settingAppsScriptUrl">Google Apps Script Web App URL</label>
+              <input type="url" id="settingAppsScriptUrl" class="input-control" placeholder="https://script.google.com/macros/s/.../exec">
+              <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
+                <button type="button" class="btn btn-secondary btn-sm" id="testScriptConnBtn">Test Connection</button>
+                <span id="connTestResult" style="font-size: 0.8rem; display: flex; align-items: center;"></span>
+              </div>
+            </div>
+
+            <div style="margin-top: 2rem; display: flex; justify-content: flex-end;">
+              <button type="submit" class="btn btn-primary" id="saveSettingsBtn">Save Settings</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+    </section>
+  </div>
+
+  <!-- =========================================================================
+       MODALS
+       ========================================================================= -->
+
+  <!-- 1. Supervisor Confirmation Popup (No card preview or print allowed) -->
+  <div class="modal-backdrop" id="supervisorSuccessModal">
+    <div class="modal-dialog" style="max-width: 440px;">
+      <div class="modal-header">
+        <h3 style="color: var(--success);">&#10003; Submission Received</h3>
+      </div>
+      <div class="modal-body" style="text-align: center; padding: 2rem 1.5rem;">
+        <p id="supervisorSuccessModalText" style="font-size: 1rem; color: #334155; font-weight: 500;">
+          Employee ID card submitted successfully. The card is queued for printing.
+        </p>
+      </div>
+      <div class="modal-footer" style="justify-content: center;">
+        <button type="button" class="btn btn-primary" id="closeSuccessModalBtn">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. Camera Snapshot Modal -->
+  <div class="modal-backdrop" id="cameraModal">
+    <div class="modal-dialog" style="max-width: 380px;">
+      <div class="modal-header">
+        <h3>Capture Passport Photo</h3>
+        <button type="button" class="modal-close" id="closeCameraModalBtn">&times;</button>
+      </div>
+      <div class="modal-body" style="display: flex; flex-direction: column; align-items: center;">
+        <video id="cameraVideo" class="camera-video" autoplay playsinline></video>
+        <canvas id="cameraCanvas" width="320" height="380" style="display: none;"></canvas>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="cancelCameraBtn">Cancel</button>
+        <button type="button" class="btn btn-accent" id="takeSnapshotBtn">Capture Photo</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. Admin Card Preview & Print Modal -->
+  <div class="modal-backdrop" id="cardPreviewModal">
+    <div class="modal-dialog" style="max-width: 820px;">
+      <div class="modal-header">
+        <h3 id="cardPreviewTitle">ID Card Preview</h3>
+        <button type="button" class="modal-close" id="closeCardPreviewBtn">&times;</button>
+      </div>
+      <div class="modal-body" style="background-color: #f1f5f9; overflow-x: auto;">
+        <div class="card-preview-container" id="modalCardPreviewContainer">
+          <!-- Live Front and Back Cards Injected Here -->
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="closePreviewBtn">Close</button>
+        <button type="button" class="btn btn-accent" id="printFromPreviewBtn">Print ID Card</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. Add/Edit Master Employee Modal -->
+  <div class="modal-backdrop" id="masterEmployeeModal">
+    <div class="modal-dialog" style="max-width: 600px;">
+      <div class="modal-header">
+        <h3 id="masterModalTitle">Add Master Employee Record</h3>
+        <button type="button" class="modal-close" id="closeMasterModalBtn">&times;</button>
+      </div>
+      <form id="masterEmployeeForm">
+        <div class="modal-body">
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label class="form-label">Enrollment ID *</label>
+              <input type="text" id="masterEnrollId" class="input-control" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Name *</label>
+              <input type="text" id="masterName" class="input-control" required>
+            </div>
+          </div>
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label class="form-label">Designation</label>
+              <input type="text" id="masterDesignation" class="input-control">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Department</label>
+              <input type="text" id="masterDepartment" class="input-control">
+            </div>
+          </div>
+          <div class="form-grid-3">
+            <div class="form-group">
+              <label class="form-label">Job Type</label>
+              <input type="text" id="masterJobType" class="input-control" value="PERMANENT">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Joining Date</label>
+              <input type="text" id="masterJoiningDate" class="input-control" placeholder="DD/MM/YYYY">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Card Issue</label>
+              <input type="text" id="masterCardIssueDate" class="input-control" placeholder="DD/MM/YYYY">
+            </div>
+          </div>
+          <div class="form-grid-3">
+            <div class="form-group">
+              <label class="form-label">National ID</label>
+              <input type="text" id="masterNid" class="input-control">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Blood Group</label>
+              <input type="text" id="masterBlood" class="input-control" value="O+">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Contact Number</label>
+              <input type="text" id="masterContact" class="input-control">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="cancelMasterModalBtn">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="saveMasterBtn">Save Employee</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- =========================================================================
+       PRINT SHEET CONTAINER (Direct Browser & PDF Print Engine)
+       ========================================================================= -->
+  <div id="printSheetContainer" style="display: none;"></div>
+
+  <!-- Application Logic -->
+  <script src="script.js"></script>
+</body>
+</html>

@@ -21,6 +21,12 @@ import { parseExcelFile } from '../services/excelService';
 import { ColumnMappingModal } from './ColumnMappingModal';
 import { CameraCaptureModal } from './CameraCaptureModal';
 import { SignaturePadModal } from './SignaturePadModal';
+import { BanglaSizeAlertModal } from './BanglaSizeAlertModal';
+import {
+  compressImageFile,
+  compressDataUrl,
+  MAX_FILE_SIZE_BYTES,
+} from '../utils/imageCompression';
 
 interface EmployeeDatabaseSectionProps {
   onRefreshData?: () => void;
@@ -60,6 +66,7 @@ export function EmployeeDatabaseSection({ onRefreshData }: EmployeeDatabaseSecti
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [cameraTarget, setCameraTarget] = useState<'photo' | 'signature'>('photo');
   const [isSignaturePadOpen, setIsSignaturePadOpen] = useState(false);
+  const [isSizeAlertOpen, setIsSizeAlertOpen] = useState(false);
   const editPhotoInputRef = useRef<HTMLInputElement>(null);
   const editSigInputRef = useRef<HTMLInputElement>(null);
 
@@ -665,12 +672,22 @@ export function EmployeeDatabaseSection({ onRefreshData }: EmployeeDatabaseSecti
                         ref={editPhotoInputRef}
                         accept="image/*"
                         className="hidden"
-                        onChange={(e) => {
+                        onChange={async (e) => {
                           const file = e.target.files?.[0];
                           if (file) {
-                            const reader = new FileReader();
-                            reader.onload = (ev) => setEditFormData({ ...editFormData, photo: ev.target?.result as string });
-                            reader.readAsDataURL(file);
+                            try {
+                              const result = await compressImageFile(file, { maxWidth: 800, maxHeight: 800, quality: 0.8 });
+                              if (!result.isValidSize || result.sizeBytes > MAX_FILE_SIZE_BYTES) {
+                                setIsSizeAlertOpen(true);
+                                if (editPhotoInputRef.current) editPhotoInputRef.current.value = '';
+                                return;
+                              }
+                              setEditFormData((prev) => ({ ...prev, photo: result.dataUrl }));
+                            } catch (err) {
+                              console.error('Error compressing photo:', err);
+                            } finally {
+                              e.target.value = '';
+                            }
                           }
                         }}
                       />
@@ -712,12 +729,22 @@ export function EmployeeDatabaseSection({ onRefreshData }: EmployeeDatabaseSecti
                         ref={editSigInputRef}
                         accept="image/*"
                         className="hidden"
-                        onChange={(e) => {
+                        onChange={async (e) => {
                           const file = e.target.files?.[0];
                           if (file) {
-                            const reader = new FileReader();
-                            reader.onload = (ev) => setEditFormData({ ...editFormData, signature: ev.target?.result as string });
-                            reader.readAsDataURL(file);
+                            try {
+                              const result = await compressImageFile(file, { maxWidth: 800, maxHeight: 800, quality: 0.8, isSignature: true });
+                              if (!result.isValidSize || result.sizeBytes > MAX_FILE_SIZE_BYTES) {
+                                setIsSizeAlertOpen(true);
+                                if (editSigInputRef.current) editSigInputRef.current.value = '';
+                                return;
+                              }
+                              setEditFormData((prev) => ({ ...prev, signature: result.dataUrl }));
+                            } catch (err) {
+                              console.error('Error compressing signature:', err);
+                            } finally {
+                              e.target.value = '';
+                            }
                           }
                         }}
                       />
@@ -767,13 +794,28 @@ export function EmployeeDatabaseSection({ onRefreshData }: EmployeeDatabaseSecti
         onClose={() => setIsCameraOpen(false)}
         title={cameraTarget === 'photo' ? 'Capture Employee Photo' : 'Capture Employee Signature'}
         type={cameraTarget}
-        onCapture={(dataUrl: string) => {
-          if (cameraTarget === 'photo') {
-            setEditFormData((prev) => ({ ...prev, photo: dataUrl }));
-          } else {
-            setEditFormData((prev) => ({ ...prev, signature: dataUrl }));
+        onCapture={async (dataUrl: string) => {
+          try {
+            const res = await compressDataUrl(dataUrl, {
+              maxWidth: 800,
+              maxHeight: 800,
+              quality: 0.8,
+              isSignature: cameraTarget === 'signature',
+            });
+            if (!res.isValidSize || res.sizeBytes > MAX_FILE_SIZE_BYTES) {
+              setIsSizeAlertOpen(true);
+              return;
+            }
+            if (cameraTarget === 'photo') {
+              setEditFormData((prev) => ({ ...prev, photo: res.dataUrl }));
+            } else {
+              setEditFormData((prev) => ({ ...prev, signature: res.dataUrl }));
+            }
+          } catch (err) {
+            console.error(err);
+          } finally {
+            setIsCameraOpen(false);
           }
-          setIsCameraOpen(false);
         }}
       />
 
@@ -781,9 +823,24 @@ export function EmployeeDatabaseSection({ onRefreshData }: EmployeeDatabaseSecti
       <SignaturePadModal
         isOpen={isSignaturePadOpen}
         onClose={() => setIsSignaturePadOpen(false)}
-        onSave={(dataUrl: string) => {
-          setEditFormData((prev) => ({ ...prev, signature: dataUrl }));
-          setIsSignaturePadOpen(false);
+        onSave={async (dataUrl: string) => {
+          try {
+            const res = await compressDataUrl(dataUrl, {
+              maxWidth: 800,
+              maxHeight: 800,
+              quality: 0.8,
+              isSignature: true,
+            });
+            if (!res.isValidSize || res.sizeBytes > MAX_FILE_SIZE_BYTES) {
+              setIsSizeAlertOpen(true);
+              return;
+            }
+            setEditFormData((prev) => ({ ...prev, signature: res.dataUrl }));
+          } catch (err) {
+            console.error(err);
+          } finally {
+            setIsSignaturePadOpen(false);
+          }
         }}
       />
 
@@ -796,6 +853,16 @@ export function EmployeeDatabaseSection({ onRefreshData }: EmployeeDatabaseSecti
         sourceName={currentFileName || 'Master Excel Spreadsheet'}
         warnings={importWarnings}
         onConfirmMapping={handleConfirmMapping}
+      />
+
+      {/* Bangla 1MB Size Alert Popup Modal */}
+      <BanglaSizeAlertModal
+        isOpen={isSizeAlertOpen}
+        onClose={() => {
+          setIsSizeAlertOpen(false);
+          if (editPhotoInputRef.current) editPhotoInputRef.current.value = '';
+          if (editSigInputRef.current) editSigInputRef.current.value = '';
+        }}
       />
     </div>
   );

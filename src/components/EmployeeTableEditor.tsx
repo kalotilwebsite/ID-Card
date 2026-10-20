@@ -12,6 +12,11 @@ import {
   Check,
   X,
 } from 'lucide-react';
+import { BanglaSizeAlertModal } from './BanglaSizeAlertModal';
+import {
+  compressImageFile,
+  MAX_FILE_SIZE_BYTES,
+} from '../utils/imageCompression';
 
 interface EmployeeTableEditorProps {
   employees: EmployeeCardData[];
@@ -30,6 +35,7 @@ export const EmployeeTableEditor: React.FC<EmployeeTableEditorProps> = ({
   const [filterStatus, setFilterStatus] = useState<'all' | 'valid' | 'invalid'>('all');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editFormData, setEditFormData] = useState<Partial<EmployeeCardData>>({});
+  const [isSizeAlertOpen, setIsSizeAlertOpen] = useState(false);
 
   const validateEmployee = (emp: EmployeeCardData): { isValid: boolean; errors: string[] } => {
     const errors: string[] = [];
@@ -190,28 +196,36 @@ export const EmployeeTableEditor: React.FC<EmployeeTableEditorProps> = ({
     setIsAddModalOpen(false);
   };
 
-  const handlePhotoUpload = (empId: string, file: File) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const dataUrl = e.target?.result as string;
+  const handlePhotoUpload = async (empId: string, file: File) => {
+    try {
+      const result = await compressImageFile(file, { maxWidth: 800, maxHeight: 800, quality: 0.8 });
+      if (!result.isValidSize || result.sizeBytes > MAX_FILE_SIZE_BYTES) {
+        setIsSizeAlertOpen(true);
+        return;
+      }
       const updated = employees.map((emp) =>
-        emp.id === empId ? { ...emp, photoUrl: dataUrl } : emp
+        emp.id === empId ? { ...emp, photoUrl: result.dataUrl } : emp
       );
       onUpdateEmployees(updated);
-    };
-    reader.readAsDataURL(file);
+    } catch (err) {
+      console.error('Error compressing employee photo:', err);
+    }
   };
 
-  const handleSignatureUpload = (empId: string, file: File) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const dataUrl = e.target?.result as string;
+  const handleSignatureUpload = async (empId: string, file: File) => {
+    try {
+      const result = await compressImageFile(file, { maxWidth: 800, maxHeight: 800, quality: 0.8, isSignature: true });
+      if (!result.isValidSize || result.sizeBytes > MAX_FILE_SIZE_BYTES) {
+        setIsSizeAlertOpen(true);
+        return;
+      }
       const updated = employees.map((emp) =>
-        emp.id === empId ? { ...emp, signatureUrl: dataUrl } : emp
+        emp.id === empId ? { ...emp, signatureUrl: result.dataUrl } : emp
       );
       onUpdateEmployees(updated);
-    };
-    reader.readAsDataURL(file);
+    } catch (err) {
+      console.error('Error compressing employee signature:', err);
+    }
   };
 
   return (
@@ -975,6 +989,12 @@ export const EmployeeTableEditor: React.FC<EmployeeTableEditorProps> = ({
           </div>
         </div>
       )}
+
+      {/* Bangla 1MB Size Alert Popup Modal */}
+      <BanglaSizeAlertModal
+        isOpen={isSizeAlertOpen}
+        onClose={() => setIsSizeAlertOpen(false)}
+      />
     </div>
   );
 };

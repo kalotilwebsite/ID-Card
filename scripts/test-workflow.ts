@@ -404,6 +404,31 @@ async function runTestSuite() {
       'Duplicate submission for same Enrollment ID blocked with 409 Conflict'
     );
 
+    // Test Oversized Image Payload Rejection (defense-in-depth)
+    const oversizedBase64 = 'data:image/jpeg;base64,' + 'A'.repeat(2 * 1024 * 1024);
+    const oversizeRes = await makeRequest(
+      {
+        hostname: 'localhost',
+        port: 3000,
+        path: '/api/submissions',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${supervisorToken}`,
+        },
+      },
+      {
+        enrollId: 'BULK-TEST-002',
+        nationalId: '1998543210123',
+        photoUrl: oversizedBase64,
+        signatureUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+      }
+    );
+    assert(
+      oversizeRes.statusCode === 400 && oversizeRes.data?.sizeExceeded === true,
+      'Oversized image payload strictly rejected on server with Bangla size alert message'
+    );
+
     // 8. Test PDF Print Layout Settings
     console.log('\n--- 8. Testing PDF Print Layout Settings ---');
     const updateLayoutTopBottom = await makeRequest(

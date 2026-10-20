@@ -746,6 +746,17 @@ app.post('/api/submissions', authenticateToken, (req: AuthenticatedRequest, res:
     return;
   }
 
+  // Validate maximum image payload size
+  const photoSize = Math.round((photoUrl.length * 3) / 4);
+  const sigSize = Math.round((signatureUrl.length * 3) / 4);
+  if (photoSize > 1.5 * 1024 * 1024 || sigSize > 1.5 * 1024 * 1024) {
+    res.status(400).json({
+      error: 'ছবি বা সিগনেচারের সাইজ অনেক বেশি বড়! অনুগ্রহ করে ১ মেগাবাইটের (1 MB) নিচের ছবি বা সিগনেচার আপলোড করুন।',
+      sizeExceeded: true,
+    });
+    return;
+  }
+
   const newSubmission = {
     id: `sub-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
     enrollId: cleanEnrollId,

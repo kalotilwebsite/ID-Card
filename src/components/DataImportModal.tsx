@@ -32,6 +32,7 @@ interface DataImportModalProps {
     rows: Record<string, any>[];
     sourceName: string;
     embeddedImagesCount?: number;
+    warnings?: string[];
   }) => void;
   onLoadSample: () => void;
 }
@@ -247,6 +248,7 @@ export const DataImportModal: React.FC<DataImportModalProps> = ({
       rows: excelResult.rows,
       sourceName: excelFile?.name || 'Excel Spreadsheet',
       embeddedImagesCount: excelResult.embeddedImagesCount,
+      warnings: excelResult.warnings,
     });
     onClose();
   };
@@ -459,7 +461,7 @@ export const DataImportModal: React.FC<DataImportModalProps> = ({
                       </span>
                       {excelResult.embeddedImagesCount > 0 && (
                         <span className="text-[11px] bg-purple-100 text-purple-800 font-medium px-2 py-0.5 rounded-full">
-                          {excelResult.embeddedImagesCount} embedded photos
+                          {excelResult.embeddedImagesCount} embedded {excelResult.embeddedImagesCount === 1 ? 'image' : 'images'} (photo/signature)
                         </span>
                       )}
                     </div>
@@ -482,6 +484,20 @@ export const DataImportModal: React.FC<DataImportModalProps> = ({
                       </div>
                     )}
                   </div>
+
+                  {excelResult.warnings && excelResult.warnings.length > 0 && (
+                    <div className="p-3 bg-amber-50/90 border border-amber-200 rounded-xl text-xs text-amber-900 space-y-1">
+                      <div className="flex items-center gap-1.5 font-bold text-amber-950">
+                        <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                        <span>Worksheet Image Notice:</span>
+                      </div>
+                      <ul className="list-disc list-inside space-y-0.5 text-[11px] text-amber-800">
+                        {excelResult.warnings.map((w, idx) => (
+                          <li key={idx}>{w}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
 
                   <div className="flex justify-end gap-2 pt-2">
                     <button

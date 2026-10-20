@@ -254,3 +254,47 @@ export interface CompanyTemplateConfig {
   disclaimer: string;
   returnToHeader: string;
 }
+
+export type UserRole = 'admin' | 'data_entry' | 'supervisor';
+
+export interface AuthUser {
+  id: string;
+  username: string;
+  employeeId?: string;
+  name: string;
+  email?: string;
+  role: UserRole;
+  status?: 'active' | 'inactive';
+  createdAt?: string;
+}
+
+export interface MasterEmployee {
+  enrollId: string;
+  name: string;
+  designation: string;
+  department: string;
+  jobType: string;
+  joiningDate: string;
+  cardIssue: string;
+  emergencyContact: string;
+  permanentAddress: string;
+  bloodGroup: string;
+  nationalId?: string;
+  importedAt?: string;
+}
+
+export interface SubmissionRecord {
+  id: string;
+  enrollId: string;
+  nationalId: string;
+  photoUrl: string;
+  signatureUrl: string;
+  employee: MasterEmployee;
+  submittedBy: {
+    id: string;
+    name: string;
+    username: string;
+  };
+  submittedAt: string;
+}
+

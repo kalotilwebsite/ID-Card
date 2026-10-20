@@ -1,4 +1,5 @@
 import ExcelJS from 'exceljs';
+import JSZip from 'jszip';
 import { parseCSVText } from './googleSheetsService';
 import { EmployeeCardData } from '../types';
 
@@ -8,7 +9,33 @@ export interface ParsedExcelResult {
   headers: string[];
   rows: Record<string, any>[];
   embeddedImagesCount: number;
+  warnings?: string[];
 }
+
+// Convert 1-based column index to Excel column letter (e.g. 1 -> 'A', 11 -> 'K', 12 -> 'L', 27 -> 'AA')
+export const colIndexToLetter = (colIndex: number): string => {
+  let temp = colIndex;
+  let letter = '';
+  while (temp > 0) {
+    const rem = (temp - 1) % 26;
+    letter = String.fromCharCode(65 + rem) + letter;
+    temp = Math.floor((temp - 1) / 26);
+  }
+  return letter || 'A';
+};
+
+// Convert Excel column letter to 1-based column index (e.g. 'A' -> 1, 'K' -> 11, 'L' -> 12, 'AA' -> 27)
+export const letterToColIndex = (letter: string): number => {
+  const clean = letter.toUpperCase().trim();
+  let col = 0;
+  for (let i = 0; i < clean.length; i++) {
+    const code = clean.charCodeAt(i);
+    if (code >= 65 && code <= 90) {
+      col = col * 26 + (code - 64);
+    }
+  }
+  return col || 1;
+};
 
 // Convert image ArrayBuffer to a base64 Data URL safely in browser
 export const bufferToDataUrl = (buffer: ArrayBuffer | Uint8Array, extension: string): string => {
@@ -29,7 +56,20 @@ export const bufferToDataUrl = (buffer: ArrayBuffer | Uint8Array, extension: str
 
   const base64 = btoa(binary);
   const ext = (extension || 'png').toLowerCase().replace('.', '');
-  const mime = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : ext === 'png' ? 'image/png' : 'image/jpeg';
+  const mime =
+    ext === 'jpg' || ext === 'jpeg'
+      ? 'image/jpeg'
+      : ext === 'png'
+      ? 'image/png'
+      : ext === 'gif'
+      ? 'image/gif'
+      : ext === 'webp'
+      ? 'image/webp'
+      : ext === 'bmp'
+      ? 'image/bmp'
+      : ext === 'svg'
+      ? 'image/svg+xml'
+      : 'image/jpeg';
   return `data:${mime};base64,${base64}`;
 };
 
@@ -64,6 +104,16 @@ export const sanitizeExcelCellValue = (val: any): string => {
   return String(val).trim();
 };
 
+interface ExtractedCellImage {
+  dataUrl: string;
+  rowNumber: number; // 1-based Excel row
+  colNumber: number; // 1-based Excel column
+  colLetter: string; // 'A', 'K', 'L', etc.
+  source: 'drawing' | 'cellImage' | 'media';
+  fileName?: string;
+  format?: string;
+}
+
 export const parseExcelFile = async (
   file: File,
   targetSheetIndex = 0
@@ -77,7 +127,7 @@ export const parseExcelFile = async (
     if (parsed.length === 0) {
       return { sheetNames: ['Sheet1'], currentSheet: 'Sheet1', headers: [], rows: [], embeddedImagesCount: 0 };
     }
-    const headers = parsed[0].map((h, i) => (h ? h.trim() : `Column ${i + 1}`));
+    const headers = parsed[0].map((h, i) => (h ? h.trim() : `Column ${colIndexToLetter(i + 1)}`));
     const rows: Record<string, any>[] = [];
     for (let i = 1; i < parsed.length; i++) {
       const line = parsed[i];
@@ -109,141 +159,327 @@ export const parseExcelFile = async (
     throw new Error('Workbook contains no valid worksheets');
   }
 
-  // 1. Extract embedded images and their row/column positions
-  // In ExcelJS, worksheet.getImages() returns [{ type: 'image', imageId: string, range: { tl: { col, row }, br: { col, row } } }]
-  const embeddedImageByRowCol: Record<string, string> = {};
-  const imagesByRow: Record<number, string[]> = {};
-  let imagesCount = 0;
+  // Prepare JSZip instance for raw archive inspection (modern cellImages and fallback validation)
+  let zip: JSZip | null = null;
+  try {
+    zip = await JSZip.loadAsync(arrayBuffer);
+  } catch (err) {
+    console.warn('Could not inspect workbook as zip archive:', err);
+  }
 
+  const cellImages: ExtractedCellImage[] = [];
+  const warnings: string[] = [];
+
+  // 1. Primary Extraction: ExcelJS DrawingML images
   try {
     const images = worksheet.getImages?.() || [];
-    imagesCount = images.length;
 
     images.forEach((img: any) => {
       try {
         const imageId = typeof img.imageId === 'number' ? img.imageId : parseInt(img.imageId, 10);
         const media = workbook.getImage(imageId);
         if (media && media.buffer) {
-          const dataUrl = bufferToDataUrl(media.buffer as any, media.extension);
-          const topRow = img.range?.tl?.row !== undefined ? Math.floor(img.range.tl.row) : null;
-          const topCol = img.range?.tl?.col !== undefined ? Math.floor(img.range.tl.col) : null;
-          if (topRow !== null) {
-            if (!imagesByRow[topRow]) imagesByRow[topRow] = [];
-            imagesByRow[topRow].push(dataUrl);
+          const ext = (media.extension || 'png').toLowerCase();
+          if (['emf', 'wmf'].includes(ext)) {
+            warnings.push(
+              `An embedded image is in Windows Metafile (.${ext.toUpperCase()}) format, which web browsers cannot display. Please re-insert as PNG or JPEG in Excel.`
+            );
+            return;
+          }
+          if (['tiff', 'tif'].includes(ext)) {
+            warnings.push(
+              `An embedded image is in .${ext.toUpperCase()} format. Web browsers require standard PNG or JPEG images.`
+            );
+            return;
+          }
 
-            if (topCol !== null) {
-              embeddedImageByRowCol[`${topRow}_${topCol}`] = dataUrl;
-            }
+          const dataUrl = bufferToDataUrl(media.buffer as any, media.extension);
+          const tl = img.range?.tl;
+          const br = img.range?.br;
+
+          if (tl) {
+            const tlCol = tl.col !== undefined ? tl.col : (tl.nativeCol !== undefined ? tl.nativeCol : 0);
+            const tlRow = tl.row !== undefined ? tl.row : (tl.nativeRow !== undefined ? tl.nativeRow : 0);
+            const brCol = br && br.col !== undefined ? br.col : (br && br.nativeCol !== undefined ? br.nativeCol : tlCol + 1);
+            const brRow = br && br.row !== undefined ? br.row : (br && br.nativeRow !== undefined ? br.nativeRow : tlRow + 1);
+
+            // Calculate anchor center position in 1-based Excel row & column coordinates
+            const centerCol = (tlCol + brCol) / 2;
+            const centerRow = (tlRow + brRow) / 2;
+
+            const colNumber = Math.floor(centerCol) + 1;
+            const rowNumber = Math.floor(centerRow) + 1;
+            const colLetter = colIndexToLetter(colNumber);
+
+            cellImages.push({
+              dataUrl,
+              rowNumber,
+              colNumber,
+              colLetter,
+              source: 'drawing',
+              format: media.extension,
+            });
           }
         }
       } catch (err) {
-        console.warn('Could not extract image from worksheet', err);
+        console.warn('Could not extract image from worksheet drawing:', err);
       }
     });
   } catch (err) {
-    console.warn('Worksheet image extraction not supported or empty', err);
+    console.warn('Worksheet image extraction not supported or empty:', err);
   }
 
-  // 2. Read rows and headers
-  const headers: string[] = [];
-  const rows: Record<string, any>[] = [];
-
-  let headerRowIndex = 1;
-  // Find first row with text
-  worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
-    if (headers.length === 0) {
-      headerRowIndex = rowNumber;
-      row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
-        const val = sanitizeExcelCellValue(cell.value);
-        headers[colNumber - 1] = val || `Column ${colNumber}`;
-      });
-      // Ensure no gaps in headers
-      for (let i = 0; i < headers.length; i++) {
-        if (!headers[i]) headers[i] = `Column ${i + 1}`;
+  // 2. Secondary Extraction: Modern Excel 365 "Place in Cell" (xl/cellimages.xml)
+  if (zip && zip.file('xl/cellimages.xml')) {
+    try {
+      const cellImagesXml = await zip.file('xl/cellimages.xml')!.async('text');
+      let relsXml = '';
+      const relsFile = zip.file('xl/_rels/cellimages.xml.rels');
+      if (relsFile) {
+        relsXml = await relsFile.async('text');
       }
-    } else {
-      const rowObj: Record<string, any> = {};
-      let hasData = false;
 
-      row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
-        const header = headers[colNumber - 1] || `Column ${colNumber}`;
-        const val = sanitizeExcelCellValue(cell.value);
-        if (val) hasData = true;
-        rowObj[header] = val;
-      });
+      // Map rId to media file path in zip
+      const rIdToTarget: Record<string, string> = {};
+      const relMatches = relsXml.matchAll(/<Relationship[^>]+Id="([^"]+)"[^>]+Target="([^"]+)"/g);
+      for (const m of relMatches) {
+        rIdToTarget[m[1]] = m[2].replace(/^(\.\.\/)+/, '').replace(/^xl\//, '');
+      }
 
-      // Check for embedded images in this row:
-      const zeroBasedRow = rowNumber - 1;
-      
-      // Match by exact cell column if available
-      headers.forEach((header, colIdx) => {
-        const imgAtCell =
-          embeddedImageByRowCol[`${zeroBasedRow}_${colIdx}`] ||
-          embeddedImageByRowCol[`${rowNumber}_${colIdx}`] ||
-          embeddedImageByRowCol[`${zeroBasedRow - (headerRowIndex - 1)}_${colIdx}`];
-        if (imgAtCell) {
-          rowObj[header] = imgAtCell;
-          hasData = true;
-          const lowerH = header.toLowerCase();
-          if (lowerH.includes('sign')) {
-            rowObj['__embedded_signature__'] = imgAtCell;
-          } else {
-            rowObj['__embedded_photo__'] = imgAtCell;
+      // Map image ID/name to media target
+      const imageIdToTarget: Record<string, string> = {};
+      const imgMatches = cellImagesXml.matchAll(/<etc:cellImage[\s\S]*?name="([^"]+)"[\s\S]*?r:embed="([^"]+)"/g);
+      for (const m of imgMatches) {
+        const imgId = m[1];
+        const rId = m[2];
+        if (rIdToTarget[rId]) {
+          imageIdToTarget[imgId] = rIdToTarget[rId];
+        }
+      }
+
+      // Look in worksheet XML to find cell locations
+      const sheetIndex1 = targetSheetIndex + 1;
+      const sheetFile =
+        zip.file(`xl/worksheets/sheet${sheetIndex1}.xml`) ||
+        zip.file('xl/worksheets/sheet1.xml');
+
+      if (sheetFile) {
+        const sheetXml = await sheetFile.async('text');
+        // Match cells with DISPIMG formula: <c r="K2"...><f>_xlfn.DISPIMG("ID_...", ...)</f></c>
+        const cellMatches = sheetXml.matchAll(/<c\s+r="([A-Z]+)(\d+)"[^>]*>[\s\S]*?<f[^>]*>[^<]*DISPIMG\("([^"]+)"/g);
+        for (const cm of cellMatches) {
+          const colLetter = cm[1];
+          const rowNumber = parseInt(cm[2], 10);
+          const imgName = cm[3];
+          const mediaPath = imageIdToTarget[imgName];
+          if (mediaPath) {
+            const mFile = zip.file('xl/' + mediaPath) || zip.file(mediaPath);
+            if (mFile) {
+              const buf = await mFile.async('uint8array');
+              const ext = mediaPath.split('.').pop() || 'png';
+              const dataUrl = bufferToDataUrl(buf, ext);
+              const colNumber = letterToColIndex(colLetter);
+
+              // Only add if not already captured at this cell
+              const exists = cellImages.some(
+                (c) => c.rowNumber === rowNumber && c.colNumber === colNumber
+              );
+              if (!exists) {
+                cellImages.push({
+                  dataUrl,
+                  rowNumber,
+                  colNumber,
+                  colLetter,
+                  source: 'cellImage',
+                  format: ext,
+                });
+              }
+            }
           }
         }
-      });
+      }
+    } catch (err) {
+      console.warn('Error extracting modern cellimages.xml:', err);
+    }
+  }
 
-      // Match sequential images by row if column match was not found
-      const rowImages =
-        imagesByRow[zeroBasedRow] ||
-        imagesByRow[rowNumber] ||
-        imagesByRow[zeroBasedRow - (headerRowIndex - 1)];
-
-      if (rowImages && rowImages.length > 0) {
-        if (!rowObj['__embedded_photo__'] && rowImages[0]) {
-          rowObj['__embedded_photo__'] = rowImages[0];
-          hasData = true;
-        }
-        if (!rowObj['__embedded_signature__'] && rowImages.length > 1 && rowImages[1]) {
-          rowObj['__embedded_signature__'] = rowImages[1];
-          hasData = true;
+  // 3. Check for any unsupported media formats or absolute anchors in zip
+  if (zip) {
+    try {
+      for (const [path, fileEntry] of Object.entries(zip.files)) {
+        if (path.startsWith('xl/media/') && !fileEntry.dir) {
+          const fName = path.split('/').pop() || '';
+          const ext = fName.split('.').pop()?.toLowerCase() || '';
+          if (['emf', 'wmf'].includes(ext)) {
+            const warningMsg = `Image file "${fName}" is in Windows Metafile (.${ext.toUpperCase()}) format. Browsers cannot render EMF/WMF format directly. Please re-insert as PNG or JPEG in Excel.`;
+            if (!warnings.includes(warningMsg)) warnings.push(warningMsg);
+          } else if (['tiff', 'tif'].includes(ext)) {
+            const warningMsg = `Image file "${fName}" is in .${ext.toUpperCase()} format. Web browsers require PNG or JPEG format.`;
+            if (!warnings.includes(warningMsg)) warnings.push(warningMsg);
+          }
+        } else if (path.startsWith('xl/drawings/') && path.endsWith('.xml') && !path.includes('_rels')) {
+          const drawingXml = await fileEntry.async('text');
+          if (drawingXml.includes('<xdr:absoluteAnchor')) {
+            const warningMsg = `Worksheet contains floating image(s) with absolute canvas placement. Move the images inside employee cells (e.g., Column K for Photo, Column L for Signature) to associate them with specific employees.`;
+            if (!warnings.includes(warningMsg)) warnings.push(warningMsg);
+          }
         }
       }
+    } catch (err) {
+      // Ignore zip validation errors
+    }
+  }
 
-      if (hasData) {
-        rows.push(rowObj);
+  // 4. Index all extracted cell images by row & column
+  const imageByCell: Record<string, string> = {};
+  for (const item of cellImages) {
+    imageByCell[`${item.rowNumber}_${item.colNumber}`] = item.dataUrl;
+    imageByCell[`${item.rowNumber}_${item.colLetter.toUpperCase()}`] = item.dataUrl;
+  }
+
+  // 5. Detect header row and maximum column count
+  let headerRowIndex = 1;
+  const initialRowHeaders: string[] = [];
+
+  // Find first row containing text values
+  worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+    if (initialRowHeaders.length === 0) {
+      let hasAnyText = false;
+      row.eachCell({ includeEmpty: true }, (cell) => {
+        if (sanitizeExcelCellValue(cell.value)) hasAnyText = true;
+      });
+      if (hasAnyText) {
+        headerRowIndex = rowNumber;
+        row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+          const val = sanitizeExcelCellValue(cell.value);
+          initialRowHeaders[colNumber - 1] = val || '';
+        });
       }
     }
   });
 
-  // If embedded images exists, add auto headers for photo and signature if not present
-  const hasEmbeddedPhotos = rows.some((r) => Boolean(r['__embedded_photo__']));
-  const hasEmbeddedSignatures = rows.some((r) => Boolean(r['__embedded_signature__']));
-
-  if (hasEmbeddedPhotos && !headers.includes('Embedded Photo') && !headers.includes('Photo')) {
-    headers.push('Embedded Photo');
-    rows.forEach((r) => {
-      if (r['__embedded_photo__']) {
-        r['Embedded Photo'] = r['__embedded_photo__'];
-      }
+  // Calculate maximum column across worksheet cells and extracted image cell locations
+  let maxColumns = Math.max(initialRowHeaders.length, worksheet.columnCount || 0);
+  worksheet.eachRow({ includeEmpty: true }, (row) => {
+    if (row.cellCount > maxColumns) maxColumns = row.cellCount;
+    row.eachCell({ includeEmpty: true }, (_, colNumber) => {
+      if (colNumber > maxColumns) maxColumns = colNumber;
     });
+  });
+
+  for (const item of cellImages) {
+    if (item.colNumber > maxColumns) {
+      maxColumns = item.colNumber;
+    }
+  }
+  maxColumns = Math.max(maxColumns, 1);
+
+  // 6. Build final headers list
+  const headers: string[] = [];
+  const headerRow = worksheet.getRow(headerRowIndex);
+
+  for (let col = 1; col <= maxColumns; col++) {
+    const cell = headerRow.getCell(col);
+    const val = sanitizeExcelCellValue(cell.value);
+    const colLetter = colIndexToLetter(col);
+
+    let headerName = '';
+    if (val && !/^Column\s+\d+$/i.test(val)) {
+      headerName = val;
+    } else {
+      headerName = `Column ${colLetter}`;
+    }
+    headers[col - 1] = headerName;
   }
 
-  if (hasEmbeddedSignatures && !headers.includes('Embedded Signature') && !headers.includes('Signature')) {
-    headers.push('Embedded Signature');
-    rows.forEach((r) => {
-      if (r['__embedded_signature__']) {
-        r['Embedded Signature'] = r['__embedded_signature__'];
+  // 7. Parse rows and attach cell images to corresponding columns
+  const rows: Record<string, any>[] = [];
+
+  worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+    // Skip header row
+    if (rowNumber <= headerRowIndex) return;
+
+    const rowObj: Record<string, any> = {
+      __cell_images__: {},
+    };
+    let hasAnyData = false;
+
+    for (let col = 1; col <= maxColumns; col++) {
+      const cell = row.getCell(col);
+      const textVal = sanitizeExcelCellValue(cell.value);
+      const header = headers[col - 1] || `Column ${colIndexToLetter(col)}`;
+      const colLetter = colIndexToLetter(col);
+
+      // Check if this exact cell has an embedded image
+      const imgAtCell =
+        imageByCell[`${rowNumber}_${col}`] ||
+        imageByCell[`${rowNumber}_${colLetter}`];
+
+      if (imgAtCell) {
+        hasAnyData = true;
+        rowObj[header] = imgAtCell;
+        rowObj[colLetter] = imgAtCell;
+        rowObj[`Column ${colLetter}`] = imgAtCell;
+        rowObj[`Col ${colLetter}`] = imgAtCell;
+        rowObj[`Column ${col}`] = imgAtCell;
+
+        // Populate dedicated image lookup map on the row
+        rowObj.__cell_images__[col] = imgAtCell;
+        rowObj.__cell_images__[colLetter] = imgAtCell;
+        rowObj.__cell_images__[header] = imgAtCell;
+        rowObj.__cell_images__[`Column ${colLetter}`] = imgAtCell;
+
+        // Auto-detect photo or signature field for this specific employee row
+        const lowerH = header.toLowerCase();
+        if (lowerH.includes('sign')) {
+          rowObj['__embedded_signature__'] = imgAtCell;
+        } else if (
+          lowerH.includes('photo') ||
+          lowerH.includes('picture') ||
+          lowerH.includes('image') ||
+          lowerH.includes('pic')
+        ) {
+          rowObj['__embedded_photo__'] = imgAtCell;
+        }
+      } else if (textVal) {
+        hasAnyData = true;
+        rowObj[header] = textVal;
+        rowObj[colLetter] = textVal;
+        rowObj[`Column ${colLetter}`] = textVal;
+
+        // Check if text itself is an image URL
+        if (/^(https?:\/\/|data:image\/)/i.test(textVal)) {
+          const lowerH = header.toLowerCase();
+          if (lowerH.includes('sign')) {
+            rowObj['__embedded_signature__'] = textVal;
+          } else if (
+            lowerH.includes('photo') ||
+            lowerH.includes('picture') ||
+            lowerH.includes('image') ||
+            lowerH.includes('pic')
+          ) {
+            rowObj['__embedded_photo__'] = textVal;
+          }
+        }
+      } else {
+        rowObj[header] = '';
+        rowObj[colLetter] = '';
+        rowObj[`Column ${colLetter}`] = '';
       }
-    });
-  }
+    }
+
+    if (hasAnyData) {
+      rows.push(rowObj);
+    }
+  });
 
   return {
     sheetNames,
     currentSheet: worksheet.name,
     headers,
     rows,
-    embeddedImagesCount: imagesCount,
+    embeddedImagesCount: cellImages.length,
+    warnings: warnings.length > 0 ? warnings : undefined,
   };
 };
 

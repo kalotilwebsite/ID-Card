@@ -8,6 +8,7 @@ interface ColumnMappingModalProps {
   headers: string[];
   sampleRows: Record<string, any>[];
   sourceName: string;
+  warnings?: string[];
   onConfirmMapping: (mappings: ColumnMapping[]) => void;
 }
 
@@ -76,7 +77,23 @@ const FIELD_DEFINITIONS: {
     label: 'Employee Photo',
     required: false,
     description: 'Embedded Excel picture, Image URL, or Base64 string placed in photo area',
-    keywords: ['photo', 'employee photo', 'emp photo', 'photograph', 'picture', 'image', 'photo url', 'avatar', 'img', 'embedded photo', '__embedded_photo__'],
+    keywords: [
+      'photo',
+      'employee photo',
+      'emp photo',
+      'photograph',
+      'picture',
+      'image',
+      'photo url',
+      'avatar',
+      'img',
+      'embedded photo',
+      '__embedded_photo__',
+      'column k',
+      'col k',
+      'photo (column k)',
+      'photo (col k)',
+    ],
   },
   {
     key: 'signatureUrl',
@@ -99,6 +116,10 @@ const FIELD_DEFINITIONS: {
       'sign image',
       'embedded signature',
       '__embedded_signature__',
+      'column l',
+      'col l',
+      'signature (column l)',
+      'signature (col l)',
     ],
   },
   {
@@ -140,6 +161,7 @@ export const ColumnMappingModal: React.FC<ColumnMappingModalProps> = ({
   headers,
   sampleRows,
   sourceName,
+  warnings,
   onConfirmMapping,
 }) => {
   const [mappings, setMappings] = useState<ColumnMapping[]>([]);
@@ -192,10 +214,45 @@ export const ColumnMappingModal: React.FC<ColumnMappingModalProps> = ({
     const mapping = mappings.find((m) => m.fieldKey === fieldKey);
     if (!mapping) return '';
     const currentRow = sampleRows[previewRowIdx] || {};
-    const rawVal = mapping.sourceColumn ? currentRow[mapping.sourceColumn] : '';
-    if (rawVal) return String(rawVal);
+    const col = mapping.sourceColumn;
+    if (!col) return mapping.fallbackValue || '';
+
+    // Direct match on current row
+    const rawVal = currentRow[col];
+    if (rawVal !== undefined && rawVal !== null && String(rawVal).trim() !== '') {
+      return String(rawVal).trim();
+    }
+
+    // Lookup via __cell_images__
+    if (currentRow.__cell_images__) {
+      if (currentRow.__cell_images__[col]) {
+        return String(currentRow.__cell_images__[col]).trim();
+      }
+      const match = col.match(/(?:Column|Col)?\s*([A-Za-z]+)/i);
+      if (match && match[1]) {
+        const letter = match[1].toUpperCase();
+        if (currentRow.__cell_images__[letter]) {
+          return String(currentRow.__cell_images__[letter]).trim();
+        }
+      }
+    }
+
+    // Variant column letter matches
+    const match = col.match(/(?:Column|Col)?\s*([A-Za-z]+)/i);
+    if (match && match[1]) {
+      const letter = match[1].toUpperCase();
+      const variants = [`Column ${letter}`, `Col ${letter}`, letter];
+      for (const v of variants) {
+        if (currentRow[v] !== undefined && currentRow[v] !== null && String(currentRow[v]).trim() !== '') {
+          return String(currentRow[v]).trim();
+        }
+      }
+    }
+
     return mapping.fallbackValue || '';
   };
+
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   const handleSaveAndGenerate = () => {
     // Validate required fields
@@ -204,7 +261,7 @@ export const ColumnMappingModal: React.FC<ColumnMappingModalProps> = ({
     );
 
     if (missingRequired.length > 0) {
-      alert(
+      setValidationError(
         `Please map the required field(s): ${missingRequired
           .map((m) => m.label)
           .join(', ')}`
@@ -212,13 +269,12 @@ export const ColumnMappingModal: React.FC<ColumnMappingModalProps> = ({
       return;
     }
 
+    setValidationError(null);
     onConfirmMapping(mappings);
     onClose();
   };
 
   if (!isOpen) return null;
-
-  const currentPreviewRow = sampleRows[previewRowIdx] || {};
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
@@ -244,6 +300,21 @@ export const ColumnMappingModal: React.FC<ColumnMappingModalProps> = ({
             ✕
           </button>
         </div>
+
+        {/* Warnings Banner if any unsupported images or formats */}
+        {warnings && warnings.length > 0 && (
+          <div className="bg-amber-50 border-b border-amber-200 px-5 py-2.5 flex items-start gap-2 text-xs text-amber-900 flex-shrink-0">
+            <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+            <div className="space-y-0.5">
+              <span className="font-bold">Image Notice:</span>
+              <ul className="list-disc list-inside text-[11px] text-amber-800">
+                {warnings.map((w, idx) => (
+                  <li key={idx}>{w}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        )}
 
         {/* Content Body: Split into Mapping List (Left) and Live Sample Preview (Right) */}
         <div className="flex-1 overflow-y-auto grid grid-cols-1 lg:grid-cols-12 divide-y lg:divide-y-0 lg:divide-x divide-gray-200">
@@ -401,9 +472,31 @@ export const ColumnMappingModal: React.FC<ColumnMappingModalProps> = ({
                           }`}
                         >
                           {def.key === 'photoUrl' && mappedVal ? (
-                            <span className="text-purple-600 text-[10px]">
-                              [Image Loaded]
-                            </span>
+                            <div className="flex items-center gap-1.5 justify-end">
+                              {mappedVal.startsWith('data:image') || mappedVal.startsWith('http') ? (
+                                <img
+                                  src={mappedVal}
+                                  alt="Photo Preview"
+                                  className="w-5 h-5 rounded object-cover border border-purple-300"
+                                />
+                              ) : null}
+                              <span className="text-purple-600 text-[10px] font-bold">
+                                [Photo Loaded]
+                              </span>
+                            </div>
+                          ) : def.key === 'signatureUrl' && mappedVal ? (
+                            <div className="flex items-center gap-1.5 justify-end">
+                              {mappedVal.startsWith('data:image') || mappedVal.startsWith('http') ? (
+                                <img
+                                  src={mappedVal}
+                                  alt="Signature Preview"
+                                  className="w-8 h-4 rounded object-contain border border-indigo-200 bg-white"
+                                />
+                              ) : null}
+                              <span className="text-indigo-600 text-[10px] font-bold">
+                                [Signature Loaded]
+                              </span>
+                            </div>
                           ) : (
                             mappedVal || (isMissing ? 'Missing *' : 'Empty')
                           )}
@@ -424,6 +517,18 @@ export const ColumnMappingModal: React.FC<ColumnMappingModalProps> = ({
             </div>
 
             {/* Bottom Actions */}
+            {validationError && (
+              <div className="mt-3 p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl flex items-center justify-between">
+                <span>{validationError}</span>
+                <button
+                  type="button"
+                  onClick={() => setValidationError(null)}
+                  className="font-bold text-rose-800 hover:text-black ml-2"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
             <div className="pt-6 border-t border-gray-200 flex items-center justify-end gap-3">
               <button
                 onClick={onClose}

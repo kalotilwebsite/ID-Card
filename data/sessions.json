@@ -82,5 +82,13 @@
   "31acc029f8134ea25ae5c18dc8e057c060fa6fd569d42adae3eba01e76cb8e81": {
     "userId": "user-supervisor-1",
     "expiresAt": 1795080424414
+  },
+  "2f9e984a0286544b79efdce99a2bad7f7482c8f263fca53e93d248364b37a9e0": {
+    "userId": "user-admin-1",
+    "expiresAt": 1795083047282
+  },
+  "5c10884f42f27b76e3dcec462176b66ee0fdff7ce002b6ba0719bbca5409123b": {
+    "userId": "user-supervisor-1",
+    "expiresAt": 1795083047371
   }
 }

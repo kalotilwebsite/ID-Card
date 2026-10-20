@@ -21,6 +21,16 @@ const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const MASTER_FILE = path.join(DATA_DIR, 'master_employees.json');
 const SUBMISSIONS_FILE = path.join(DATA_DIR, 'submissions.json');
 const SESSIONS_FILE = path.join(DATA_DIR, 'sessions.json');
+const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
+
+interface AppSettings {
+  supervisorSuccessMessage: string;
+}
+
+const DEFAULT_SETTINGS: AppSettings = {
+  supervisorSuccessMessage:
+    'Employee ID Card data has been submitted successfully and queued for administrative review and printing. Thank you!',
+};
 
 // Helper for atomic file read/write
 function readJsonFile<T>(filePath: string, fallback: T): T {
@@ -196,6 +206,12 @@ function initializeDatabase() {
 
   // 3. Submissions
   readJsonFile<Record<string, any>>(SUBMISSIONS_FILE, {});
+
+  // 4. Settings
+  const settings = readJsonFile<AppSettings>(SETTINGS_FILE, DEFAULT_SETTINGS);
+  if (!settings.supervisorSuccessMessage) {
+    writeJsonFile(SETTINGS_FILE, DEFAULT_SETTINGS);
+  }
 }
 
 initializeDatabase();
@@ -644,26 +660,150 @@ app.post('/api/submissions', authenticateToken, (req: AuthenticatedRequest, res:
       role: req.user.role,
     },
     submittedAt: new Date().toISOString(),
+    printStatus: 'pending',
+    printCount: 0,
+    printedAt: null,
+    reprintHistory: [],
   };
 
   submissions[cleanEnrollId] = newSubmission;
   writeJsonFile(SUBMISSIONS_FILE, submissions);
 
+  // Retrieve current configured success message from settings
+  const currentSettings = readJsonFile<AppSettings>(SETTINGS_FILE, DEFAULT_SETTINGS);
+
   res.status(201).json({
     success: true,
-    message: `Record successfully submitted for ${masterEmp.name} (Enroll ID: ${cleanEnrollId}).`,
+    message: currentSettings.supervisorSuccessMessage || `Record successfully submitted for ${masterEmp.name} (Enroll ID: ${cleanEnrollId}).`,
     submission: {
       id: newSubmission.id,
       enrollId: cleanEnrollId,
       submittedAt: newSubmission.submittedAt,
+      printStatus: newSubmission.printStatus,
     },
   });
 });
 
-// Admin-only: list all submissions for table, department filtering, and printing
+// Admin-only: list all submissions with normalized print status
 app.get('/api/submissions', authenticateToken, requireAdminRole, (_req: Request, res: Response) => {
   const submissions = readJsonFile<Record<string, any>>(SUBMISSIONS_FILE, {});
-  res.json(Object.values(submissions));
+  const normalized = Object.values(submissions).map((sub: any) => ({
+    ...sub,
+    printStatus: sub.printStatus === 'printed' ? 'printed' : 'pending',
+    printCount: typeof sub.printCount === 'number' ? sub.printCount : sub.printStatus === 'printed' ? 1 : 0,
+    reprintHistory: Array.isArray(sub.reprintHistory) ? sub.reprintHistory : [],
+  }));
+  res.json(normalized);
+});
+
+// Admin-only: mark single submission as printed
+app.post('/api/submissions/:enrollId/mark-printed', authenticateToken, requireAdminRole, (req: AuthenticatedRequest, res: Response) => {
+  const { enrollId } = req.params;
+  const submissions = readJsonFile<Record<string, any>>(SUBMISSIONS_FILE, {});
+  const record = submissions[enrollId];
+
+  if (!record) {
+    res.status(404).json({ error: `Submission for Enrollment ID "${enrollId}" not found.` });
+    return;
+  }
+
+  const now = new Date().toISOString();
+  const isFirstPrint = record.printStatus !== 'printed';
+  record.printStatus = 'printed';
+  record.printedAt = now;
+  record.printCount = (record.printCount || 0) + 1;
+  if (!Array.isArray(record.reprintHistory)) record.reprintHistory = [];
+
+  record.reprintHistory.push({
+    printedAt: now,
+    printedBy: req.user.name || req.user.username,
+    action: isFirstPrint ? 'initial_print' : 'reprint',
+    note: req.body?.note || (isFirstPrint ? 'Initial ID card printed' : 'Card reprint completed'),
+  });
+
+  submissions[enrollId] = record;
+  writeJsonFile(SUBMISSIONS_FILE, submissions);
+
+  res.json({
+    success: true,
+    message: `Card for ${enrollId} marked as printed.`,
+    record,
+  });
+});
+
+// Admin-only: log a reprint action
+app.post('/api/submissions/:enrollId/reprint', authenticateToken, requireAdminRole, (req: AuthenticatedRequest, res: Response) => {
+  const { enrollId } = req.params;
+  const submissions = readJsonFile<Record<string, any>>(SUBMISSIONS_FILE, {});
+  const record = submissions[enrollId];
+
+  if (!record) {
+    res.status(404).json({ error: `Submission for Enrollment ID "${enrollId}" not found.` });
+    return;
+  }
+
+  const now = new Date().toISOString();
+  record.printStatus = 'printed';
+  record.printedAt = now;
+  record.printCount = (record.printCount || 1) + 1;
+  if (!Array.isArray(record.reprintHistory)) record.reprintHistory = [];
+
+  record.reprintHistory.push({
+    printedAt: now,
+    printedBy: req.user.name || req.user.username,
+    action: 'reprint',
+    note: req.body?.note || 'Reprint issued by administrator',
+  });
+
+  submissions[enrollId] = record;
+  writeJsonFile(SUBMISSIONS_FILE, submissions);
+
+  res.json({
+    success: true,
+    message: `Card for ${enrollId} marked as reprinted (Print #${record.printCount}).`,
+    record,
+  });
+});
+
+// Admin-only: bulk mark multiple submissions as printed
+app.post('/api/submissions/bulk-mark-printed', authenticateToken, requireAdminRole, (req: AuthenticatedRequest, res: Response) => {
+  const { enrollIds, note } = req.body;
+  if (!Array.isArray(enrollIds) || enrollIds.length === 0) {
+    res.status(400).json({ error: 'Expected non-empty array of enrollIds.' });
+    return;
+  }
+
+  const submissions = readJsonFile<Record<string, any>>(SUBMISSIONS_FILE, {});
+  const now = new Date().toISOString();
+  let updatedCount = 0;
+
+  for (const enrollId of enrollIds) {
+    const record = submissions[enrollId];
+    if (record) {
+      const isFirstPrint = record.printStatus !== 'printed';
+      record.printStatus = 'printed';
+      record.printedAt = now;
+      record.printCount = (record.printCount || 0) + 1;
+      if (!Array.isArray(record.reprintHistory)) record.reprintHistory = [];
+
+      record.reprintHistory.push({
+        printedAt: now,
+        printedBy: req.user.name || req.user.username,
+        action: isFirstPrint ? 'initial_print' : 'reprint',
+        note: note || (isFirstPrint ? 'Batch print output' : 'Batch reprint output'),
+      });
+
+      submissions[enrollId] = record;
+      updatedCount++;
+    }
+  }
+
+  writeJsonFile(SUBMISSIONS_FILE, submissions);
+  res.json({
+    success: true,
+    message: `Successfully marked ${updatedCount} submissions as printed.`,
+    updatedCount,
+  });
 });
 
 // Admin-only: delete submission to allow resubmission if needed
@@ -679,6 +819,33 @@ app.delete('/api/submissions/:enrollId', authenticateToken, requireAdminRole, (r
   delete submissions[enrollId];
   writeJsonFile(SUBMISSIONS_FILE, submissions);
   res.json({ success: true, message: `Submission for ${enrollId} deleted.` });
+});
+
+// --- SETTINGS (ADMIN CONFIGURABLE & PUBLIC CONFIRMATION MESSAGE) ---
+
+// Authenticated users (including supervisors): get public confirmation message
+app.get('/api/settings/public', authenticateToken, (_req: Request, res: Response) => {
+  const settings = readJsonFile<AppSettings>(SETTINGS_FILE, DEFAULT_SETTINGS);
+  res.json({ supervisorSuccessMessage: settings.supervisorSuccessMessage || DEFAULT_SETTINGS.supervisorSuccessMessage });
+});
+
+// Admin-only: get full application settings
+app.get('/api/settings', authenticateToken, requireAdminRole, (_req: Request, res: Response) => {
+  const settings = readJsonFile<AppSettings>(SETTINGS_FILE, DEFAULT_SETTINGS);
+  res.json(settings);
+});
+
+// Admin-only: update application settings
+app.put('/api/settings', authenticateToken, requireAdminRole, (req: Request, res: Response) => {
+  const current = readJsonFile<AppSettings>(SETTINGS_FILE, DEFAULT_SETTINGS);
+  const updated: AppSettings = {
+    ...current,
+    supervisorSuccessMessage: req.body.supervisorSuccessMessage !== undefined
+      ? String(req.body.supervisorSuccessMessage).trim()
+      : current.supervisorSuccessMessage,
+  };
+  writeJsonFile(SETTINGS_FILE, updated);
+  res.json(updated);
 });
 
 // =========================================================================

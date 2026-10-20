@@ -244,4 +244,47 @@ export const apiService = {
       method: 'DELETE',
     });
   },
+
+  async markSubmissionPrinted(enrollId: string, note?: string): Promise<{ success: boolean; message: string; record: SubmissionRecord }> {
+    return request<{ success: boolean; message: string; record: SubmissionRecord }>(
+      `/api/submissions/${encodeURIComponent(enrollId)}/mark-printed`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ note }),
+      }
+    );
+  },
+
+  async reprintSubmission(enrollId: string, note?: string): Promise<{ success: boolean; message: string; record: SubmissionRecord }> {
+    return request<{ success: boolean; message: string; record: SubmissionRecord }>(
+      `/api/submissions/${encodeURIComponent(enrollId)}/reprint`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ note }),
+      }
+    );
+  },
+
+  async bulkMarkPrinted(enrollIds: string[], note?: string): Promise<{ success: boolean; message: string; updatedCount: number }> {
+    return request<{ success: boolean; message: string; updatedCount: number }>('/api/submissions/bulk-mark-printed', {
+      method: 'POST',
+      body: JSON.stringify({ enrollIds, note }),
+    });
+  },
+
+  // Settings
+  async getPublicSettings(): Promise<{ supervisorSuccessMessage: string }> {
+    return request<{ supervisorSuccessMessage: string }>('/api/settings/public');
+  },
+
+  async getAdminSettings(): Promise<{ supervisorSuccessMessage: string }> {
+    return request<{ supervisorSuccessMessage: string }>('/api/settings');
+  },
+
+  async updateAdminSettings(settings: { supervisorSuccessMessage?: string }): Promise<{ supervisorSuccessMessage: string }> {
+    return request<{ supervisorSuccessMessage: string }>('/api/settings', {
+      method: 'PUT',
+      body: JSON.stringify(settings),
+    });
+  },
 };

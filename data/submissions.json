@@ -56,9 +56,9 @@
     "submittedAt": "2026-10-20T07:48:13.086Z"
   },
   "586667": {
-    "id": "sub-1792482647149-936",
+    "id": "sub-1792485306504-853",
     "enrollId": "586667",
-    "nationalId": "19852691234567890",
+    "nationalId": "19952692018000456",
     "photoUrl": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
     "signatureUrl": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
     "employee": {
@@ -76,12 +76,29 @@
       "importedAt": "2026-10-20T06:44:11.440Z"
     },
     "submittedBy": {
-      "id": "user-1792482647022-495",
-      "name": "Assembly Line 2 Supervisor",
-      "username": "sup_1792482647019",
-      "employeeId": "SUP-T-1792482647019",
+      "id": "user-supervisor-1",
+      "name": "Production Shift Supervisor",
+      "username": "supervisor1",
+      "employeeId": "SUP-2026-01",
       "role": "supervisor"
     },
-    "submittedAt": "2026-10-20T07:50:47.149Z"
+    "submittedAt": "2026-10-20T08:35:06.504Z",
+    "printStatus": "printed",
+    "printCount": 2,
+    "printedAt": "2026-10-20T08:35:06.527Z",
+    "reprintHistory": [
+      {
+        "printedAt": "2026-10-20T08:35:06.524Z",
+        "printedBy": "System Administrator",
+        "action": "initial_print",
+        "note": "Test initial print verification"
+      },
+      {
+        "printedAt": "2026-10-20T08:35:06.527Z",
+        "printedBy": "System Administrator",
+        "action": "reprint",
+        "note": "Card damaged in packaging; reprint requested"
+      }
+    ]
   }
 }

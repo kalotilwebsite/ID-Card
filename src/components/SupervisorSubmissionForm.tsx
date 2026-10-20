@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Search,
   CheckCircle,
@@ -18,29 +18,23 @@ import {
   Droplet,
   MapPin,
   RefreshCw,
-  Eye,
   Shield,
   FileCheck,
+  Check,
+  X,
 } from 'lucide-react';
 import { apiService } from '../services/apiService';
-import { AuthUser, MasterEmployee, EmployeeCardData, CARD_WIDTH, CARD_HEIGHT, DEFAULT_CALIBRATION } from '../types';
-import { CardFront } from './CardFront';
-import { CardBack } from './CardBack';
-import { FRONT_TEMPLATE_SVG, BACK_TEMPLATE_SVG } from '../data/cardTemplates';
+import { AuthUser, MasterEmployee } from '../types';
 import { CameraCaptureModal } from './CameraCaptureModal';
 import { SignaturePadModal } from './SignaturePadModal';
 
 interface SupervisorSubmissionFormProps {
   currentUser?: AuthUser | null;
-  frontTemplateUrl?: string;
-  backTemplateUrl?: string;
   onSubmissionSuccess?: () => void;
 }
 
 export function SupervisorSubmissionForm({
   currentUser,
-  frontTemplateUrl = FRONT_TEMPLATE_SVG,
-  backTemplateUrl = BACK_TEMPLATE_SVG,
   onSubmissionSuccess,
 }: SupervisorSubmissionFormProps) {
   // Search & Lookup State
@@ -51,7 +45,7 @@ export function SupervisorSubmissionForm({
   const [alreadySubmitted, setAlreadySubmitted] = useState(false);
   const [submissionInfo, setSubmissionInfo] = useState<any | null>(null);
 
-  // The 3 required input fields
+  // Form input fields
   const [nationalId, setNationalId] = useState('');
   const [photoUrl, setPhotoUrl] = useState('');
   const [signatureUrl, setSignatureUrl] = useState('');
@@ -63,12 +57,45 @@ export function SupervisorSubmissionForm({
 
   // Submission State
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitSuccess, setSubmitSuccess] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
+
+  // Confirmation Popup Modal State (Strictly NO ID Card Preview)
+  const [confirmationPopup, setConfirmationPopup] = useState<{
+    isOpen: boolean;
+    message: string;
+    employeeName: string;
+    enrollId: string;
+  }>({
+    isOpen: false,
+    message: '',
+    employeeName: '',
+    enrollId: '',
+  });
+
+  // Configured success message from Admin Settings
+  const [adminConfiguredMessage, setAdminConfiguredMessage] = useState(
+    'Employee ID Card data has been submitted successfully and queued for administrative review and printing. Thank you!'
+  );
 
   // Hidden file inputs
   const photoFileInputRef = useRef<HTMLInputElement>(null);
   const sigFileInputRef = useRef<HTMLInputElement>(null);
+  const enrollInputRef = useRef<HTMLInputElement>(null);
+
+  // Fetch admin configured success message on mount
+  useEffect(() => {
+    const fetchPublicSettings = async () => {
+      try {
+        const settings = await apiService.getPublicSettings();
+        if (settings?.supervisorSuccessMessage) {
+          setAdminConfiguredMessage(settings.supervisorSuccessMessage);
+        }
+      } catch (e) {
+        // Fallback to default
+      }
+    };
+    fetchPublicSettings();
+  }, []);
 
   // Lookup employee by Enrollment Number
   const handleLookup = async (idToSearch?: string) => {
@@ -80,7 +107,6 @@ export function SupervisorSubmissionForm({
 
     setIsLookingUp(true);
     setLookupError(null);
-    setSubmitSuccess(null);
     setSubmitError(null);
 
     try {
@@ -89,7 +115,6 @@ export function SupervisorSubmissionForm({
         setEmployee(res.employee);
         setAlreadySubmitted(Boolean(res.alreadySubmitted));
         setSubmissionInfo(res.submissionInfo || null);
-        // Pre-fill nationalId if exists on master record
         if (res.employee.nationalId) {
           setNationalId(res.employee.nationalId);
         } else {
@@ -165,6 +190,9 @@ export function SupervisorSubmissionForm({
     setSignatureUrl('');
     setLookupError(null);
     setSubmitError(null);
+    setTimeout(() => {
+      enrollInputRef.current?.focus();
+    }, 100);
   };
 
   // Submit Supervisor Record
@@ -208,11 +236,19 @@ export function SupervisorSubmissionForm({
 
       const empName = employee.name;
       const empId = employee.enrollId;
+      const returnedMessage = res.message || adminConfiguredMessage;
 
+      // Reset form completely
       handleResetForm();
-      setSubmitSuccess(
-        `Supervisor record successfully submitted and saved for ${empName} (Enrollment No: ${empId})! The form has been cleared and is ready for the next Employee Enrollment Number.`
-      );
+
+      // STRICT REQUIREMENT 6: Show only a simple confirmation popup message.
+      // Under NO circumstances render, preview, or show the card design or layout!
+      setConfirmationPopup({
+        isOpen: true,
+        message: returnedMessage,
+        employeeName: empName,
+        enrollId: empId,
+      });
 
       if (onSubmissionSuccess) {
         onSubmissionSuccess();
@@ -232,104 +268,79 @@ export function SupervisorSubmissionForm({
     }
   };
 
-  // Construct card preview
-  const previewCardData: EmployeeCardData | null = employee
-    ? {
-        id: `preview-${employee.enrollId}`,
-        name: employee.name,
-        designation: employee.designation,
-        department: employee.department,
-        jobType: employee.jobType,
-        joiningDate: employee.joiningDate,
-        enrollId: employee.enrollId,
-        cardIssue: employee.cardIssue,
-        photoUrl: photoUrl || undefined,
-        permanentAddress: employee.permanentAddress,
-        emergencyContact: employee.emergencyContact,
-        nationalId: nationalId || employee.nationalId || 'NID-PENDING',
-        bloodGroup: employee.bloodGroup,
-        signatureUrl: signatureUrl || undefined,
-        isValid: Boolean(nationalId && photoUrl && signatureUrl),
-      }
-    : null;
+  const handleCloseConfirmationPopup = () => {
+    setConfirmationPopup({
+      isOpen: false,
+      message: '',
+      employeeName: '',
+      enrollId: '',
+    });
+    setTimeout(() => {
+      enrollInputRef.current?.focus();
+    }, 100);
+  };
 
   return (
-    <div className="max-w-6xl mx-auto p-4 sm:p-6 space-y-6">
+    <div className="max-w-4xl mx-auto p-4 sm:p-6 space-y-6">
       {/* Top Banner with Supervisor Identity */}
-      <div className="bg-slate-950 border border-purple-900/50 rounded-2xl p-5 shadow-xl bg-gradient-to-r from-purple-950/30 via-slate-950 to-indigo-950/20 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-purple-500/20 text-purple-300 border border-purple-500/30 flex items-center gap-1">
-              <Briefcase className="w-3 h-3 text-purple-400" />
+            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-purple-50 text-purple-700 border border-purple-200 flex items-center gap-1">
+              <Briefcase className="w-3 h-3 text-purple-600" />
               Supervisor Portal
             </span>
             {currentUser && (
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700 flex items-center gap-1 font-mono">
-                <IdCard className="w-3 h-3 text-purple-400" />
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200 flex items-center gap-1 font-mono">
+                <IdCard className="w-3 h-3 text-purple-600" />
                 Supervisor ID: {currentUser.employeeId || currentUser.username}
               </span>
             )}
-            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
-              Verified Session
+            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
+              <Check className="w-3 h-3 text-emerald-600" />
+              Authorized Session
             </span>
           </div>
 
-          <h2 className="text-base sm:text-lg font-black text-white tracking-tight flex items-center gap-2">
-            <span>Supervisor ID Card Submission Form</span>
+          <h2 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight">
+            Add New Employee ID Card
           </h2>
-          <p className="text-xs text-slate-400 max-w-2xl mt-0.5">
-            Authenticate employees by their <strong className="text-purple-300">Enrollment Number</strong>, verify master database records, and submit the 3 required items: <strong className="text-slate-200">National ID Card Number</strong>, <strong className="text-slate-200">Employee Photo</strong>, and <strong className="text-slate-200">Employee Signature</strong>.
+          <p className="text-xs text-slate-600 max-w-2xl mt-0.5">
+            Enter the employee&apos;s Enrollment ID to retrieve their official master database record, then submit their National ID, portrait photo, and signature.
           </p>
         </div>
 
         <button
           type="button"
           onClick={handleResetForm}
-          className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl text-xs font-semibold flex items-center gap-2 self-start sm:self-auto transition-colors"
+          className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold flex items-center gap-2 self-start sm:self-auto transition-colors border border-slate-200"
         >
           <RotateCcw className="w-3.5 h-3.5" />
           <span>Clear Form / Next ID</span>
         </button>
       </div>
 
-      {/* Access Restriction Notice */}
-      <div className="bg-purple-950/20 border border-purple-800/30 rounded-xl px-4 py-2.5 flex items-center justify-between text-xs text-purple-300/90">
+      {/* Role Notice */}
+      <div className="bg-purple-50/70 border border-purple-200 rounded-xl px-4 py-2.5 flex items-center justify-between text-xs text-purple-900">
         <div className="flex items-center gap-2">
-          <Shield className="w-4 h-4 text-purple-400 shrink-0" />
+          <Shield className="w-4 h-4 text-purple-600 shrink-0" />
           <span>
-            <strong>Role Enforcement:</strong> Supervisors have exclusive access to this submission form. Master database management, user accounts, and card printing remain restricted to administrators.
+            <strong>Access Level:</strong> You have authorized access to submit new employee ID card data. Card previewing and printing are exclusively handled by the system administrator.
           </span>
         </div>
       </div>
 
-      {/* Success Notification */}
-      {submitSuccess && (
-        <div className="p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl text-emerald-200 text-xs flex items-start gap-3 shadow-md animate-in fade-in">
-          <CheckCircle className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
-          <div className="flex-1">
-            <h4 className="font-bold text-emerald-300 mb-0.5">Submission Completed!</h4>
-            <p className="leading-relaxed">{submitSuccess}</p>
-          </div>
-          <button
-            onClick={() => setSubmitSuccess(null)}
-            className="text-emerald-400 hover:text-emerald-200 text-xs font-bold"
-          >
-            Dismiss
-          </button>
-        </div>
-      )}
-
       {/* Error Notification */}
       {submitError && (
-        <div className="p-4 bg-rose-500/10 border border-rose-500/30 rounded-2xl text-rose-200 text-xs flex items-start gap-3 shadow-md animate-in fade-in">
-          <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+        <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl text-rose-800 text-xs flex items-start gap-3 shadow-xs animate-in fade-in">
+          <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
           <div className="flex-1">
-            <h4 className="font-bold text-rose-300 mb-0.5">Submission Blocked</h4>
+            <h4 className="font-bold text-rose-900 mb-0.5">Submission Blocked</h4>
             <p className="leading-relaxed">{submitError}</p>
           </div>
           <button
             onClick={() => setSubmitError(null)}
-            className="text-rose-400 hover:text-rose-200 text-xs font-bold"
+            className="text-rose-600 hover:text-rose-800 text-xs font-bold"
           >
             Dismiss
           </button>
@@ -337,25 +348,27 @@ export function SupervisorSubmissionForm({
       )}
 
       {/* STEP 1: Employee Enrollment Number Lookup */}
-      <div className="bg-slate-950 border border-slate-800 rounded-2xl p-5 shadow-md">
+      <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs">
         <div className="flex items-center justify-between mb-3">
-          <label className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
-            <Search className="w-4 h-4 text-purple-400" />
+          <label className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2">
+            <Search className="w-4 h-4 text-purple-600" />
             <span>1. Enter Employee Enrollment Number</span>
           </label>
-          <span className="text-[11px] text-slate-500">Unique lookup key</span>
+          <span className="text-[11px] text-slate-500">Master database key</span>
         </div>
 
         <div className="flex items-center gap-2">
           <div className="relative flex-1">
-            <IdCard className="w-4 h-4 text-purple-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <IdCard className="w-4 h-4 text-purple-600 absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
+              ref={enrollInputRef}
               type="text"
               value={enrollIdInput}
               onChange={(e) => setEnrollIdInput(e.target.value)}
               onKeyDown={handleKeyDownEnrollId}
               placeholder="e.g. 586665, 586666, 586667..."
-              className="w-full bg-slate-900 border border-slate-700 focus:border-purple-500 focus:ring-1 focus:ring-purple-500 rounded-xl pl-10 pr-4 py-2.5 text-xs text-white placeholder-slate-500 font-mono transition-colors"
+              className="w-full bg-slate-50 border border-slate-300 focus:bg-white focus:border-purple-600 focus:ring-1 focus:ring-purple-600 rounded-xl pl-10 pr-4 py-2.5 text-xs text-slate-900 placeholder-slate-400 font-mono transition-colors"
+              autoFocus
             />
           </div>
 
@@ -363,7 +376,7 @@ export function SupervisorSubmissionForm({
             type="button"
             onClick={() => handleLookup()}
             disabled={isLookingUp}
-            className="px-5 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-md shadow-purple-950/40 transition-all flex items-center gap-2 shrink-0"
+            className="px-5 py-2.5 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-2 shrink-0"
           >
             {isLookingUp ? (
               <>
@@ -380,8 +393,8 @@ export function SupervisorSubmissionForm({
         </div>
 
         {/* Quick Sample IDs */}
-        <div className="mt-2.5 flex items-center gap-1.5 flex-wrap">
-          <span className="text-[10px] text-slate-500">Quick Test IDs:</span>
+        <div className="mt-3 flex items-center gap-1.5 flex-wrap">
+          <span className="text-[11px] text-slate-500 font-medium">Quick Test IDs:</span>
           {['586665', '586666', '586667'].map((id) => (
             <button
               key={id}
@@ -390,7 +403,7 @@ export function SupervisorSubmissionForm({
                 setEnrollIdInput(id);
                 handleLookup(id);
               }}
-              className="px-2 py-0.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-purple-300 rounded text-[10px] font-mono transition-colors"
+              className="px-2.5 py-1 bg-slate-100 hover:bg-purple-50 hover:border-purple-300 border border-slate-200 text-purple-700 rounded-lg text-xs font-mono font-medium transition-colors"
             >
               {id}
             </button>
@@ -399,27 +412,27 @@ export function SupervisorSubmissionForm({
 
         {/* Lookup Error */}
         {lookupError && (
-          <div className="mt-3 p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-xs text-rose-300 flex items-start gap-2.5">
-            <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+          <div className="mt-3 p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 flex items-start gap-2.5">
+            <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
             <div className="flex-1 leading-relaxed">{lookupError}</div>
           </div>
         )}
 
         {/* Duplicate Warning Alert */}
         {alreadySubmitted && submissionInfo && (
-          <div className="mt-3 p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-xs text-amber-200 flex items-start gap-2.5">
-            <ShieldAlert className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+          <div className="mt-3 p-4 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-start gap-2.5">
+            <ShieldAlert className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
             <div className="flex-1">
-              <h4 className="font-bold text-amber-300 mb-0.5">
+              <h4 className="font-bold text-amber-950 mb-0.5">
                 Already Submitted &amp; Protected!
               </h4>
-              <p className="text-[11px] text-amber-200/90 leading-relaxed">
+              <p className="text-[11px] text-amber-800 leading-relaxed">
                 This Enrollment ID was already submitted on{' '}
-                <strong className="text-white">
+                <strong className="text-slate-900">
                   {new Date(submissionInfo.submittedAt).toLocaleDateString()} at{' '}
                   {new Date(submissionInfo.submittedAt).toLocaleTimeString()}
                 </strong>{' '}
-                by <strong className="text-white">{submissionInfo.submittedBy}</strong>. Duplicate submissions are strictly prevented.
+                by <strong className="text-slate-900">{submissionInfo.submittedBy}</strong>. Duplicate submissions are strictly prevented.
               </p>
             </div>
           </div>
@@ -428,376 +441,365 @@ export function SupervisorSubmissionForm({
 
       {/* STEP 2: Read-Only Master Record Display */}
       {employee && (
-        <div className="bg-slate-950 border border-slate-800 rounded-2xl p-5 shadow-md space-y-3">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
+        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-3">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
             <div className="flex items-center gap-2">
-              <User className="w-4 h-4 text-purple-400" />
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-300">
-                2. Master Employee Record (Read-Only)
+              <User className="w-4 h-4 text-purple-600" />
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-800">
+                2. Master Employee Record (Read-Only From Database)
               </span>
             </div>
-            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">
+            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
               Verified in Database
             </span>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 text-xs">
-            <div className="p-2.5 bg-slate-900/60 rounded-xl border border-slate-800/80">
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80">
               <div className="text-[10px] text-slate-500 uppercase font-semibold">Full Name</div>
-              <div className="font-bold text-white mt-0.5 truncate">{employee.name}</div>
+              <div className="font-bold text-slate-900 mt-0.5 truncate">{employee.name}</div>
             </div>
 
-            <div className="p-2.5 bg-slate-900/60 rounded-xl border border-slate-800/80">
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80">
               <div className="text-[10px] text-slate-500 uppercase font-semibold flex items-center gap-1">
-                <Briefcase className="w-3 h-3 text-slate-400" /> Designation
+                <Briefcase className="w-3 h-3 text-slate-500" /> Designation
               </div>
-              <div className="font-semibold text-slate-200 mt-0.5 truncate">{employee.designation}</div>
+              <div className="font-semibold text-slate-800 mt-0.5 truncate">{employee.designation}</div>
             </div>
 
-            <div className="p-2.5 bg-slate-900/60 rounded-xl border border-slate-800/80">
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80">
               <div className="text-[10px] text-slate-500 uppercase font-semibold flex items-center gap-1">
-                <Building className="w-3 h-3 text-slate-400" /> Department
+                <Building className="w-3 h-3 text-slate-500" /> Department
               </div>
-              <div className="font-semibold text-slate-200 mt-0.5 truncate">{employee.department}</div>
+              <div className="font-semibold text-slate-800 mt-0.5 truncate">{employee.department}</div>
             </div>
 
-            <div className="p-2.5 bg-slate-900/60 rounded-xl border border-slate-800/80">
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80">
               <div className="text-[10px] text-slate-500 uppercase font-semibold">Enrollment No.</div>
-              <div className="font-mono font-bold text-purple-400 mt-0.5">{employee.enrollId}</div>
+              <div className="font-mono font-bold text-purple-700 mt-0.5">{employee.enrollId}</div>
             </div>
 
-            <div className="p-2.5 bg-slate-900/60 rounded-xl border border-slate-800/80">
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80">
               <div className="text-[10px] text-slate-500 uppercase font-semibold flex items-center gap-1">
-                <Calendar className="w-3 h-3 text-slate-400" /> Joining Date
+                <Calendar className="w-3 h-3 text-slate-500" /> Joining Date
               </div>
-              <div className="font-mono text-slate-300 mt-0.5">{employee.joiningDate}</div>
+              <div className="font-mono text-slate-700 mt-0.5">{employee.joiningDate}</div>
             </div>
 
-            <div className="p-2.5 bg-slate-900/60 rounded-xl border border-slate-800/80">
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80">
               <div className="text-[10px] text-slate-500 uppercase font-semibold flex items-center gap-1">
-                <Droplet className="w-3 h-3 text-rose-400" /> Blood Group
+                <Droplet className="w-3 h-3 text-rose-600" /> Blood Group
               </div>
-              <div className="font-bold text-rose-400 mt-0.5">{employee.bloodGroup}</div>
+              <div className="font-bold text-rose-700 mt-0.5">{employee.bloodGroup}</div>
             </div>
 
-            <div className="p-2.5 bg-slate-900/60 rounded-xl border border-slate-800/80 col-span-2">
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80">
               <div className="text-[10px] text-slate-500 uppercase font-semibold flex items-center gap-1">
-                <Phone className="w-3 h-3 text-slate-400" /> Emergency Contact
+                <Calendar className="w-3 h-3 text-slate-500" /> Card Issue Date
               </div>
-              <div className="font-mono text-slate-300 mt-0.5">{employee.emergencyContact}</div>
+              <div className="font-mono text-slate-700 mt-0.5">{employee.cardIssue || '19/10/2026'}</div>
             </div>
 
-            <div className="p-2.5 bg-slate-900/60 rounded-xl border border-slate-800/80 col-span-2 sm:col-span-3 md:col-span-4">
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80">
               <div className="text-[10px] text-slate-500 uppercase font-semibold flex items-center gap-1">
-                <MapPin className="w-3 h-3 text-slate-400" /> Permanent Address
+                <Phone className="w-3 h-3 text-slate-500" /> Emergency Contact
               </div>
-              <div className="text-slate-300 mt-0.5 truncate">{employee.permanentAddress}</div>
+              <div className="font-mono text-slate-700 mt-0.5">{employee.emergencyContact}</div>
+            </div>
+
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 col-span-2 sm:col-span-3 md:col-span-4">
+              <div className="text-[10px] text-slate-500 uppercase font-semibold flex items-center gap-1">
+                <MapPin className="w-3 h-3 text-slate-500" /> Permanent Address
+              </div>
+              <div className="text-slate-800 mt-0.5 truncate">{employee.permanentAddress}</div>
             </div>
           </div>
         </div>
       )}
 
-      {/* STEP 3: The 3 Required Input Fields & Live ID Card Preview */}
+      {/* STEP 3: Input Fields (NID, Photo, Signature) & Submission */}
       {employee && (
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            {/* Left 7 Columns: Form Input Controls */}
-            <div className="lg:col-span-7 space-y-5 bg-slate-950 border border-slate-800 rounded-2xl p-5 shadow-md">
-              <div className="border-b border-slate-800 pb-2.5 flex items-center justify-between">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
-                  <FileCheck className="w-4 h-4 text-purple-400" />
-                  <span>3. Required Supervisor Submission Fields</span>
-                </h3>
-                <span className="text-[10px] text-purple-400 font-semibold">* All 3 fields mandatory</span>
-              </div>
+        <form onSubmit={handleSubmit} className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-6">
+          <div className="border-b border-slate-100 pb-3 flex items-center justify-between">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2">
+              <FileCheck className="w-4 h-4 text-purple-600" />
+              <span>3. Enter Employee National ID, Photo &amp; Signature</span>
+            </h3>
+            <span className="text-[11px] text-purple-700 font-semibold">* All 3 items mandatory</span>
+          </div>
 
-              {/* Field 1: National ID Number */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-200 mb-1.5 flex items-center justify-between">
-                  <span>National ID Card Number *</span>
-                  <span className="text-[10px] text-slate-500 font-normal">NID or Smart Card No.</span>
-                </label>
-                <div className="relative">
-                  <IdCard className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    required
-                    value={nationalId}
-                    onChange={(e) => setNationalId(e.target.value)}
-                    placeholder="e.g. 19852691234567890 or 5912345678"
-                    disabled={alreadySubmitted}
-                    className="w-full bg-slate-900 border border-slate-700 focus:border-purple-500 focus:ring-1 focus:ring-purple-500 rounded-xl pl-10 pr-3.5 py-2.5 text-xs text-white placeholder-slate-500 font-mono transition-colors disabled:opacity-50"
-                  />
-                </div>
-              </div>
-
-              {/* Field 2: Employee Photo Capture / Upload */}
-              <div className="p-4 bg-slate-900/50 border border-slate-800 rounded-xl space-y-3">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
-                    <User className="w-3.5 h-3.5 text-purple-400" />
-                    <span>Employee Photo *</span>
-                  </label>
-                  {photoUrl ? (
-                    <span className="text-[10px] font-bold text-emerald-400 flex items-center gap-1">
-                      <CheckCircle className="w-3 h-3" /> Photo Attached
-                    </span>
-                  ) : (
-                    <span className="text-[10px] text-rose-400 font-semibold">Required</span>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-4">
-                  {/* Thumbnail / Avatar */}
-                  <div className="w-20 h-24 rounded-xl bg-slate-950 border border-slate-700 flex items-center justify-center overflow-hidden shrink-0 shadow-inner">
-                    {photoUrl ? (
-                      <img
-                        src={photoUrl}
-                        alt="Employee Photo Preview"
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="text-center p-2 text-slate-600">
-                        <User className="w-8 h-8 mx-auto mb-1 opacity-40" />
-                        <span className="text-[9px] block">No Photo</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Actions */}
-                  <div className="flex-1 space-y-2">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <button
-                        type="button"
-                        onClick={() => openCamera('photo')}
-                        disabled={alreadySubmitted}
-                        className="px-3 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:opacity-50 text-white rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 shadow-sm"
-                      >
-                        <Camera className="w-3.5 h-3.5" />
-                        <span>Live Camera (Passport Guide)</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => photoFileInputRef.current?.click()}
-                        disabled={alreadySubmitted}
-                        className="px-3 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-200 rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5 border border-slate-700"
-                      >
-                        <Upload className="w-3.5 h-3.5" />
-                        <span>Upload File</span>
-                      </button>
-
-                      {photoUrl && (
-                        <button
-                          type="button"
-                          onClick={() => setPhotoUrl('')}
-                          disabled={alreadySubmitted}
-                          className="px-2.5 py-2 text-rose-400 hover:text-rose-300 text-xs font-semibold"
-                        >
-                          Clear
-                        </button>
-                      )}
-                    </div>
-                    <p className="text-[10px] text-slate-500 leading-tight">
-                      Use the camera with passport framing guide or upload a clear portrait photo.
-                    </p>
-                  </div>
-                </div>
-
-                <input
-                  ref={photoFileInputRef}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(e) => handleFileChange(e, 'photo')}
-                />
-              </div>
-
-              {/* Field 3: Employee Signature Capture / Upload */}
-              <div className="p-4 bg-slate-900/50 border border-slate-800 rounded-xl space-y-3">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
-                    <PenTool className="w-3.5 h-3.5 text-purple-400" />
-                    <span>Employee Signature Photo *</span>
-                  </label>
-                  {signatureUrl ? (
-                    <span className="text-[10px] font-bold text-emerald-400 flex items-center gap-1">
-                      <CheckCircle className="w-3 h-3" /> Signature Attached
-                    </span>
-                  ) : (
-                    <span className="text-[10px] text-rose-400 font-semibold">Required</span>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-4">
-                  {/* Thumbnail */}
-                  <div className="w-28 h-16 rounded-xl bg-slate-950 border border-slate-700 flex items-center justify-center overflow-hidden shrink-0 shadow-inner p-1">
-                    {signatureUrl ? (
-                      <img
-                        src={signatureUrl}
-                        alt="Signature Preview"
-                        className="w-full h-full object-contain filter invert"
-                      />
-                    ) : (
-                      <div className="text-center text-slate-600">
-                        <PenTool className="w-5 h-5 mx-auto mb-0.5 opacity-40" />
-                        <span className="text-[9px]">No Signature</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Actions */}
-                  <div className="flex-1 space-y-2">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <button
-                        type="button"
-                        onClick={() => setIsSignaturePadOpen(true)}
-                        disabled={alreadySubmitted}
-                        className="px-3 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:opacity-50 text-white rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 shadow-sm"
-                      >
-                        <PenTool className="w-3.5 h-3.5" />
-                        <span>Draw on Touchpad</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => sigFileInputRef.current?.click()}
-                        disabled={alreadySubmitted}
-                        className="px-3 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-200 rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5 border border-slate-700"
-                      >
-                        <Upload className="w-3.5 h-3.5" />
-                        <span>Upload Signature</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => openCamera('signature')}
-                        disabled={alreadySubmitted}
-                        className="px-3 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-300 rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5 border border-slate-700"
-                      >
-                        <Camera className="w-3.5 h-3.5" />
-                        <span>Capture Paper</span>
-                      </button>
-
-                      {signatureUrl && (
-                        <button
-                          type="button"
-                          onClick={() => setSignatureUrl('')}
-                          disabled={alreadySubmitted}
-                          className="px-2.5 py-2 text-rose-400 hover:text-rose-300 text-xs font-semibold"
-                        >
-                          Clear
-                        </button>
-                      )}
-                    </div>
-                    <p className="text-[10px] text-slate-500 leading-tight">
-                      Draw on touchscreen/mouse or upload a photo/scan of the employee's physical signature.
-                    </p>
-                  </div>
-                </div>
-
-                <input
-                  ref={sigFileInputRef}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(e) => handleFileChange(e, 'sig')}
-                />
-              </div>
-
-              {/* Submit Button */}
-              <div className="pt-2">
-                <button
-                  type="submit"
-                  disabled={isSubmitting || alreadySubmitted || !nationalId.trim() || !photoUrl || !signatureUrl}
-                  className="w-full py-3.5 bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-600 hover:from-purple-500 hover:to-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-black text-sm rounded-xl shadow-lg shadow-purple-950/50 transition-all flex items-center justify-center gap-2"
-                >
-                  {isSubmitting ? (
-                    <>
-                      <RefreshCw className="w-4 h-4 animate-spin" />
-                      <span>Saving Supervisor Record...</span>
-                    </>
-                  ) : alreadySubmitted ? (
-                    <>
-                      <ShieldAlert className="w-4 h-4 text-amber-300" />
-                      <span>Already Submitted (Blocked from Duplicate)</span>
-                    </>
-                  ) : (
-                    <>
-                      <Send className="w-4 h-4" />
-                      <span>Submit Supervisor Verified Record</span>
-                    </>
-                  )}
-                </button>
-              </div>
+          {/* Field 1: National ID Number */}
+          <div className="space-y-1.5">
+            <label className="block text-xs font-semibold text-slate-800 flex items-center justify-between">
+              <span>Employee National ID (NID) Card Number *</span>
+              <span className="text-[10px] text-slate-500 font-normal">Smart NID or Old NID</span>
+            </label>
+            <div className="relative">
+              <IdCard className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                required
+                value={nationalId}
+                onChange={(e) => setNationalId(e.target.value)}
+                placeholder="e.g. 19852691234567890 or 5912345678"
+                disabled={alreadySubmitted}
+                className="w-full bg-slate-50 border border-slate-300 focus:bg-white focus:border-purple-600 focus:ring-1 focus:ring-purple-600 rounded-xl pl-10 pr-3.5 py-2.5 text-xs text-slate-900 placeholder-slate-400 font-mono transition-colors disabled:opacity-50"
+              />
             </div>
+          </div>
 
-            {/* Right 5 Columns: Real-Time ID Card Preview */}
-            <div className="lg:col-span-5 bg-slate-950 border border-slate-800 rounded-2xl p-5 shadow-md flex flex-col items-center">
-              <div className="w-full border-b border-slate-800 pb-2.5 mb-4 flex items-center justify-between">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
-                  <Eye className="w-4 h-4 text-purple-400" />
-                  <span>Live ID Card Preview</span>
-                </h3>
-                <span className="text-[10px] text-slate-500 font-mono">54 × 86 mm</span>
-              </div>
-
-              {previewCardData && (
-                <div className="flex flex-col items-center gap-5">
-                  {/* Front Preview */}
-                  <div className="flex flex-col items-center">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
-                      Card Front (Portrait)
-                    </span>
-                    <div
-                      className="rounded-xl overflow-hidden shadow-2xl border border-slate-700 bg-white"
-                      style={{
-                        width: `${CARD_WIDTH * 2.8}px`,
-                        height: `${CARD_HEIGHT * 2.8}px`,
-                      }}
-                    >
-                      <CardFront
-                        employee={previewCardData}
-                        templateUrl={frontTemplateUrl}
-                        calibration={DEFAULT_CALIBRATION.front}
-                        scale={0.49}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Back Preview */}
-                  <div className="flex flex-col items-center">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
-                      Card Back (Portrait)
-                    </span>
-                    <div
-                      className="rounded-xl overflow-hidden shadow-2xl border border-slate-700 bg-white"
-                      style={{
-                        width: `${CARD_WIDTH * 2.8}px`,
-                        height: `${CARD_HEIGHT * 2.8}px`,
-                      }}
-                    >
-                      <CardBack
-                        employee={previewCardData}
-                        templateUrl={backTemplateUrl}
-                        calibration={DEFAULT_CALIBRATION.back}
-                        scale={0.49}
-                      />
-                    </div>
-                  </div>
-                </div>
+          {/* Field 2: Employee Photo Capture & Review */}
+          <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
+                <User className="w-3.5 h-3.5 text-purple-600" />
+                <span>Employee Photo (Passport Portrait) *</span>
+              </label>
+              {photoUrl ? (
+                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1">
+                  <Check className="w-3 h-3 text-emerald-600" /> Photo Attached
+                </span>
+              ) : (
+                <span className="text-[10px] text-rose-600 font-semibold">Required</span>
               )}
             </div>
+
+            <div className="flex items-center gap-4">
+              {/* Photo Review Thumbnail */}
+              <div className="w-24 h-32 rounded-xl bg-white border border-slate-300 flex items-center justify-center overflow-hidden shrink-0 shadow-xs">
+                {photoUrl ? (
+                  <img
+                    src={photoUrl}
+                    alt="Employee Photo Review"
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="text-center p-2 text-slate-400">
+                    <User className="w-8 h-8 mx-auto mb-1 opacity-50" />
+                    <span className="text-[9px] block">No Photo</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Photo Actions */}
+              <div className="flex-1 space-y-2.5">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => openCamera('photo')}
+                    disabled={alreadySubmitted}
+                    className="px-3 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 shadow-xs"
+                  >
+                    <Camera className="w-3.5 h-3.5" />
+                    <span>Live Camera (Passport Guide)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => photoFileInputRef.current?.click()}
+                    disabled={alreadySubmitted}
+                    className="px-3 py-2 bg-white hover:bg-slate-100 disabled:opacity-50 text-slate-700 rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5 border border-slate-300"
+                  >
+                    <Upload className="w-3.5 h-3.5 text-slate-500" />
+                    <span>Upload Image File</span>
+                  </button>
+
+                  {photoUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setPhotoUrl('')}
+                      disabled={alreadySubmitted}
+                      className="px-2.5 py-2 text-rose-600 hover:text-rose-800 text-xs font-semibold"
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+                <p className="text-[11px] text-slate-500 leading-tight">
+                  Capture directly using device camera with official passport framing guide, or upload a clear portrait photo. Review the image in the box on the left before submitting.
+                </p>
+              </div>
+            </div>
+
+            <input
+              ref={photoFileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => handleFileChange(e, 'photo')}
+            />
+          </div>
+
+          {/* Field 3: Employee Signature Capture & Review */}
+          <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
+                <PenTool className="w-3.5 h-3.5 text-purple-600" />
+                <span>Employee Signature Photo (Horizontal) *</span>
+              </label>
+              {signatureUrl ? (
+                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1">
+                  <Check className="w-3 h-3 text-emerald-600" /> Signature Attached
+                </span>
+              ) : (
+                <span className="text-[10px] text-rose-600 font-semibold">Required</span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-4">
+              {/* Signature Review Thumbnail */}
+              <div className="w-36 h-20 rounded-xl bg-white border border-slate-300 flex items-center justify-center overflow-hidden shrink-0 shadow-xs p-1">
+                {signatureUrl ? (
+                  <img
+                    src={signatureUrl}
+                    alt="Signature Review"
+                    className="max-h-full max-w-full object-contain"
+                  />
+                ) : (
+                  <div className="text-center text-slate-400">
+                    <PenTool className="w-5 h-5 mx-auto mb-0.5 opacity-50" />
+                    <span className="text-[9px]">No Signature</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Signature Actions */}
+              <div className="flex-1 space-y-2.5">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => openCamera('signature')}
+                    disabled={alreadySubmitted}
+                    className="px-3 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 shadow-xs"
+                  >
+                    <Camera className="w-3.5 h-3.5" />
+                    <span>Camera Capture (Narrow Box)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsSignaturePadOpen(true)}
+                    disabled={alreadySubmitted}
+                    className="px-3 py-2 bg-white hover:bg-slate-100 disabled:opacity-50 text-slate-700 rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5 border border-slate-300"
+                  >
+                    <PenTool className="w-3.5 h-3.5 text-purple-600" />
+                    <span>Touchpad Draw</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => sigFileInputRef.current?.click()}
+                    disabled={alreadySubmitted}
+                    className="px-3 py-2 bg-white hover:bg-slate-100 disabled:opacity-50 text-slate-700 rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5 border border-slate-300"
+                  >
+                    <Upload className="w-3.5 h-3.5 text-slate-500" />
+                    <span>Upload File</span>
+                  </button>
+
+                  {signatureUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setSignatureUrl('')}
+                      disabled={alreadySubmitted}
+                      className="px-2.5 py-2 text-rose-600 hover:text-rose-800 text-xs font-semibold"
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+                <p className="text-[11px] text-slate-500 leading-tight">
+                  Capture paper signature with camera, draw directly using touchscreen/mouse, or upload an image scan. Review the signature on the left before submitting.
+                </p>
+              </div>
+            </div>
+
+            <input
+              ref={sigFileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => handleFileChange(e, 'sig')}
+            />
+          </div>
+
+          {/* Submit Button */}
+          <div className="pt-2">
+            <button
+              type="submit"
+              disabled={isSubmitting || alreadySubmitted || !nationalId.trim() || !photoUrl || !signatureUrl}
+              className="w-full py-3.5 bg-purple-600 hover:bg-purple-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-sm rounded-xl shadow-sm transition-all flex items-center justify-center gap-2"
+            >
+              {isSubmitting ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  <span>Saving Employee ID Card Record...</span>
+                </>
+              ) : alreadySubmitted ? (
+                <>
+                  <ShieldAlert className="w-4 h-4" />
+                  <span>Already Submitted (Duplicate Blocked)</span>
+                </>
+              ) : (
+                <>
+                  <Send className="w-4 h-4" />
+                  <span>Submit Employee ID Card Data</span>
+                </>
+              )}
+            </button>
           </div>
         </form>
       )}
 
-      {/* Camera Capture Modal with Passport Framing Guide */}
+      {/* STRICT REQUIREMENT 6: Supervisor Confirmation Popup Modal (NO ID CARD PREVIEW) */}
+      {confirmationPopup.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white border border-slate-200 w-full max-w-md rounded-2xl shadow-2xl overflow-hidden flex flex-col p-6 text-center space-y-4">
+            <div className="w-14 h-14 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto shadow-xs">
+              <Check className="w-8 h-8 stroke-[2.5]" />
+            </div>
+
+            <div>
+              <h3 className="text-lg font-bold text-slate-900">
+                Submission Successful!
+              </h3>
+              <p className="text-xs text-slate-600 mt-2 leading-relaxed px-2">
+                {confirmationPopup.message}
+              </p>
+            </div>
+
+            {/* Employee Reference Details */}
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 flex flex-col gap-1 text-left">
+              <div className="flex justify-between">
+                <span className="text-slate-500">Employee Name:</span>
+                <span className="font-bold text-slate-900">{confirmationPopup.employeeName}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Enrollment ID:</span>
+                <span className="font-mono font-bold text-purple-700">{confirmationPopup.enrollId}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Status:</span>
+                <span className="font-semibold text-emerald-700">Queued for Admin Print</span>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleCloseConfirmationPopup}
+              className="w-full py-3 bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-2"
+            >
+              <span>Add Next Employee ID Card</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Camera Capture Modal */}
       <CameraCaptureModal
         isOpen={isCameraOpen}
         onClose={() => setIsCameraOpen(false)}
         onCapture={handleCameraCapture}
-        title={cameraType === 'photo' ? 'Employee Photo Capture (Passport Guide)' : 'Signature Capture'}
+        title={cameraType === 'photo' ? 'Employee Photo Capture (Passport Guide)' : 'Signature Capture (Narrow Guide)'}
         type={cameraType}
       />
 

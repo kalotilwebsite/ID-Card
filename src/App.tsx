@@ -55,6 +55,7 @@ import { EmployeeDatabaseSection } from './components/EmployeeDatabaseSection';
 import { UserManagementSection } from './components/UserManagementSection';
 import { SubmissionsSection } from './components/SubmissionsSection';
 import { LoginModal } from './components/LoginModal';
+import { AdminSettingsModal } from './components/AdminSettingsModal';
 import { apiService, getStoredUser, getStoredToken } from './services/apiService';
 
 type MainNavTab =
@@ -70,6 +71,8 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => getStoredUser());
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+  const [loginInitialMode, setLoginInitialMode] = useState<'supervisor' | 'system'>('supervisor');
+  const [isAdminSettingsOpen, setIsAdminSettingsOpen] = useState(false);
 
   // Active Main Navigation Tab
   const [activeNavTab, setActiveNavTab] = useState<MainNavTab>('submissions');
@@ -370,102 +373,105 @@ export default function App() {
   const isSupervisor = currentUser?.role === 'supervisor';
 
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col font-sans">
-      {/* Top Application Bar */}
-      <header className="bg-slate-950/95 border-b border-slate-800 backdrop-blur sticky top-0 z-30 px-4 py-2 flex flex-wrap items-center justify-between gap-3 shadow-md">
+    <div className="min-h-screen bg-slate-100 text-slate-900 flex flex-col font-sans">
+      {/* Top Application Bar - Clean White Professional Header */}
+      <header className="bg-white border-b border-slate-200 backdrop-blur sticky top-0 z-30 px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 shadow-xs">
         {/* Brand and Title */}
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-rose-600 to-rose-400 flex items-center justify-center text-white shadow-md shadow-rose-900/40">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-rose-600 to-rose-500 flex items-center justify-center text-white shadow-xs">
             <Layers className="w-5 h-5" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-sm sm:text-base font-black tracking-tight text-white">
+              <h1 className="text-sm sm:text-base font-black tracking-tight text-slate-900">
                 Bulk Employee ID Card Generator
               </h1>
-              <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30">
+              <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
                 EXACT REFERENCE TEMPLATES
               </span>
             </div>
-            <p className="text-[11px] text-slate-400">
+            <p className="text-[11px] text-slate-500 font-medium">
               Akij Ceramics &amp; Rosa Sanitary Ware Bangladesh
             </p>
           </div>
         </div>
 
-        {/* User Account & Quick Role Switch Controls */}
+        {/* User Account, Settings & Authentication Controls */}
         <div className="flex items-center gap-2.5 flex-wrap">
           {currentUser ? (
-            <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-xl">
+            <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl">
               <div className="flex flex-col text-right">
-                <span className="text-xs font-bold text-white">{currentUser.name}</span>
-                <span className="text-[10px] text-slate-400 font-mono">
+                <span className="text-xs font-bold text-slate-900">{currentUser.name}</span>
+                <span className="text-[10px] text-slate-500 font-mono">
                   {currentUser.employeeId ? `Emp ID: ${currentUser.employeeId}` : `@${currentUser.username}`}
                 </span>
               </div>
 
               {isAdmin ? (
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30 flex items-center gap-1">
-                  <Shield className="w-3 h-3 text-rose-400" /> Admin
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 flex items-center gap-1">
+                  <Shield className="w-3 h-3 text-rose-600" /> Admin
                 </span>
               ) : isSupervisor ? (
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30 flex items-center gap-1">
-                  <Briefcase className="w-3 h-3 text-purple-400" /> Supervisor
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200 flex items-center gap-1">
+                  <Briefcase className="w-3 h-3 text-purple-600" /> Supervisor
                 </span>
               ) : (
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-500/20 text-sky-300 border border-sky-500/30 flex items-center gap-1">
-                  <Lock className="w-3 h-3 text-sky-400" /> Data Entry
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-50 text-sky-700 border border-sky-200 flex items-center gap-1">
+                  <Lock className="w-3 h-3 text-sky-600" /> Data Entry
                 </span>
               )}
 
-              {/* Role Switcher Pill Buttons for fast verification */}
-              <div className="h-5 w-[1px] bg-slate-800 mx-1" />
-              <div className="flex items-center gap-1">
-                {currentUser.role !== 'admin' && (
-                  <button
-                    type="button"
-                    onClick={() => handleSwitchAccount('admin')}
-                    className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-rose-300 text-[10px] font-semibold rounded-lg transition-colors"
-                    title="Switch to Administrator view"
-                  >
-                    Admin
-                  </button>
-                )}
-                {currentUser.role !== 'supervisor' && (
-                  <button
-                    type="button"
-                    onClick={() => handleSwitchAccount('supervisor')}
-                    className="px-2 py-1 bg-purple-950/60 hover:bg-purple-900/80 text-purple-300 border border-purple-800/40 text-[10px] font-semibold rounded-lg transition-colors"
-                    title="Switch to Supervisor view (Employee ID: SUP-2026-01)"
-                  >
-                    Supervisor
-                  </button>
-                )}
-                {currentUser.role !== 'data_entry' && (
-                  <button
-                    type="button"
-                    onClick={() => handleSwitchAccount('data_entry')}
-                    className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-sky-300 text-[10px] font-semibold rounded-lg transition-colors"
-                    title="Switch to Data Entry Operator view"
-                  >
-                    Operator
-                  </button>
-                )}
-
+              {/* Admin-only System Settings Button */}
+              {isAdmin && (
                 <button
                   type="button"
-                  onClick={handleLogout}
-                  className="p-1 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded-lg transition-colors"
-                  title="Sign out"
+                  onClick={() => setIsAdminSettingsOpen(true)}
+                  className="px-2 py-1 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-[11px] font-semibold rounded-lg transition-colors flex items-center gap-1"
+                  title="Configure Admin Settings & Supervisor Confirmation Message"
                 >
-                  <LogOut className="w-3.5 h-3.5" />
+                  <Settings className="w-3.5 h-3.5 text-rose-600" />
+                  <span className="hidden sm:inline">Settings</span>
                 </button>
-              </div>
+              )}
+
+              {/* Developer/Admin Role Switcher: Only accessible for Administrators to quickly verify workflows */}
+              {isAdmin && (
+                <>
+                  <div className="h-5 w-[1px] bg-slate-200 mx-1" />
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => handleSwitchAccount('supervisor')}
+                      className="px-2 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 text-[10px] font-semibold rounded-lg transition-colors"
+                      title="Switch to Supervisor view (Employee ID: SUP-2026-01)"
+                    >
+                      Supervisor Portal
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSwitchAccount('data_entry')}
+                      className="px-2 py-1 bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 text-[10px] font-semibold rounded-lg transition-colors"
+                      title="Switch to Data Entry Operator view"
+                    >
+                      Operator View
+                    </button>
+                  </div>
+                </>
+              )}
+
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors ml-1"
+                title="Sign out"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
             </div>
           ) : (
             <button
               onClick={() => setIsLoginModalOpen(true)}
-              className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1.5"
+              className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5"
             >
               <Lock className="w-3.5 h-3.5" />
               <span>Sign In</span>
@@ -475,126 +481,128 @@ export default function App() {
       </header>
 
       {/* Primary Role-Aware Navigation Bar */}
-      <nav className="bg-slate-950 border-b border-slate-800 px-4 flex items-center justify-between overflow-x-auto shadow-inner">
+      <nav className="bg-white border-b border-slate-200 px-4 flex items-center justify-between overflow-x-auto shadow-2xs">
         <div className="flex items-center gap-1 sm:gap-2">
-          {/* 1. Admin-Only: Data Entry (Submissions Table & Printing) */}
-          {isAdmin && (
-            <button
-              onClick={() => setActiveNavTab('submissions')}
-              className={`flex items-center gap-2 px-3.5 py-3 text-xs font-bold border-b-2 transition-all whitespace-nowrap ${
-                activeNavTab === 'submissions'
-                  ? 'border-rose-500 text-white bg-slate-900/60'
-                  : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900/30'
-              }`}
-            >
-              <TableIcon className="w-4 h-4 text-rose-500" />
-              <span>Data Entry (Printing)</span>
-            </button>
-          )}
-
-          {/* 2. Dedicated Supervisor ID Card Submission (Supervisors and Admin) */}
-          {(isSupervisor || isAdmin) && (
+          {/* SUPERVISOR ROLE: Strictly ONE menu only: Data Entry → Add New Employee ID Card */}
+          {isSupervisor && (
             <button
               onClick={() => setActiveNavTab('supervisor_submission')}
-              className={`flex items-center gap-2 px-3.5 py-3 text-xs font-bold border-b-2 transition-all whitespace-nowrap ${
-                activeNavTab === 'supervisor_submission'
-                  ? 'border-purple-500 text-white bg-purple-950/60'
-                  : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900/30'
-              }`}
+              className="flex items-center gap-2 px-4 py-3 text-xs font-bold border-b-2 border-purple-600 text-purple-700 bg-purple-50/60 transition-all whitespace-nowrap"
             >
-              <Briefcase className="w-4 h-4 text-purple-400" />
-              <span>Supervisor Submission</span>
-              {isSupervisor && (
-                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-500/20 text-purple-300">
-                  Supervisor Portal
-                </span>
-              )}
+              <IdCard className="w-4 h-4 text-purple-600" />
+              <span>Data Entry → Add New Employee ID Card</span>
+              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-200/70 text-purple-800">
+                Supervisor
+              </span>
             </button>
           )}
 
-          {/* 3. Data Entry Form (Authorized Operators & Admin) */}
-          {(isDataEntry || isAdmin) && (
+          {/* ADMIN ONLY MENUS */}
+          {isAdmin && (
+            <>
+              {/* 1. Admin: Data Entry (Printing & Submission Queue) */}
+              <button
+                onClick={() => setActiveNavTab('submissions')}
+                className={`flex items-center gap-2 px-3.5 py-3 text-xs font-bold border-b-2 transition-all whitespace-nowrap ${
+                  activeNavTab === 'submissions'
+                    ? 'border-rose-600 text-rose-700 bg-rose-50/60'
+                    : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                }`}
+              >
+                <TableIcon className="w-4 h-4 text-rose-600" />
+                <span>Data Entry (Printing Queue)</span>
+              </button>
+
+              {/* 2. Admin: Supervisor Submission Portal view */}
+              <button
+                onClick={() => setActiveNavTab('supervisor_submission')}
+                className={`flex items-center gap-2 px-3.5 py-3 text-xs font-bold border-b-2 transition-all whitespace-nowrap ${
+                  activeNavTab === 'supervisor_submission'
+                    ? 'border-purple-600 text-purple-700 bg-purple-50/60'
+                    : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                }`}
+              >
+                <Briefcase className="w-4 h-4 text-purple-600" />
+                <span>Data Entry → Add New Employee ID Card</span>
+              </button>
+
+              {/* 3. Admin: Data Entry Form */}
+              <button
+                onClick={() => setActiveNavTab('data_entry_form')}
+                className={`flex items-center gap-2 px-3.5 py-3 text-xs font-bold border-b-2 transition-all whitespace-nowrap ${
+                  activeNavTab === 'data_entry_form'
+                    ? 'border-rose-600 text-rose-700 bg-rose-50/60'
+                    : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                }`}
+              >
+                <IdCard className="w-4 h-4 text-rose-600" />
+                <span>Direct Data Entry</span>
+              </button>
+
+              {/* 4. Admin: Employee Data (Master Database) */}
+              <button
+                onClick={() => setActiveNavTab('employee_data')}
+                className={`flex items-center gap-2 px-3.5 py-3 text-xs font-bold border-b-2 transition-all whitespace-nowrap ${
+                  activeNavTab === 'employee_data'
+                    ? 'border-rose-600 text-rose-700 bg-rose-50/60'
+                    : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                }`}
+              >
+                <Database className="w-4 h-4 text-rose-600" />
+                <span>Master Employee Database</span>
+              </button>
+
+              {/* 5. Admin: User Management */}
+              <button
+                onClick={() => setActiveNavTab('user_management')}
+                className={`flex items-center gap-2 px-3.5 py-3 text-xs font-bold border-b-2 transition-all whitespace-nowrap ${
+                  activeNavTab === 'user_management'
+                    ? 'border-rose-600 text-rose-700 bg-rose-50/60'
+                    : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                }`}
+              >
+                <Users className="w-4 h-4 text-rose-600" />
+                <span>User Management</span>
+              </button>
+
+              {/* 6. Admin: Card Studio & Designer */}
+              <button
+                onClick={() => setActiveNavTab('card_studio')}
+                className={`flex items-center gap-2 px-3.5 py-3 text-xs font-bold border-b-2 transition-all whitespace-nowrap ${
+                  activeNavTab === 'card_studio'
+                    ? 'border-rose-600 text-rose-700 bg-rose-50/60'
+                    : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                }`}
+              >
+                <Layers className="w-4 h-4 text-rose-600" />
+                <span>Card Studio &amp; Designer</span>
+              </button>
+            </>
+          )}
+
+          {/* DATA ENTRY OPERATOR ROLE */}
+          {isDataEntry && (
             <button
               onClick={() => setActiveNavTab('data_entry_form')}
-              className={`flex items-center gap-2 px-3.5 py-3 text-xs font-bold border-b-2 transition-all whitespace-nowrap ${
-                activeNavTab === 'data_entry_form'
-                  ? 'border-rose-500 text-white bg-slate-900/60'
-                  : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900/30'
-              }`}
+              className="flex items-center gap-2 px-4 py-3 text-xs font-bold border-b-2 border-sky-600 text-sky-700 bg-sky-50/60 transition-all whitespace-nowrap"
             >
-              <IdCard className="w-4 h-4 text-rose-500" />
+              <IdCard className="w-4 h-4 text-sky-600" />
               <span>Data Entry Form</span>
-              {isDataEntry && (
-                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-sky-500/20 text-sky-300">
-                  Active Role
-                </span>
-              )}
-            </button>
-          )}
-
-          {/* 4. Admin-Only: Employee Data (Master Database) */}
-          {isAdmin && (
-            <button
-              onClick={() => setActiveNavTab('employee_data')}
-              className={`flex items-center gap-2 px-3.5 py-3 text-xs font-bold border-b-2 transition-all whitespace-nowrap ${
-                activeNavTab === 'employee_data'
-                  ? 'border-rose-500 text-white bg-slate-900/60'
-                  : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900/30'
-              }`}
-            >
-              <Database className="w-4 h-4 text-rose-500" />
-              <span>Employee Data</span>
-            </button>
-          )}
-
-          {/* 5. Admin-Only: User Management */}
-          {isAdmin && (
-            <button
-              onClick={() => setActiveNavTab('user_management')}
-              className={`flex items-center gap-2 px-3.5 py-3 text-xs font-bold border-b-2 transition-all whitespace-nowrap ${
-                activeNavTab === 'user_management'
-                  ? 'border-rose-500 text-white bg-slate-900/60'
-                  : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900/30'
-              }`}
-            >
-              <Users className="w-4 h-4 text-rose-500" />
-              <span>User Management</span>
-            </button>
-          )}
-
-          {/* 6. Admin-Only: Card Studio & Designer */}
-          {isAdmin && (
-            <button
-              onClick={() => setActiveNavTab('card_studio')}
-              className={`flex items-center gap-2 px-3.5 py-3 text-xs font-bold border-b-2 transition-all whitespace-nowrap ${
-                activeNavTab === 'card_studio'
-                  ? 'border-rose-500 text-white bg-slate-900/60'
-                  : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900/30'
-              }`}
-            >
-              <Layers className="w-4 h-4 text-rose-500" />
-              <span>Card Studio &amp; Designer</span>
             </button>
           )}
         </div>
 
         {/* Right Info Note */}
         {isSupervisor && (
-          <div className="text-[11px] text-purple-300 font-medium flex items-center gap-1.5 py-2">
-            <Briefcase className="w-3.5 h-3.5 text-purple-400 shrink-0" />
-            <span className="hidden sm:inline">Role restriction active:</span> Supervisor Submission Access Only
-          </div>
-        )}
-        {isDataEntry && (
-          <div className="text-[11px] text-amber-300/90 font-medium flex items-center gap-1.5 py-2">
-            <Lock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-            <span className="hidden sm:inline">Role restriction active:</span> Data Entry Operator access
+          <div className="text-[11px] text-purple-700 font-medium flex items-center gap-1.5 py-2">
+            <Briefcase className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+            <span className="hidden sm:inline">Supervisor Portal Active:</span> Add New Employee ID Card Only
           </div>
         )}
       </nav>
 
       {/* Main Content Area Based on Active Section */}
-      <main className="flex-1 flex flex-col overflow-auto">
+      <main className="flex-1 flex flex-col overflow-auto bg-slate-50">
         {isAuthLoading ? (
           <div className="flex-1 flex flex-col items-center justify-center p-12 text-slate-400 gap-3">
             <div className="w-8 h-8 border-2 border-rose-500 border-t-transparent rounded-full animate-spin" />
@@ -611,12 +619,10 @@ export default function App() {
               />
             )}
 
-        {/* SECTION 2: Dedicated Supervisor Submission Form */}
+        {/* SECTION 2: Dedicated Supervisor Submission Form (Strictly No Card Preview) */}
         {(isSupervisor || (isAdmin && activeNavTab === 'supervisor_submission')) && activeNavTab === 'supervisor_submission' && (
           <SupervisorSubmissionForm
             currentUser={currentUser}
-            frontTemplateUrl={frontTemplateUrl}
-            backTemplateUrl={backTemplateUrl}
             onSubmissionSuccess={() => {
               // optional callback
             }}
@@ -648,17 +654,17 @@ export default function App() {
         {isAdmin && activeNavTab === 'card_studio' && (
           <div className="flex-1 flex flex-col">
             {/* Card Studio Subheader Toolbar */}
-            <div className="bg-slate-950/80 border-b border-slate-800 px-4 py-2 flex flex-wrap items-center justify-between gap-2">
-              <div className="text-xs text-slate-300">
+            <div className="bg-white border-b border-slate-200 px-4 py-2 flex flex-wrap items-center justify-between gap-2 shadow-2xs">
+              <div className="text-xs text-slate-600 font-medium">
                 Active Studio Set:{' '}
-                <span className="text-rose-400 font-bold">{currentSourceName}</span> (
+                <span className="text-rose-600 font-bold">{currentSourceName}</span> (
                 {employees.length} cards loaded)
               </div>
 
               <div className="flex items-center gap-2 flex-wrap">
                 <button
                   onClick={() => setIsImportModalOpen(true)}
-                  className="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1.5"
+                  className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5"
                 >
                   <Upload className="w-3.5 h-3.5" />
                   <span>Import Data</span>
@@ -666,27 +672,27 @@ export default function App() {
 
                 <button
                   onClick={() => setIsMappingModalOpen(true)}
-                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-semibold transition-all border border-slate-700 flex items-center gap-1.5"
+                  className="px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-semibold transition-all border border-slate-200 flex items-center gap-1.5"
                   title="Configure column mapping"
                 >
-                  <Settings className="w-3.5 h-3.5 text-rose-400" />
+                  <Settings className="w-3.5 h-3.5 text-rose-600" />
                   <span>Map Columns</span>
                 </button>
 
                 <button
                   onClick={() => setIsCalibrationModalOpen(true)}
-                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-semibold transition-all border border-slate-700 flex items-center gap-1.5"
+                  className="px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-semibold transition-all border border-slate-200 flex items-center gap-1.5"
                   title="Calibrate field positions"
                 >
-                  <Sliders className="w-3.5 h-3.5 text-rose-400" />
+                  <Sliders className="w-3.5 h-3.5 text-rose-600" />
                   <span>Field Calibration</span>
                 </button>
 
                 <label
-                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-semibold transition-all border border-slate-700 flex items-center gap-1.5 cursor-pointer"
+                  className="px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-semibold transition-all border border-slate-200 flex items-center gap-1.5 cursor-pointer"
                   title="Upload custom Front Reference image"
                 >
-                  <ImageIcon className="w-3.5 h-3.5 text-emerald-400" />
+                  <ImageIcon className="w-3.5 h-3.5 text-emerald-600" />
                   <span>Front Ref</span>
                   <input
                     type="file"
@@ -702,7 +708,7 @@ export default function App() {
 
                 <button
                   onClick={() => setIsPrintModalOpen(true)}
-                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-semibold transition-all border border-slate-700 flex items-center gap-1.5"
+                  className="px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-semibold transition-all border border-slate-200 flex items-center gap-1.5"
                 >
                   <Printer className="w-3.5 h-3.5" />
                   <span>Print Layout</span>
@@ -710,7 +716,7 @@ export default function App() {
 
                 <button
                   onClick={() => setIsExportModalOpen(true)}
-                  className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center gap-1.5"
+                  className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5"
                 >
                   <Download className="w-3.5 h-3.5" />
                   <span>Export (PDF &amp; Word)</span>
@@ -719,7 +725,7 @@ export default function App() {
                 <button
                   onClick={handleLoadSample}
                   title="Reset to default sample"
-                  className="p-1.5 bg-slate-800/80 hover:bg-slate-700 text-slate-300 rounded-xl text-xs transition-colors border border-slate-700"
+                  className="p-1.5 bg-white hover:bg-slate-50 text-slate-600 rounded-xl text-xs transition-colors border border-slate-200"
                 >
                   <RefreshCw className="w-4 h-4" />
                 </button>
@@ -727,18 +733,18 @@ export default function App() {
             </div>
 
             {/* Main Workspace: Left (Table/Gallery) & Right (Card Preview) */}
-            <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
+            <div className="flex-1 flex flex-col lg:flex-row overflow-hidden bg-white">
               {/* Left Section: Tabs and Controls */}
-              <div className="flex-1 flex flex-col border-b lg:border-b-0 lg:border-r border-slate-800 bg-slate-900/50 overflow-hidden">
+              <div className="flex-1 flex flex-col border-b lg:border-b-0 lg:border-r border-slate-200 bg-white overflow-hidden">
                 {/* Workspace Tabs Header */}
-                <div className="flex items-center justify-between border-b border-slate-800 bg-slate-950/40 px-4 pt-2">
+                <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 pt-2">
                   <div className="flex gap-2">
                     <button
                       onClick={() => setActiveWorkspaceTab('table')}
                       className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-t-lg transition-colors border-b-2 ${
                         activeWorkspaceTab === 'table'
-                          ? 'border-rose-500 text-white bg-slate-800/60'
-                          : 'border-transparent text-slate-400 hover:text-slate-200'
+                          ? 'border-rose-600 text-rose-700 bg-white shadow-2xs'
+                          : 'border-transparent text-slate-600 hover:text-slate-900'
                       }`}
                     >
                       <TableIcon className="w-3.5 h-3.5" />
@@ -749,8 +755,8 @@ export default function App() {
                       onClick={() => setActiveWorkspaceTab('gallery')}
                       className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-t-lg transition-colors border-b-2 ${
                         activeWorkspaceTab === 'gallery'
-                          ? 'border-rose-500 text-white bg-slate-800/60'
-                          : 'border-transparent text-slate-400 hover:text-slate-200'
+                          ? 'border-rose-600 text-rose-700 bg-white shadow-2xs'
+                          : 'border-transparent text-slate-600 hover:text-slate-900'
                       }`}
                     >
                       <Eye className="w-3.5 h-3.5" />
@@ -758,7 +764,7 @@ export default function App() {
                     </button>
                   </div>
 
-                  <div className="pb-1 text-[11px] text-slate-400 flex items-center gap-2">
+                  <div className="pb-1 text-[11px] text-slate-500 flex items-center gap-2">
                     <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
                     Original Templates Active
                   </div>
@@ -766,7 +772,7 @@ export default function App() {
 
                 {/* Tab 1: Table & Validation */}
                 {activeWorkspaceTab === 'table' && (
-                  <div className="flex-1 p-4 overflow-y-auto">
+                  <div className="flex-1 p-4 overflow-y-auto bg-slate-50/50">
                     <EmployeeTableEditor
                       employees={employees}
                       onUpdateEmployees={setEmployees}
@@ -781,15 +787,15 @@ export default function App() {
 
                 {/* Tab 2: Gallery Grid */}
                 {activeWorkspaceTab === 'gallery' && (
-                  <div className="flex-1 p-6 overflow-y-auto">
+                  <div className="flex-1 p-6 overflow-y-auto bg-slate-50/50">
                     <div className="mb-4 flex items-center justify-between">
                       <div>
-                        <h3 className="text-sm font-bold text-white">Generated ID Card Gallery</h3>
-                        <p className="text-xs text-slate-400">
+                        <h3 className="text-sm font-bold text-slate-900">Generated ID Card Gallery</h3>
+                        <p className="text-xs text-slate-500">
                           Showing {employees.length} front and back cards rendered over the exact reference templates
                         </p>
                       </div>
-                      <div className="text-xs text-slate-400">Click any card to inspect</div>
+                      <div className="text-xs text-slate-500 font-medium">Click any card to inspect</div>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
@@ -799,15 +805,15 @@ export default function App() {
                           onClick={() => setSelectedEmpIndex(index)}
                           className={`p-4 rounded-2xl border transition-all cursor-pointer ${
                             index === selectedEmpIndex
-                              ? 'border-rose-500 bg-slate-800/80 shadow-lg shadow-rose-950/20 ring-1 ring-rose-500'
-                              : 'border-slate-800 bg-slate-950/40 hover:border-slate-700'
+                              ? 'border-rose-500 bg-rose-50/30 shadow-md ring-1 ring-rose-500'
+                              : 'border-slate-200 bg-white hover:border-slate-300'
                           }`}
                         >
                           <div className="flex items-center justify-between mb-3 text-xs">
-                            <span className="font-bold text-white truncate max-w-[150px]">
+                            <span className="font-bold text-slate-900 truncate max-w-[150px]">
                               {emp.name}
                             </span>
-                            <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-slate-800 text-slate-300">
+                            <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-slate-100 text-slate-700 border border-slate-200">
                               {emp.enrollId}
                             </span>
                           </div>
@@ -838,12 +844,12 @@ export default function App() {
               </div>
 
               {/* Right Section: Real-Time Precision Card Inspector & Preview */}
-              <div className="w-full lg:w-[480px] xl:w-[540px] bg-slate-950 border-l border-slate-800 p-4 flex flex-col justify-between overflow-y-auto">
+              <div className="w-full lg:w-[480px] xl:w-[540px] bg-slate-50 border-l border-slate-200 p-4 flex flex-col justify-between overflow-y-auto">
                 <div className="space-y-4">
                   {/* Card Navigation & Selection */}
-                  <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                  <div className="flex items-center justify-between border-b border-slate-200 pb-3">
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                      <span className="text-xs font-bold uppercase tracking-wider text-slate-700">
                         Inspecting Card {selectedEmpIndex + 1} of {employees.length}
                       </span>
                     </div>
@@ -852,7 +858,7 @@ export default function App() {
                       <button
                         onClick={() => setSelectedEmpIndex((prev) => Math.max(0, prev - 1))}
                         disabled={selectedEmpIndex === 0}
-                        className="p-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 rounded-lg text-slate-200 transition-colors"
+                        className="p-1.5 bg-white hover:bg-slate-100 border border-slate-200 disabled:opacity-40 rounded-lg text-slate-700 transition-colors"
                       >
                         <ChevronLeft className="w-4 h-4" />
                       </button>
@@ -861,7 +867,7 @@ export default function App() {
                           setSelectedEmpIndex((prev) => Math.min(employees.length - 1, prev + 1))
                         }
                         disabled={selectedEmpIndex === employees.length - 1}
-                        className="p-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 rounded-lg text-slate-200 transition-colors"
+                        className="p-1.5 bg-white hover:bg-slate-100 border border-slate-200 disabled:opacity-40 rounded-lg text-slate-700 transition-colors"
                       >
                         <ChevronRight className="w-4 h-4" />
                       </button>
@@ -869,14 +875,14 @@ export default function App() {
                   </div>
 
                   {/* Preview Side Switcher & Zoom */}
-                  <div className="flex items-center justify-between bg-slate-900 p-1.5 rounded-xl border border-slate-800">
+                  <div className="flex items-center justify-between bg-white p-1.5 rounded-xl border border-slate-200 shadow-2xs">
                     <div className="flex gap-1">
                       <button
                         onClick={() => setPreviewSide('both')}
                         className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${
                           previewSide === 'both'
                             ? 'bg-rose-600 text-white'
-                            : 'text-slate-400 hover:text-white'
+                            : 'text-slate-600 hover:text-slate-900'
                         }`}
                       >
                         Both Sides
@@ -886,7 +892,7 @@ export default function App() {
                         className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${
                           previewSide === 'front'
                             ? 'bg-rose-600 text-white'
-                            : 'text-slate-400 hover:text-white'
+                            : 'text-slate-600 hover:text-slate-900'
                         }`}
                       >
                         Front Only
@@ -896,7 +902,7 @@ export default function App() {
                         className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${
                           previewSide === 'back'
                             ? 'bg-rose-600 text-white'
-                            : 'text-slate-400 hover:text-white'
+                            : 'text-slate-600 hover:text-slate-900'
                         }`}
                       >
                         Back Only
@@ -906,17 +912,17 @@ export default function App() {
                     <div className="flex items-center gap-1.5 pr-1">
                       <button
                         onClick={() => setPreviewZoom((z) => Math.max(0.5, z - 0.1))}
-                        className="p-1 text-slate-400 hover:text-white"
+                        className="p-1 text-slate-500 hover:text-slate-900"
                         title="Zoom out"
                       >
                         <ZoomOut className="w-3.5 h-3.5" />
                       </button>
-                      <span className="text-[11px] font-mono text-slate-300 w-10 text-center">
+                      <span className="text-[11px] font-mono font-bold text-slate-700 w-10 text-center">
                         {Math.round(previewZoom * 100)}%
                       </span>
                       <button
                         onClick={() => setPreviewZoom((z) => Math.min(1.4, z + 0.1))}
-                        className="p-1 text-slate-400 hover:text-white"
+                        className="p-1 text-slate-500 hover:text-slate-900"
                         title="Zoom in"
                       >
                         <ZoomIn className="w-3.5 h-3.5" />
@@ -924,11 +930,11 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Rendered Live Cards */}
-                  <div className="flex flex-col items-center justify-center gap-6 py-4 min-h-[460px]">
+                  {/* Rendered Live Cards on clean backdrop */}
+                  <div className="flex flex-col items-center justify-center gap-6 py-4 min-h-[460px] bg-slate-100/70 border border-slate-200/80 rounded-2xl p-4">
                     {(previewSide === 'both' || previewSide === 'front') && (
                       <div className="flex flex-col items-center">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-600 mb-1.5">
                           Front Side (Official)
                         </span>
                         <div
@@ -936,7 +942,7 @@ export default function App() {
                             width: CARD_WIDTH * previewZoom,
                             height: CARD_HEIGHT * previewZoom,
                           }}
-                          className="relative transition-all"
+                          className="relative transition-all shadow-md rounded-2xl overflow-hidden"
                         >
                           <CardFront
                             employee={currentEmployee}
@@ -950,7 +956,7 @@ export default function App() {
 
                     {(previewSide === 'both' || previewSide === 'back') && (
                       <div className="flex flex-col items-center">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-600 mb-1.5">
                           Back Side (Emergency &amp; Blood Group)
                         </span>
                         <div
@@ -958,7 +964,7 @@ export default function App() {
                             width: CARD_WIDTH * previewZoom,
                             height: CARD_HEIGHT * previewZoom,
                           }}
-                          className="relative transition-all"
+                          className="relative transition-all shadow-md rounded-2xl overflow-hidden"
                         >
                           <CardBack
                             employee={currentEmployee}
@@ -973,22 +979,22 @@ export default function App() {
                 </div>
 
                 {/* Bottom Card Status & Export Action */}
-                <div className="pt-3 border-t border-slate-800 flex items-center justify-between gap-2">
-                  <div className="text-[11px] text-slate-400">
+                <div className="pt-3 border-t border-slate-200 flex items-center justify-between gap-2">
+                  <div className="text-[11px] text-slate-600">
                     {currentEmployee.isValid ? (
-                      <span className="text-emerald-400 font-semibold flex items-center gap-1">
-                        <CheckCircle className="w-3.5 h-3.5" /> Valid &amp; Ready
+                      <span className="text-emerald-700 font-semibold flex items-center gap-1">
+                        <CheckCircle className="w-3.5 h-3.5 text-emerald-600" /> Valid &amp; Ready
                       </span>
                     ) : (
-                      <span className="text-rose-400 font-semibold flex items-center gap-1">
-                        <AlertTriangle className="w-3.5 h-3.5" /> Missing required fields
+                      <span className="text-rose-700 font-semibold flex items-center gap-1">
+                        <AlertTriangle className="w-3.5 h-3.5 text-rose-600" /> Missing required fields
                       </span>
                     )}
                   </div>
 
                   <button
                     onClick={() => setIsExportModalOpen(true)}
-                    className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold shadow transition-colors flex items-center gap-1.5"
+                    className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5"
                   >
                     <Download className="w-3.5 h-3.5" />
                     <span>Export All ({employees.length})</span>
@@ -1142,6 +1148,12 @@ export default function App() {
         settings={printSettings}
         companyConfig={companyConfig}
         getCardElement={getCardElement}
+      />
+
+      {/* Admin Settings Modal (Configures supervisor submission confirmation message & settings) */}
+      <AdminSettingsModal
+        isOpen={isAdminSettingsOpen}
+        onClose={() => setIsAdminSettingsOpen(false)}
       />
     </div>
   );

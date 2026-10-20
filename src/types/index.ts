@@ -283,6 +283,13 @@ export interface MasterEmployee {
   importedAt?: string;
 }
 
+export interface PrintHistoryItem {
+  printedAt: string;
+  printedBy: string;
+  action: 'initial_print' | 'reprint';
+  note?: string;
+}
+
 export interface SubmissionRecord {
   id: string;
   enrollId: string;
@@ -294,7 +301,17 @@ export interface SubmissionRecord {
     id: string;
     name: string;
     username: string;
+    employeeId?: string;
+    role?: string;
   };
   submittedAt: string;
+  printStatus: 'pending' | 'printed';
+  printedAt?: string;
+  printCount?: number;
+  reprintHistory?: PrintHistoryItem[];
+}
+
+export interface AppSettings {
+  supervisorSuccessMessage: string;
 }
 

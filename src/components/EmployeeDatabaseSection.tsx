@@ -55,96 +55,93 @@ export function EmployeeDatabaseSection({ onRefreshData }: EmployeeDatabaseSecti
     loadMasterEmployees();
   }, []);
 
-  // Handle Excel file selection
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    setIsLoading(true);
+    setStatusMessage(null);
+
     try {
-      setIsLoading(true);
-      const parsed = await parseExcelFile(file);
-      setRawHeaders(parsed.headers);
-      setRawRows(parsed.rows);
+      const parseResult = await parseExcelFile(file);
+      setRawHeaders(parseResult.headers);
+      setRawRows(parseResult.rows);
       setCurrentFileName(file.name);
-      setImportWarnings(parsed.warnings || []);
+      setImportWarnings(parseResult.warnings || []);
       setIsMappingModalOpen(true);
     } catch (err: any) {
-      setStatusMessage({ type: 'error', text: err.message || 'Error parsing Excel file.' });
+      console.error('Excel parse error:', err);
+      setStatusMessage({
+        type: 'error',
+        text: err.message || 'Failed to parse Excel file. Please ensure it is a valid .xlsx or .xls file.',
+      });
     } finally {
       setIsLoading(false);
       e.target.value = '';
     }
   };
 
-  // Confirm mapping and import into master database
   const handleConfirmMapping = async (mappings: ColumnMapping[]) => {
-    setIsMappingModalOpen(false);
     setIsLoading(true);
     setStatusMessage(null);
 
     try {
-      const getVal = (row: Record<string, any>, key: string): string => {
-        const m = mappings.find((item) => item.fieldKey === key);
-        if (!m || !m.sourceColumn) return m?.fallbackValue || '';
-        const col = m.sourceColumn;
-        const val = row[col];
-        if (val !== undefined && val !== null && String(val).trim() !== '') {
-          return String(val).trim();
-        }
-        return m.fallbackValue || '';
-      };
-
-      const mappedList: Partial<MasterEmployee>[] = rawRows.map((row, idx) => {
-        const enrollId = getVal(row, 'enrollId') || String(100000 + idx);
-        const name = getVal(row, 'name') || `Employee #${idx + 1}`;
-        const designation = getVal(row, 'designation') || 'Staff';
-        const department = getVal(row, 'department') || 'General';
-        const jobType = getVal(row, 'jobType') || 'Permanent';
-        const joiningDate = getVal(row, 'joiningDate') || '01/03/2026';
-        const cardIssue = getVal(row, 'cardIssue') || '19/10/2026';
-        const emergencyContact = getVal(row, 'emergencyContact') || '01920-694100';
-        const permanentAddress = getVal(row, 'permanentAddress') || 'Mukkhopur, Trishal, Mymensingh';
-        const bloodGroup = getVal(row, 'bloodGroup') || 'O+';
-        const nationalId = getVal(row, 'nationalId') || '';
+      const mappedEmployees: Partial<MasterEmployee>[] = rawRows.map((row) => {
+        const getVal = (key: string): string => {
+          const m = mappings.find((item) => item.fieldKey === key);
+          if (!m) return '';
+          const col = m.sourceColumn;
+          if (!col) return m.fallbackValue || '';
+          const val = row[col];
+          return val !== undefined && val !== null ? String(val).trim() : m.fallbackValue || '';
+        };
 
         return {
-          enrollId,
-          name,
-          designation,
-          department,
-          jobType,
-          joiningDate,
-          cardIssue,
-          emergencyContact,
-          permanentAddress,
-          bloodGroup,
-          nationalId,
+          enrollId: getVal('enrollId'),
+          name: getVal('name'),
+          designation: getVal('designation'),
+          department: getVal('department'),
+          jobType: getVal('jobType') || 'Permanent',
+          joiningDate: getVal('joiningDate') || '01/03/2026',
+          cardIssue: getVal('cardIssue') || '19/10/2026',
+          emergencyContact: getVal('emergencyContact') || '01920-694100',
+          permanentAddress: getVal('permanentAddress') || 'Mukkhopur, Trishal, Mymensingh',
+          bloodGroup: getVal('bloodGroup') || 'O+',
+          nationalId: getVal('nationalId') || '',
         };
       });
 
-      const res = await apiService.importMasterEmployees(mappedList);
-      setStatusMessage({
-        type: 'success',
-        text: `${res.message} Total master records in database: ${res.totalRecords}.`,
-      });
+      const validRecords = mappedEmployees.filter((e) => Boolean(e.enrollId && e.name));
+
+      if (validRecords.length === 0) {
+        setStatusMessage({
+          type: 'error',
+          text: 'No valid records found with both Enrollment ID and Name. Please check column mapping.',
+        });
+        setIsLoading(false);
+        return;
+      }
+
+      const res = await apiService.importMasterEmployees(validRecords);
+      setStatusMessage({ type: 'success', text: res.message });
       await loadMasterEmployees();
       if (onRefreshData) onRefreshData();
     } catch (err: any) {
       console.error('Import error:', err);
-      setStatusMessage({ type: 'error', text: err.message || 'Failed to import master employees.' });
+      setStatusMessage({ type: 'error', text: err.message || 'Failed to import records into master database.' });
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleDeleteEmployee = async (enrollId: string) => {
-    if (!window.confirm(`Are you sure you want to delete employee "${enrollId}" from the Master Database?`)) {
+    if (!window.confirm(`Are you sure you want to remove employee "${enrollId}" from the master database?`)) {
       return;
     }
     try {
       await apiService.deleteMasterEmployee(enrollId);
       setEmployees((prev) => prev.filter((e) => e.enrollId !== enrollId));
-      setStatusMessage({ type: 'success', text: `Employee ${enrollId} removed from Master Database.` });
+      setStatusMessage({ type: 'success', text: `Employee ${enrollId} removed from master database.` });
     } catch (err: any) {
       setStatusMessage({ type: 'error', text: err.message || 'Failed to delete employee.' });
     }
@@ -225,21 +222,21 @@ export function EmployeeDatabaseSection({ onRefreshData }: EmployeeDatabaseSecti
   return (
     <div className="max-w-7xl mx-auto p-4 sm:p-6 space-y-6">
       {/* Header Banner */}
-      <div className="bg-slate-950 border border-slate-800 rounded-2xl p-5 shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-rose-500/20 text-rose-300 border border-rose-500/30">
+            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-rose-50 text-rose-700 border border-rose-200">
               Admin Only
             </span>
-            <h2 className="text-base sm:text-lg font-black text-white tracking-tight flex items-center gap-2">
-              <Database className="w-5 h-5 text-rose-500" />
+            <h2 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight flex items-center gap-2">
+              <Database className="w-5 h-5 text-rose-600" />
               <span>Master Employee Database</span>
             </h2>
           </div>
-          <p className="text-xs text-slate-400 max-w-2xl">
+          <p className="text-xs text-slate-600 max-w-2xl">
             Import and maintain master employee records from Excel with column mapping. The
-            <strong className="text-white"> Enrollment ID</strong> serves as the unique lookup key
-            for authorized operators. This master data is strictly kept separate from submitted cards.
+            <strong className="text-slate-900"> Enrollment ID</strong> serves as the unique lookup key
+            for supervisors. This master data is strictly kept separate from submitted cards.
           </p>
         </div>
 
@@ -255,7 +252,7 @@ export function EmployeeDatabaseSection({ onRefreshData }: EmployeeDatabaseSecti
 
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-rose-950/40 flex items-center gap-2"
+            className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-2"
           >
             <Upload className="w-3.5 h-3.5" />
             <span>Import from Excel</span>
@@ -264,15 +261,15 @@ export function EmployeeDatabaseSection({ onRefreshData }: EmployeeDatabaseSecti
           <button
             onClick={handleExportCSV}
             disabled={employees.length === 0}
-            className="px-3 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-200 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors"
+            className="px-3 py-2 bg-white hover:bg-slate-100 border border-slate-300 disabled:opacity-50 text-slate-700 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors"
           >
-            <Download className="w-3.5 h-3.5" />
+            <Download className="w-3.5 h-3.5 text-slate-500" />
             <span>Export CSV</span>
           </button>
 
           <button
             onClick={loadMasterEmployees}
-            className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl transition-colors"
+            className="p-2 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 rounded-xl transition-colors"
             title="Refresh database"
           >
             <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
@@ -281,7 +278,7 @@ export function EmployeeDatabaseSection({ onRefreshData }: EmployeeDatabaseSecti
           {employees.length > 0 && (
             <button
               onClick={handleClearAll}
-              className="px-3 py-2 bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 border border-rose-800/50 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors"
+              className="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors"
             >
               <Trash2 className="w-3.5 h-3.5" />
               <span>Clear All</span>
@@ -295,21 +292,21 @@ export function EmployeeDatabaseSection({ onRefreshData }: EmployeeDatabaseSecti
         <div
           className={`p-3.5 rounded-xl text-xs flex items-center justify-between gap-2.5 ${
             statusMessage.type === 'success'
-              ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-200'
-              : 'bg-rose-500/10 border border-rose-500/30 text-rose-200'
+              ? 'bg-emerald-50 border border-emerald-200 text-emerald-800'
+              : 'bg-rose-50 border border-rose-200 text-rose-800'
           }`}
         >
           <div className="flex items-center gap-2">
             {statusMessage.type === 'success' ? (
-              <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+              <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
             ) : (
-              <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+              <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
             )}
-            <span>{statusMessage.text}</span>
+            <span className="font-medium">{statusMessage.text}</span>
           </div>
           <button
             onClick={() => setStatusMessage(null)}
-            className="text-slate-400 hover:text-white font-bold"
+            className="text-slate-400 hover:text-slate-700 font-bold"
           >
             Dismiss
           </button>
@@ -317,7 +314,7 @@ export function EmployeeDatabaseSection({ onRefreshData }: EmployeeDatabaseSecti
       )}
 
       {/* Filter and Search Bar */}
-      <div className="bg-slate-950 border border-slate-800 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-md">
+      <div className="bg-white border border-slate-200 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xs">
         <div className="flex items-center gap-2 w-full sm:w-auto">
           {/* Search */}
           <div className="relative flex-1 sm:w-72">
@@ -327,7 +324,7 @@ export function EmployeeDatabaseSection({ onRefreshData }: EmployeeDatabaseSecti
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search by name, ID, department..."
-              className="w-full bg-slate-900 border border-slate-700 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-rose-500"
+              className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-rose-500 focus:bg-white"
             />
           </div>
 
@@ -336,7 +333,7 @@ export function EmployeeDatabaseSection({ onRefreshData }: EmployeeDatabaseSecti
             <select
               value={selectedDept}
               onChange={(e) => setSelectedDept(e.target.value)}
-              className="bg-slate-900 border border-slate-700 text-xs text-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:border-rose-500"
+              className="bg-slate-50 border border-slate-300 text-xs text-slate-700 rounded-xl px-3 py-2 focus:outline-none focus:border-rose-500"
             >
               <option value="all">All Departments ({employees.length})</option>
               {departments.map((dept) => (
@@ -348,19 +345,19 @@ export function EmployeeDatabaseSection({ onRefreshData }: EmployeeDatabaseSecti
           </div>
         </div>
 
-        <div className="text-xs text-slate-400 font-medium">
-          Showing <span className="text-white font-bold">{filteredEmployees.length}</span> of{' '}
-          <span className="text-rose-400 font-bold">{employees.length}</span> Master Records
+        <div className="text-xs text-slate-500 font-medium">
+          Showing <span className="text-slate-900 font-bold">{filteredEmployees.length}</span> of{' '}
+          <span className="text-rose-600 font-bold">{employees.length}</span> Master Records
         </div>
       </div>
 
       {/* Master Employees Table */}
-      <div className="bg-slate-950 border border-slate-800 rounded-2xl shadow-md overflow-hidden">
+      <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
         {filteredEmployees.length === 0 ? (
           <div className="p-12 text-center">
-            <Database className="w-12 h-12 text-slate-600 mx-auto mb-3" />
-            <h3 className="text-sm font-bold text-white mb-1">No Master Records Found</h3>
-            <p className="text-xs text-slate-400 max-w-sm mx-auto mb-4">
+            <Database className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+            <h3 className="text-sm font-bold text-slate-800 mb-1">No Master Records Found</h3>
+            <p className="text-xs text-slate-500 max-w-sm mx-auto mb-4">
               {employees.length === 0
                 ? 'Import employee records from an Excel worksheet to get started. Enrollment ID will be used as the unique key.'
                 : 'No employees match the current search query or department filter.'}
@@ -368,7 +365,7 @@ export function EmployeeDatabaseSection({ onRefreshData }: EmployeeDatabaseSecti
             {employees.length === 0 && (
               <button
                 onClick={() => fileInputRef.current?.click()}
-                className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold transition-all shadow-md inline-flex items-center gap-2"
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs inline-flex items-center gap-2"
               >
                 <Upload className="w-3.5 h-3.5" />
                 <span>Import Excel Spreadsheet</span>
@@ -379,7 +376,7 @@ export function EmployeeDatabaseSection({ onRefreshData }: EmployeeDatabaseSecti
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
-                <tr className="bg-slate-900/90 border-b border-slate-800 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-bold uppercase tracking-wider text-slate-600">
                   <th className="py-3 px-4">Enroll ID</th>
                   <th className="py-3 px-4">Employee Name</th>
                   <th className="py-3 px-4">Designation</th>
@@ -391,25 +388,25 @@ export function EmployeeDatabaseSection({ onRefreshData }: EmployeeDatabaseSecti
                   <th className="py-3 px-4 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800/60">
+              <tbody className="divide-y divide-slate-100">
                 {filteredEmployees.map((emp) => (
-                  <tr key={emp.enrollId} className="hover:bg-slate-900/40 transition-colors">
-                    <td className="py-3 px-4 font-mono font-bold text-rose-400">{emp.enrollId}</td>
-                    <td className="py-3 px-4 font-bold text-white whitespace-nowrap">{emp.name}</td>
-                    <td className="py-3 px-4 text-slate-300">{emp.designation}</td>
+                  <tr key={emp.enrollId} className="hover:bg-slate-50/80 transition-colors">
+                    <td className="py-3 px-4 font-mono font-bold text-purple-700">{emp.enrollId}</td>
+                    <td className="py-3 px-4 font-bold text-slate-900 whitespace-nowrap">{emp.name}</td>
+                    <td className="py-3 px-4 text-slate-700">{emp.designation}</td>
                     <td className="py-3 px-4">
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-800 text-slate-300 border border-slate-700">
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
                         {emp.department}
                       </span>
                     </td>
-                    <td className="py-3 px-4 text-slate-400">{emp.jobType}</td>
-                    <td className="py-3 px-4 font-mono text-slate-400">{emp.joiningDate}</td>
-                    <td className="py-3 px-4 font-mono text-slate-400">{emp.emergencyContact}</td>
-                    <td className="py-3 px-4 font-bold text-rose-400">{emp.bloodGroup}</td>
+                    <td className="py-3 px-4 text-slate-600">{emp.jobType}</td>
+                    <td className="py-3 px-4 font-mono text-slate-600">{emp.joiningDate}</td>
+                    <td className="py-3 px-4 font-mono text-slate-600">{emp.emergencyContact}</td>
+                    <td className="py-3 px-4 font-bold text-rose-600">{emp.bloodGroup}</td>
                     <td className="py-3 px-4 text-right">
                       <button
                         onClick={() => handleDeleteEmployee(emp.enrollId)}
-                        className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors"
+                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
                         title="Delete from master database"
                       >
                         <Trash2 className="w-3.5 h-3.5" />

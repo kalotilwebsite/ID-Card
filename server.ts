@@ -5,6 +5,10 @@ import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
+import mongoose, { Schema } from 'mongoose';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -13,7 +17,7 @@ const app = express();
 const PORT = 3000;
 const DATA_DIR = path.resolve(__dirname, 'data');
 
-// Ensure data directory exists
+// Ensure data directory exists for local fallback
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
@@ -24,23 +28,201 @@ const SUBMISSIONS_FILE = path.join(DATA_DIR, 'submissions.json');
 const SESSIONS_FILE = path.join(DATA_DIR, 'sessions.json');
 const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
 
-interface AppSettings {
+// =========================================================================
+// MONGOOSE SCHEMAS & MODELS
+// =========================================================================
+
+export interface IUser {
+  id: string;
+  username: string;
+  employeeId?: string;
+  passwordHash: string;
+  name: string;
+  email?: string;
+  role: 'admin' | 'supervisor' | 'data_entry';
+  status: 'active' | 'inactive';
+  createdAt: string;
+}
+
+const UserSchema = new Schema<IUser>(
+  {
+    id: { type: String, required: true, unique: true, index: true },
+    username: { type: String, required: true, unique: true, index: true },
+    employeeId: { type: String, index: true },
+    passwordHash: { type: String, required: true },
+    name: { type: String, required: true },
+    email: { type: String, default: '' },
+    role: { type: String, enum: ['admin', 'supervisor', 'data_entry'], required: true },
+    status: { type: String, enum: ['active', 'inactive'], default: 'active' },
+    createdAt: { type: String, default: () => new Date().toISOString() },
+  },
+  { timestamps: false, collection: 'users' }
+);
+
+export interface IMasterEmployee {
+  enrollId: string;
+  name: string;
+  designation: string;
+  department: string;
+  jobType: string;
+  joiningDate: string;
+  cardIssue: string;
+  emergencyContact: string;
+  permanentAddress: string;
+  bloodGroup: string;
+  nationalId?: string;
+  photo?: string;
+  signature?: string;
+  importedAt: string;
+  updatedAt?: string;
+}
+
+const MasterEmployeeSchema = new Schema<IMasterEmployee>(
+  {
+    enrollId: { type: String, required: true, unique: true, index: true },
+    name: { type: String, required: true },
+    designation: { type: String, default: '' },
+    department: { type: String, default: '' },
+    jobType: { type: String, default: 'Permanent' },
+    joiningDate: { type: String, default: '01/03/2026' },
+    cardIssue: { type: String, default: '19/10/2026' },
+    emergencyContact: { type: String, default: '' },
+    permanentAddress: { type: String, default: '' },
+    bloodGroup: { type: String, default: 'O+' },
+    nationalId: { type: String, default: '' },
+    photo: { type: String, default: '' },
+    signature: { type: String, default: '' },
+    importedAt: { type: String, default: () => new Date().toISOString() },
+    updatedAt: { type: String },
+  },
+  { timestamps: false, collection: 'master_employees' }
+);
+
+export interface ISubmission {
+  id: string;
+  enrollId: string;
+  nationalId: string;
+  photoUrl: string;
+  signatureUrl: string;
+  employee: any;
+  submittedBy: {
+    id: string;
+    name: string;
+    username: string;
+    employeeId: string;
+    role: string;
+  };
+  submittedAt: string;
+  printStatus: 'pending' | 'printed';
+  printCount: number;
+  printedAt: string | null;
+  reprintHistory: Array<{
+    printedAt: string;
+    printedBy: string;
+    action: string;
+    note: string;
+  }>;
+}
+
+const SubmissionSchema = new Schema<ISubmission>(
+  {
+    id: { type: String, required: true, index: true },
+    enrollId: { type: String, required: true, unique: true, index: true },
+    nationalId: { type: String, required: true },
+    photoUrl: { type: String, required: true },
+    signatureUrl: { type: String, required: true },
+    employee: { type: Schema.Types.Mixed, required: true },
+    submittedBy: {
+      id: String,
+      name: String,
+      username: String,
+      employeeId: String,
+      role: String,
+    },
+    submittedAt: { type: String, default: () => new Date().toISOString() },
+    printStatus: { type: String, enum: ['pending', 'printed'], default: 'pending' },
+    printCount: { type: Number, default: 0 },
+    printedAt: { type: String, default: null },
+    reprintHistory: [
+      {
+        printedAt: { type: String, required: true },
+        printedBy: { type: String, required: true },
+        action: { type: String, required: true },
+        note: { type: String, default: '' },
+      },
+    ],
+  },
+  { timestamps: false, collection: 'submissions' }
+);
+
+export interface ISession {
+  token: string;
+  userId: string;
+  expiresAt: number;
+}
+
+const SessionSchema = new Schema<ISession>(
+  {
+    token: { type: String, required: true, unique: true, index: true },
+    userId: { type: String, required: true },
+    expiresAt: { type: Number, required: true },
+  },
+  { timestamps: false, collection: 'sessions' }
+);
+
+export interface IAppSettings {
+  key: string;
   supervisorSuccessMessage: string;
   supervisorFormEnabled: boolean;
   supervisorFormDisabledMessage: string;
   pdfPrintLayout: 'side_by_side' | 'top_bottom';
 }
 
-const DEFAULT_SETTINGS: AppSettings = {
+const AppSettingsSchema = new Schema<IAppSettings>(
+  {
+    key: { type: String, required: true, unique: true, default: 'global' },
+    supervisorSuccessMessage: {
+      type: String,
+      default:
+        'Employee ID Card data has been submitted successfully and queued for administrative review and printing. Thank you!',
+    },
+    supervisorFormEnabled: { type: Boolean, default: true },
+    supervisorFormDisabledMessage: {
+      type: String,
+      default:
+        'Employee ID Card submission is temporarily closed by the administrator. Please check back later.',
+    },
+    pdfPrintLayout: { type: String, enum: ['side_by_side', 'top_bottom'], default: 'side_by_side' },
+  },
+  { timestamps: false, collection: 'settings' }
+);
+
+const UserModel = mongoose.models.User || mongoose.model<IUser>('User', UserSchema);
+const MasterEmployeeModel =
+  mongoose.models.MasterEmployee || mongoose.model<IMasterEmployee>('MasterEmployee', MasterEmployeeSchema);
+const SubmissionModel =
+  mongoose.models.Submission || mongoose.model<ISubmission>('Submission', SubmissionSchema);
+const SessionModel =
+  mongoose.models.Session || mongoose.model<ISession>('Session', SessionSchema);
+const AppSettingsModel =
+  mongoose.models.AppSettings || mongoose.model<IAppSettings>('AppSettings', AppSettingsSchema);
+
+// Connection Status Flag
+let isMongoConnected = false;
+
+// =========================================================================
+// LOCAL FALLBACK HELPER FUNCTIONS
+// =========================================================================
+
+const DEFAULT_SETTINGS = {
   supervisorSuccessMessage:
     'Employee ID Card data has been submitted successfully and queued for administrative review and printing. Thank you!',
   supervisorFormEnabled: true,
   supervisorFormDisabledMessage:
     'Employee ID Card submission is temporarily closed by the administrator. Please check back later.',
-  pdfPrintLayout: 'side_by_side',
+  pdfPrintLayout: 'side_by_side' as const,
 };
 
-// Helper for atomic file read/write
 function readJsonFile<T>(filePath: string, fallback: T): T {
   try {
     if (!fs.existsSync(filePath)) {
@@ -70,155 +252,629 @@ function hashPassword(password: string, salt = 'idcard_salt_2026'): string {
   return crypto.scryptSync(password, salt, 32).toString('hex');
 }
 
-// Persistent token store: saved to DATA_DIR/sessions.json
-function getSessions(): Record<string, { userId: string; expiresAt: number }> {
-  return readJsonFile<Record<string, { userId: string; expiresAt: number }>>(SESSIONS_FILE, {});
-}
+// Seed Records for Initial Setup
+const INITIAL_ADMIN = {
+  id: 'user-admin-1',
+  username: 'Idcard@nuralam.com',
+  passwordHash: hashPassword('@466035$'),
+  name: 'System Administrator',
+  email: 'Idcard@nuralam.com',
+  role: 'admin' as const,
+  status: 'active' as const,
+  createdAt: new Date().toISOString(),
+};
 
-function saveSessions(sessions: Record<string, { userId: string; expiresAt: number }>): void {
-  writeJsonFile(SESSIONS_FILE, sessions);
-}
+const INITIAL_SUPERVISOR = {
+  id: 'user-supervisor-1',
+  username: 'supervisor1',
+  employeeId: 'SUP-2026-01',
+  passwordHash: hashPassword('supervisor123'),
+  name: 'Production Shift Supervisor',
+  email: 'supervisor@company.com',
+  role: 'supervisor' as const,
+  status: 'active' as const,
+  createdAt: new Date().toISOString(),
+};
 
-function createToken(userId: string): string {
-  const token = crypto.randomBytes(32).toString('hex');
-  const sessions = getSessions();
-  // 30 days expiration
-  sessions[token] = { userId, expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000 };
-  saveSessions(sessions);
-  return token;
-}
+const INITIAL_MASTER_EMPLOYEES: Record<string, any> = {
+  '586665': {
+    enrollId: '586665',
+    name: 'MD. RABIUL AWAL',
+    designation: 'Asst.Caster',
+    department: 'Casting',
+    jobType: 'Permanent',
+    joiningDate: '01/03/2026',
+    cardIssue: '19/10/2026',
+    emergencyContact: '01920-694100',
+    permanentAddress: 'Mukkhopur, Trishal, Mymensingh',
+    bloodGroup: 'O+',
+    nationalId: '',
+    importedAt: new Date().toISOString(),
+  },
+  '586666': {
+    enrollId: '586666',
+    name: 'MD. JAHIDUL ISLAM',
+    designation: 'Senior Glazer',
+    department: 'Glazing',
+    jobType: 'Permanent',
+    joiningDate: '15/02/2025',
+    cardIssue: '19/10/2026',
+    emergencyContact: '01712-345678',
+    permanentAddress: 'Dhanmondi, Dhaka',
+    bloodGroup: 'A+',
+    nationalId: '',
+    importedAt: new Date().toISOString(),
+  },
+  '586667': {
+    enrollId: '586667',
+    name: 'SHARIFUL ISLAM',
+    designation: 'Quality Inspector',
+    department: 'QC',
+    jobType: 'Permanent',
+    joiningDate: '10/01/2024',
+    cardIssue: '19/10/2026',
+    emergencyContact: '01819-876543',
+    permanentAddress: 'Kotwali, Mymensingh',
+    bloodGroup: 'B+',
+    nationalId: '',
+    importedAt: new Date().toISOString(),
+  },
+};
 
-function validateAndGetSession(token: string): { userId: string; expiresAt: number } | null {
-  const sessions = getSessions();
-  const session = sessions[token];
-  if (!session) return null;
-  if (session.expiresAt < Date.now()) {
-    delete sessions[token];
-    saveSessions(sessions);
-    return null;
-  }
-  return session;
-}
-
-function removeSession(token: string): void {
-  const sessions = getSessions();
-  if (sessions[token]) {
-    delete sessions[token];
-    saveSessions(sessions);
-  }
-}
-
-// Initialize seed data
-function initializeDatabase() {
-  // 1. Users - ensure initial admin credentials: Email: Idcard@nuralam.com, Password: @466035$
+// Initialize Local JSON files so fallback is always populated
+function initializeLocalDatabase(): void {
+  // 1. Users
   const users = readJsonFile<any[]>(USERS_FILE, []);
   let admin = users.find((u) => u.role === 'admin');
   if (!admin) {
-    admin = {
-      id: 'user-admin-1',
-      username: 'Idcard@nuralam.com',
-      passwordHash: hashPassword('@466035$'),
-      name: 'System Administrator',
-      email: 'Idcard@nuralam.com',
-      role: 'admin',
-      status: 'active',
-      createdAt: new Date().toISOString(),
-    };
-    users.unshift(admin);
+    users.unshift({ ...INITIAL_ADMIN });
   } else {
-    // Ensure initial admin credentials match configured requirements securely
-    admin.email = 'Idcard@nuralam.com';
-    admin.username = 'Idcard@nuralam.com';
-    admin.passwordHash = hashPassword('@466035$');
+    admin.email = INITIAL_ADMIN.email;
+    admin.username = INITIAL_ADMIN.username;
+    admin.passwordHash = INITIAL_ADMIN.passwordHash;
     admin.status = 'active';
   }
 
-  // Ensure initial supervisor exists for field submissions
   if (!users.some((u) => u.role === 'supervisor')) {
-    const demoSupervisorUser = {
-      id: 'user-supervisor-1',
-      username: 'supervisor1',
-      employeeId: 'SUP-2026-01',
-      passwordHash: hashPassword('supervisor123'),
-      name: 'Production Shift Supervisor',
-      email: 'supervisor@company.com',
-      role: 'supervisor',
-      status: 'active',
-      createdAt: new Date().toISOString(),
-    };
-    users.push(demoSupervisorUser);
+    users.push({ ...INITIAL_SUPERVISOR });
   }
-
   writeJsonFile(USERS_FILE, users);
 
-  // 2. Master Employees (seed with initial sample data so lookup works right out of the box)
-  const masterEmployees = readJsonFile<Record<string, any>>(MASTER_FILE, {});
-  if (Object.keys(masterEmployees).length === 0) {
-    const seedRecords: Record<string, any> = {
-      '586665': {
-        enrollId: '586665',
-        name: 'MD. RABIUL AWAL',
-        designation: 'Asst.Caster',
-        department: 'Casting',
-        jobType: 'Permanent',
-        joiningDate: '01/03/2026',
-        cardIssue: '19/10/2026',
-        emergencyContact: '01920-694100',
-        permanentAddress: 'Mukkhopur, Trishal, Mymensingh',
-        bloodGroup: 'O+',
-        nationalId: '',
-        importedAt: new Date().toISOString(),
-      },
-      '586666': {
-        enrollId: '586666',
-        name: 'MD. JAHIDUL ISLAM',
-        designation: 'Senior Glazer',
-        department: 'Glazing',
-        jobType: 'Permanent',
-        joiningDate: '15/02/2025',
-        cardIssue: '19/10/2026',
-        emergencyContact: '01712-345678',
-        permanentAddress: 'Dhanmondi, Dhaka',
-        bloodGroup: 'A+',
-        nationalId: '',
-        importedAt: new Date().toISOString(),
-      },
-      '586667': {
-        enrollId: '586667',
-        name: 'SHARIFUL ISLAM',
-        designation: 'Quality Inspector',
-        department: 'QC',
-        jobType: 'Permanent',
-        joiningDate: '10/01/2024',
-        cardIssue: '19/10/2026',
-        emergencyContact: '01819-876543',
-        permanentAddress: 'Kotwali, Mymensingh',
-        bloodGroup: 'B+',
-        nationalId: '',
-        importedAt: new Date().toISOString(),
-      },
-    };
-    writeJsonFile(MASTER_FILE, seedRecords);
+  // 2. Master Employees
+  const master = readJsonFile<Record<string, any>>(MASTER_FILE, {});
+  if (Object.keys(master).length === 0) {
+    writeJsonFile(MASTER_FILE, INITIAL_MASTER_EMPLOYEES);
   }
 
   // 3. Submissions
   readJsonFile<Record<string, any>>(SUBMISSIONS_FILE, {});
 
   // 4. Settings
-  const settings = readJsonFile<AppSettings>(SETTINGS_FILE, DEFAULT_SETTINGS);
-  const updatedSettings: AppSettings = {
-    supervisorSuccessMessage: settings.supervisorSuccessMessage || DEFAULT_SETTINGS.supervisorSuccessMessage,
-    supervisorFormEnabled: settings.supervisorFormEnabled !== undefined ? settings.supervisorFormEnabled : true,
-    supervisorFormDisabledMessage:
-      settings.supervisorFormDisabledMessage || DEFAULT_SETTINGS.supervisorFormDisabledMessage,
-    pdfPrintLayout: settings.pdfPrintLayout || DEFAULT_SETTINGS.pdfPrintLayout,
-  };
-  writeJsonFile(SETTINGS_FILE, updatedSettings);
+  const settings = readJsonFile<any>(SETTINGS_FILE, DEFAULT_SETTINGS);
+  writeJsonFile(SETTINGS_FILE, { ...DEFAULT_SETTINGS, ...settings });
 }
 
-initializeDatabase();
+initializeLocalDatabase();
 
-// Middleware
+// =========================================================================
+// MONGODB CONNECTION & SEEDING
+// =========================================================================
+
+async function seedMongoDatabase(): Promise<void> {
+  try {
+    // 1. Users seeding
+    const userCount = await UserModel.countDocuments();
+    if (userCount === 0) {
+      // Seed from local users.json if populated, otherwise use initial records
+      const localUsers = readJsonFile<any[]>(USERS_FILE, []);
+      const usersToSeed = localUsers.length > 0 ? localUsers : [INITIAL_ADMIN, INITIAL_SUPERVISOR];
+      await UserModel.insertMany(usersToSeed);
+      console.log(`[MongoDB] Seeded ${usersToSeed.length} user accounts into MongoDB.`);
+    } else {
+      // Ensure required admin credentials always match
+      await UserModel.findOneAndUpdate(
+        { role: 'admin' },
+        {
+          $set: {
+            username: INITIAL_ADMIN.username,
+            email: INITIAL_ADMIN.email,
+            passwordHash: INITIAL_ADMIN.passwordHash,
+            status: 'active',
+          },
+        },
+        { upsert: true }
+      );
+    }
+
+    // 2. Master Employees seeding
+    const empCount = await MasterEmployeeModel.countDocuments();
+    if (empCount === 0) {
+      const localMaster = readJsonFile<Record<string, any>>(MASTER_FILE, INITIAL_MASTER_EMPLOYEES);
+      const employeesToSeed = Object.values(localMaster);
+      if (employeesToSeed.length > 0) {
+        await MasterEmployeeModel.insertMany(employeesToSeed);
+        console.log(`[MongoDB] Seeded ${employeesToSeed.length} master employee records into MongoDB.`);
+      }
+    }
+
+    // 3. Settings seeding
+    const existingSettings = await AppSettingsModel.findOne({ key: 'global' });
+    if (!existingSettings) {
+      const localSettings = readJsonFile<any>(SETTINGS_FILE, DEFAULT_SETTINGS);
+      await AppSettingsModel.create({
+        key: 'global',
+        ...DEFAULT_SETTINGS,
+        ...localSettings,
+      });
+      console.log('[MongoDB] Seeded application settings into MongoDB.');
+    }
+  } catch (err: any) {
+    console.error('[MongoDB] Seeding error:', err.message);
+  }
+}
+
+async function connectMongoDB(): Promise<void> {
+  const uri = process.env.MONGODB_URI;
+  if (!uri || !uri.trim()) {
+    console.log('[MongoDB] MONGODB_URI is not configured. Server running gracefully with local persistent storage.');
+    isMongoConnected = false;
+    return;
+  }
+
+  try {
+    // Fail fast if offline, preventing hanging queries
+    mongoose.set('bufferCommands', false);
+    console.log('[MongoDB] Connecting to MongoDB Atlas...');
+    await mongoose.connect(uri.trim(), {
+      serverSelectionTimeoutMS: 5000,
+      connectTimeoutMS: 8000,
+    });
+
+    isMongoConnected = true;
+    console.log('[MongoDB] Connected successfully to MongoDB Atlas.');
+    await seedMongoDatabase();
+  } catch (err: any) {
+    isMongoConnected = false;
+    console.warn('[MongoDB] Could not establish connection to MongoDB Atlas:', err.message);
+    console.warn('[MongoDB] Falling back gracefully to local file storage. All features remain 100% operational.');
+  }
+}
+
+// =========================================================================
+// UNIFIED DATA ACCESS LAYER (MongoDB with Graceful Local Fallback)
+// =========================================================================
+
+// --- SESSIONS ---
+async function createToken(userId: string): Promise<string> {
+  const token = crypto.randomBytes(32).toString('hex');
+  const expiresAt = Date.now() + 30 * 24 * 60 * 60 * 1000; // 30 days
+
+  // Always update local sessions file
+  const localSessions = readJsonFile<Record<string, { userId: string; expiresAt: number }>>(SESSIONS_FILE, {});
+  localSessions[token] = { userId, expiresAt };
+  writeJsonFile(SESSIONS_FILE, localSessions);
+
+  if (isMongoConnected) {
+    try {
+      await SessionModel.create({ token, userId, expiresAt });
+    } catch (e) {
+      // Non-fatal
+    }
+  }
+  return token;
+}
+
+async function validateAndGetSession(token: string): Promise<{ userId: string; expiresAt: number } | null> {
+  if (isMongoConnected) {
+    try {
+      const session = await SessionModel.findOne({ token }).lean();
+      if (session) {
+        if (session.expiresAt < Date.now()) {
+          await SessionModel.deleteOne({ token });
+          return null;
+        }
+        return { userId: session.userId, expiresAt: session.expiresAt };
+      }
+    } catch (e) {
+      // Fallback below
+    }
+  }
+
+  // Local fallback
+  const localSessions = readJsonFile<Record<string, { userId: string; expiresAt: number }>>(SESSIONS_FILE, {});
+  const session = localSessions[token];
+  if (!session) return null;
+  if (session.expiresAt < Date.now()) {
+    delete localSessions[token];
+    writeJsonFile(SESSIONS_FILE, localSessions);
+    return null;
+  }
+  return session;
+}
+
+// --- USERS ---
+async function findUserByCredentials(loginInput: string, passwordHash: string): Promise<IUser | null> {
+  const clean = loginInput.trim().toLowerCase();
+
+  if (isMongoConnected) {
+    try {
+      const user = await UserModel.findOne({
+        $or: [
+          { username: clean },
+          { email: clean },
+          { employeeId: clean },
+        ],
+        passwordHash,
+      }).lean();
+      if (user) return user as IUser;
+    } catch (e) {
+      // Fallback below
+    }
+  }
+
+  // Local fallback
+  const users = readJsonFile<IUser[]>(USERS_FILE, []);
+  const user = users.find(
+    (u) =>
+      (u.username.toLowerCase() === clean ||
+        (u.email && u.email.toLowerCase() === clean) ||
+        (u.employeeId && u.employeeId.toLowerCase() === clean)) &&
+      u.passwordHash === passwordHash
+  );
+  return user || null;
+}
+
+async function findSupervisorByCredentials(employeeId: string, passwordHash: string): Promise<IUser | null> {
+  const cleanId = String(employeeId).trim().toLowerCase();
+
+  if (isMongoConnected) {
+    try {
+      const sup = await UserModel.findOne({
+        role: 'supervisor',
+        $or: [
+          { employeeId: cleanId },
+          { username: cleanId },
+          { email: cleanId },
+        ],
+        passwordHash,
+      }).lean();
+      if (sup) return sup as IUser;
+    } catch (e) {
+      // Fallback below
+    }
+  }
+
+  // Local fallback
+  const users = readJsonFile<IUser[]>(USERS_FILE, []);
+  const sup = users.find(
+    (u) =>
+      u.role === 'supervisor' &&
+      ((u.employeeId && u.employeeId.toLowerCase() === cleanId) ||
+        u.username.toLowerCase() === cleanId ||
+        (u.email && u.email.toLowerCase() === cleanId)) &&
+      u.passwordHash === passwordHash
+  );
+  return sup || null;
+}
+
+async function findUserById(id: string): Promise<IUser | null> {
+  if (isMongoConnected) {
+    try {
+      const user = await UserModel.findOne({ id }).lean();
+      if (user) return user as IUser;
+    } catch (e) {
+      // Fallback below
+    }
+  }
+
+  const users = readJsonFile<IUser[]>(USERS_FILE, []);
+  return users.find((u) => u.id === id) || null;
+}
+
+async function getAllUsersList(): Promise<IUser[]> {
+  if (isMongoConnected) {
+    try {
+      const users = await UserModel.find().lean();
+      if (users && users.length > 0) return users as IUser[];
+    } catch (e) {
+      // Fallback below
+    }
+  }
+  return readJsonFile<IUser[]>(USERS_FILE, []);
+}
+
+async function insertUserRecord(userData: IUser): Promise<IUser> {
+  // Sync to local file
+  const localUsers = readJsonFile<IUser[]>(USERS_FILE, []);
+  localUsers.push(userData);
+  writeJsonFile(USERS_FILE, localUsers);
+
+  if (isMongoConnected) {
+    try {
+      await UserModel.create(userData);
+    } catch (e) {
+      console.warn('[MongoDB] User create error:', e);
+    }
+  }
+  return userData;
+}
+
+async function updateUserRecord(id: string, updates: Partial<IUser>): Promise<IUser | null> {
+  // Sync local file
+  const localUsers = readJsonFile<IUser[]>(USERS_FILE, []);
+  const idx = localUsers.findIndex((u) => u.id === id);
+  let updatedUser: IUser | null = null;
+  if (idx !== -1) {
+    localUsers[idx] = { ...localUsers[idx], ...updates };
+    updatedUser = localUsers[idx];
+    writeJsonFile(USERS_FILE, localUsers);
+  }
+
+  if (isMongoConnected) {
+    try {
+      const res = await UserModel.findOneAndUpdate({ id }, { $set: updates }, { new: true }).lean();
+      if (res) updatedUser = res as IUser;
+    } catch (e) {
+      console.warn('[MongoDB] User update error:', e);
+    }
+  }
+  return updatedUser;
+}
+
+async function deleteUserRecord(id: string): Promise<boolean> {
+  const localUsers = readJsonFile<IUser[]>(USERS_FILE, []);
+  const filtered = localUsers.filter((u) => u.id !== id);
+  writeJsonFile(USERS_FILE, filtered);
+
+  if (isMongoConnected) {
+    try {
+      await UserModel.deleteOne({ id });
+    } catch (e) {
+      console.warn('[MongoDB] User delete error:', e);
+    }
+  }
+  return true;
+}
+
+// --- MASTER EMPLOYEES ---
+async function getMasterEmployeeRecord(enrollId: string): Promise<IMasterEmployee | null> {
+  const cleanId = String(enrollId).trim();
+
+  if (isMongoConnected) {
+    try {
+      const emp = await MasterEmployeeModel.findOne({ enrollId: cleanId }).lean();
+      if (emp) return emp as IMasterEmployee;
+    } catch (e) {
+      // Fallback below
+    }
+  }
+
+  const master = readJsonFile<Record<string, any>>(MASTER_FILE, {});
+  return master[cleanId] || null;
+}
+
+async function getAllMasterEmployeesList(): Promise<IMasterEmployee[]> {
+  if (isMongoConnected) {
+    try {
+      const records = await MasterEmployeeModel.find().lean();
+      if (records && records.length > 0) return records as IMasterEmployee[];
+    } catch (e) {
+      // Fallback below
+    }
+  }
+
+  const master = readJsonFile<Record<string, any>>(MASTER_FILE, {});
+  return Object.values(master);
+}
+
+async function updateMasterEmployeeRecord(enrollId: string, updates: Partial<IMasterEmployee>): Promise<IMasterEmployee | null> {
+  const cleanId = String(enrollId).trim();
+
+  // Local sync
+  const master = readJsonFile<Record<string, any>>(MASTER_FILE, {});
+  let updated: IMasterEmployee | null = null;
+  if (master[cleanId]) {
+    master[cleanId] = { ...master[cleanId], ...updates, updatedAt: new Date().toISOString() };
+    updated = master[cleanId];
+    writeJsonFile(MASTER_FILE, master);
+  }
+
+  if (isMongoConnected) {
+    try {
+      const res = await MasterEmployeeModel.findOneAndUpdate(
+        { enrollId: cleanId },
+        { $set: { ...updates, updatedAt: new Date().toISOString() } },
+        { new: true }
+      ).lean();
+      if (res) updated = res as IMasterEmployee;
+    } catch (e) {
+      console.warn('[MongoDB] Master employee update error:', e);
+    }
+  }
+  return updated;
+}
+
+async function deleteMasterEmployeeRecord(enrollId: string): Promise<boolean> {
+  const cleanId = String(enrollId).trim();
+
+  const master = readJsonFile<Record<string, any>>(MASTER_FILE, {});
+  delete master[cleanId];
+  writeJsonFile(MASTER_FILE, master);
+
+  if (isMongoConnected) {
+    try {
+      await MasterEmployeeModel.deleteOne({ enrollId: cleanId });
+    } catch (e) {
+      console.warn('[MongoDB] Master employee delete error:', e);
+    }
+  }
+  return true;
+}
+
+async function clearAllMasterEmployeesRecords(): Promise<void> {
+  writeJsonFile(MASTER_FILE, {});
+
+  if (isMongoConnected) {
+    try {
+      await MasterEmployeeModel.deleteMany({});
+    } catch (e) {
+      console.warn('[MongoDB] Clear master employees error:', e);
+    }
+  }
+}
+
+// --- SUBMISSIONS ---
+async function getSubmissionRecord(enrollId: string): Promise<ISubmission | null> {
+  const cleanId = String(enrollId).trim();
+
+  if (isMongoConnected) {
+    try {
+      const sub = await SubmissionModel.findOne({ enrollId: cleanId }).lean();
+      if (sub) return sub as ISubmission;
+    } catch (e) {
+      // Fallback below
+    }
+  }
+
+  const submissions = readJsonFile<Record<string, any>>(SUBMISSIONS_FILE, {});
+  return submissions[cleanId] || null;
+}
+
+async function getAllSubmissionsList(): Promise<ISubmission[]> {
+  if (isMongoConnected) {
+    try {
+      const list = await SubmissionModel.find().lean();
+      if (list && list.length > 0) return list as ISubmission[];
+    } catch (e) {
+      // Fallback below
+    }
+  }
+
+  const submissions = readJsonFile<Record<string, any>>(SUBMISSIONS_FILE, {});
+  return Object.values(submissions);
+}
+
+async function createSubmissionRecord(submissionData: ISubmission): Promise<ISubmission> {
+  // Local sync
+  const submissions = readJsonFile<Record<string, any>>(SUBMISSIONS_FILE, {});
+  submissions[submissionData.enrollId] = submissionData;
+  writeJsonFile(SUBMISSIONS_FILE, submissions);
+
+  if (isMongoConnected) {
+    try {
+      await SubmissionModel.create(submissionData);
+    } catch (e) {
+      console.warn('[MongoDB] Submission create error:', e);
+    }
+  }
+  return submissionData;
+}
+
+async function updateSubmissionRecord(enrollId: string, updates: Partial<ISubmission>): Promise<ISubmission | null> {
+  const cleanId = String(enrollId).trim();
+
+  const submissions = readJsonFile<Record<string, any>>(SUBMISSIONS_FILE, {});
+  let updated: ISubmission | null = null;
+  if (submissions[cleanId]) {
+    submissions[cleanId] = { ...submissions[cleanId], ...updates };
+    updated = submissions[cleanId];
+    writeJsonFile(SUBMISSIONS_FILE, submissions);
+  }
+
+  if (isMongoConnected) {
+    try {
+      const res = await SubmissionModel.findOneAndUpdate(
+        { enrollId: cleanId },
+        { $set: updates },
+        { new: true }
+      ).lean();
+      if (res) updated = res as ISubmission;
+    } catch (e) {
+      console.warn('[MongoDB] Submission update error:', e);
+    }
+  }
+  return updated;
+}
+
+async function deleteSubmissionRecord(enrollId: string): Promise<boolean> {
+  const cleanId = String(enrollId).trim();
+
+  const submissions = readJsonFile<Record<string, any>>(SUBMISSIONS_FILE, {});
+  delete submissions[cleanId];
+  writeJsonFile(SUBMISSIONS_FILE, submissions);
+
+  if (isMongoConnected) {
+    try {
+      await SubmissionModel.deleteOne({ enrollId: cleanId });
+    } catch (e) {
+      console.warn('[MongoDB] Submission delete error:', e);
+    }
+  }
+  return true;
+}
+
+// --- SETTINGS ---
+async function getApplicationSettings(): Promise<IAppSettings> {
+  if (isMongoConnected) {
+    try {
+      const settings = await AppSettingsModel.findOne({ key: 'global' }).lean();
+      if (settings) {
+        return {
+          key: 'global',
+          supervisorSuccessMessage: settings.supervisorSuccessMessage || DEFAULT_SETTINGS.supervisorSuccessMessage,
+          supervisorFormEnabled: settings.supervisorFormEnabled !== false,
+          supervisorFormDisabledMessage: settings.supervisorFormDisabledMessage || DEFAULT_SETTINGS.supervisorFormDisabledMessage,
+          pdfPrintLayout: settings.pdfPrintLayout || DEFAULT_SETTINGS.pdfPrintLayout,
+        };
+      }
+    } catch (e) {
+      // Fallback below
+    }
+  }
+
+  const local = readJsonFile<any>(SETTINGS_FILE, DEFAULT_SETTINGS);
+  return {
+    key: 'global',
+    supervisorSuccessMessage: local.supervisorSuccessMessage || DEFAULT_SETTINGS.supervisorSuccessMessage,
+    supervisorFormEnabled: local.supervisorFormEnabled !== false,
+    supervisorFormDisabledMessage: local.supervisorFormDisabledMessage || DEFAULT_SETTINGS.supervisorFormDisabledMessage,
+    pdfPrintLayout: local.pdfPrintLayout || DEFAULT_SETTINGS.pdfPrintLayout,
+  };
+}
+
+async function updateApplicationSettings(updates: Partial<IAppSettings>): Promise<IAppSettings> {
+  const current = await getApplicationSettings();
+  const merged: IAppSettings = {
+    key: 'global',
+    supervisorSuccessMessage:
+      updates.supervisorSuccessMessage !== undefined
+        ? String(updates.supervisorSuccessMessage).trim()
+        : current.supervisorSuccessMessage,
+    supervisorFormEnabled:
+      updates.supervisorFormEnabled !== undefined ? Boolean(updates.supervisorFormEnabled) : current.supervisorFormEnabled,
+    supervisorFormDisabledMessage:
+      updates.supervisorFormDisabledMessage !== undefined
+        ? String(updates.supervisorFormDisabledMessage).trim()
+        : current.supervisorFormDisabledMessage,
+    pdfPrintLayout: updates.pdfPrintLayout === 'top_bottom' ? 'top_bottom' : 'side_by_side',
+  };
+
+  writeJsonFile(SETTINGS_FILE, merged);
+
+  if (isMongoConnected) {
+    try {
+      await AppSettingsModel.findOneAndUpdate({ key: 'global' }, { $set: merged }, { upsert: true, new: true }).lean();
+    } catch (e) {
+      console.warn('[MongoDB] Settings update error:', e);
+    }
+  }
+  return merged;
+}
+
+// =========================================================================
+// EXPRESS MIDDLEWARE
+// =========================================================================
+
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
@@ -227,7 +883,7 @@ interface AuthenticatedRequest extends Request {
 }
 
 // Authentication Middleware
-function authenticateToken(req: AuthenticatedRequest, res: Response, next: NextFunction): void {
+async function authenticateToken(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
   const authHeader = req.headers.authorization;
   const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
 
@@ -236,14 +892,13 @@ function authenticateToken(req: AuthenticatedRequest, res: Response, next: NextF
     return;
   }
 
-  const session = validateAndGetSession(token);
+  const session = await validateAndGetSession(token);
   if (!session) {
     res.status(401).json({ error: 'Session expired. Please sign in again.' });
     return;
   }
 
-  const users = readJsonFile<any[]>(USERS_FILE, []);
-  const user = users.find((u) => u.id === session.userId);
+  const user = await findUserById(session.userId);
 
   if (!user || user.status !== 'active') {
     res.status(403).json({ error: 'Account not found or inactive.' });
@@ -269,22 +924,15 @@ function requireAdminRole(req: AuthenticatedRequest, res: Response, next: NextFu
 
 // --- AUTHENTICATION ---
 
-app.post('/api/auth/login', (req: Request, res: Response) => {
+app.post('/api/auth/login', async (req: Request, res: Response) => {
   const { username, password } = req.body;
   if (!username || !password) {
     res.status(400).json({ error: 'Username and password are required.' });
     return;
   }
 
-  const cleanInput = username.trim().toLowerCase();
-  const users = readJsonFile<any[]>(USERS_FILE, []);
-  const user = users.find(
-    (u) =>
-      (u.username.toLowerCase() === cleanInput ||
-        (u.email && u.email.toLowerCase() === cleanInput) ||
-        (u.employeeId && u.employeeId.toLowerCase() === cleanInput)) &&
-      u.passwordHash === hashPassword(password)
-  );
+  const pwHash = hashPassword(password);
+  const user = await findUserByCredentials(username, pwHash);
 
   if (!user) {
     res.status(401).json({ error: 'Invalid username or password.' });
@@ -296,7 +944,7 @@ app.post('/api/auth/login', (req: Request, res: Response) => {
     return;
   }
 
-  const token = createToken(user.id);
+  const token = await createToken(user.id);
 
   res.json({
     token,
@@ -313,29 +961,21 @@ app.post('/api/auth/login', (req: Request, res: Response) => {
 });
 
 // Dedicated Supervisor Login using Employee ID / Enrollment Number and password
-app.post('/api/auth/supervisor-login', (req: Request, res: Response) => {
+app.post('/api/auth/supervisor-login', async (req: Request, res: Response) => {
   const { employeeId, password } = req.body;
   if (!employeeId || !String(employeeId).trim() || !password) {
     res.status(400).json({ error: 'Supervisor Employee ID/Enrollment Number and password are required.' });
     return;
   }
 
-  const cleanId = String(employeeId).trim().toLowerCase();
-  const users = readJsonFile<any[]>(USERS_FILE, []);
-
-  // Find user matching employeeId, username, or email
-  const supervisor = users.find(
-    (u) =>
-      u.role === 'supervisor' &&
-      ((u.employeeId && u.employeeId.toLowerCase() === cleanId) ||
-        u.username.toLowerCase() === cleanId ||
-        (u.email && u.email.toLowerCase() === cleanId)) &&
-      u.passwordHash === hashPassword(password)
-  );
+  const pwHash = hashPassword(password);
+  const supervisor = await findSupervisorByCredentials(employeeId, pwHash);
 
   if (!supervisor) {
     // Check if account exists with non-supervisor role or invalid password
-    const otherAccount = users.find(
+    const allUsers = await getAllUsersList();
+    const cleanId = String(employeeId).trim().toLowerCase();
+    const otherAccount = allUsers.find(
       (u) =>
         (u.employeeId && u.employeeId.toLowerCase() === cleanId) ||
         u.username.toLowerCase() === cleanId
@@ -356,7 +996,7 @@ app.post('/api/auth/supervisor-login', (req: Request, res: Response) => {
     return;
   }
 
-  const token = createToken(supervisor.id);
+  const token = await createToken(supervisor.id);
 
   res.json({
     token,
@@ -379,13 +1019,13 @@ app.get('/api/auth/me', authenticateToken, (req: AuthenticatedRequest, res: Resp
 
 // --- USER MANAGEMENT (ADMIN ONLY) ---
 
-app.get('/api/users', authenticateToken, requireAdminRole, (_req: Request, res: Response) => {
-  const users = readJsonFile<any[]>(USERS_FILE, []);
+app.get('/api/users', authenticateToken, requireAdminRole, async (_req: Request, res: Response) => {
+  const users = await getAllUsersList();
   const safeUsers = users.map(({ passwordHash, ...u }) => u);
   res.json(safeUsers);
 });
 
-app.post('/api/users', authenticateToken, requireAdminRole, (req: Request, res: Response) => {
+app.post('/api/users', authenticateToken, requireAdminRole, async (req: Request, res: Response) => {
   const { username, password, name, email, role, employeeId } = req.body;
 
   if (!username || !password || !name) {
@@ -394,9 +1034,9 @@ app.post('/api/users', authenticateToken, requireAdminRole, (req: Request, res: 
   }
 
   const cleanUsername = username.trim().toLowerCase();
-  const users = readJsonFile<any[]>(USERS_FILE, []);
+  const allUsers = await getAllUsersList();
 
-  if (users.some((u) => u.username.toLowerCase() === cleanUsername)) {
+  if (allUsers.some((u) => u.username.toLowerCase() === cleanUsername)) {
     res.status(409).json({ error: `Username "${username}" is already taken.` });
     return;
   }
@@ -407,7 +1047,7 @@ app.post('/api/users', authenticateToken, requireAdminRole, (req: Request, res: 
 
   const cleanEmployeeId = employeeId ? String(employeeId).trim() : cleanUsername;
 
-  const newUser = {
+  const newUser: IUser = {
     id: `user-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
     username: cleanUsername,
     employeeId: cleanEmployeeId,
@@ -419,51 +1059,49 @@ app.post('/api/users', authenticateToken, requireAdminRole, (req: Request, res: 
     createdAt: new Date().toISOString(),
   };
 
-  users.push(newUser);
-  writeJsonFile(USERS_FILE, users);
+  await insertUserRecord(newUser);
 
-  const { passwordHash, ...safeUser } = newUser;
+  const { passwordHash: _, ...safeUser } = newUser;
   res.status(201).json(safeUser);
 });
 
-app.put('/api/users/:id', authenticateToken, requireAdminRole, (req: Request, res: Response) => {
+app.put('/api/users/:id', authenticateToken, requireAdminRole, async (req: Request, res: Response) => {
   const { id } = req.params;
   const { name, email, role, status, password, employeeId } = req.body;
 
-  const users = readJsonFile<any[]>(USERS_FILE, []);
-  const index = users.findIndex((u) => u.id === id);
-
-  if (index === -1) {
+  const existing = await findUserById(id);
+  if (!existing) {
     res.status(404).json({ error: 'User not found.' });
     return;
   }
 
-  const existing = users[index];
-  if (name !== undefined) existing.name = name.trim();
-  if (email !== undefined) existing.email = email.trim();
+  const updates: Partial<IUser> = {};
+  if (name !== undefined) updates.name = name.trim();
+  if (email !== undefined) updates.email = email.trim();
   if (role !== undefined) {
-    if (role === 'admin') existing.role = 'admin';
-    else if (role === 'supervisor') existing.role = 'supervisor';
-    else existing.role = 'data_entry';
+    if (role === 'admin') updates.role = 'admin';
+    else if (role === 'supervisor') updates.role = 'supervisor';
+    else updates.role = 'data_entry';
   }
-  if (employeeId !== undefined) existing.employeeId = String(employeeId).trim();
-  if (status !== undefined) existing.status = status === 'inactive' ? 'inactive' : 'active';
+  if (employeeId !== undefined) updates.employeeId = String(employeeId).trim();
+  if (status !== undefined) updates.status = status === 'inactive' ? 'inactive' : 'active';
   if (password && password.trim() !== '') {
-    existing.passwordHash = hashPassword(password.trim());
+    updates.passwordHash = hashPassword(password.trim());
   }
 
-  users[index] = existing;
-  writeJsonFile(USERS_FILE, users);
+  const updated = await updateUserRecord(id, updates);
+  if (!updated) {
+    res.status(500).json({ error: 'Failed to update user.' });
+    return;
+  }
 
-  const { passwordHash, ...safeUser } = existing;
+  const { passwordHash: _, ...safeUser } = updated;
   res.json(safeUser);
 });
 
-app.delete('/api/users/:id', authenticateToken, requireAdminRole, (req: Request, res: Response) => {
+app.delete('/api/users/:id', authenticateToken, requireAdminRole, async (req: Request, res: Response) => {
   const { id } = req.params;
-  const users = readJsonFile<any[]>(USERS_FILE, []);
-
-  const target = users.find((u) => u.id === id);
+  const target = await findUserById(id);
   if (!target) {
     res.status(404).json({ error: 'User not found.' });
     return;
@@ -471,26 +1109,26 @@ app.delete('/api/users/:id', authenticateToken, requireAdminRole, (req: Request,
 
   // Prevent deleting the last admin
   if (target.role === 'admin') {
-    const adminCount = users.filter((u) => u.role === 'admin').length;
+    const allUsers = await getAllUsersList();
+    const adminCount = allUsers.filter((u) => u.role === 'admin').length;
     if (adminCount <= 1) {
       res.status(400).json({ error: 'Cannot delete the only administrator account.' });
       return;
     }
   }
 
-  const filtered = users.filter((u) => u.id !== id);
-  writeJsonFile(USERS_FILE, filtered);
+  await deleteUserRecord(id);
   res.json({ success: true, message: 'User deleted successfully.' });
 });
 
 // --- EMPLOYEE MASTER DATABASE (ADMIN ONLY FOR MANAGEMENT) ---
 
-app.get('/api/master-employees', authenticateToken, requireAdminRole, (_req: Request, res: Response) => {
-  const master = readJsonFile<Record<string, any>>(MASTER_FILE, {});
-  res.json(Object.values(master));
+app.get('/api/master-employees', authenticateToken, requireAdminRole, async (_req: Request, res: Response) => {
+  const records = await getAllMasterEmployeesList();
+  res.json(records);
 });
 
-app.post('/api/master-employees/import', authenticateToken, requireAdminRole, (req: Request, res: Response) => {
+app.post('/api/master-employees/import', authenticateToken, requireAdminRole, async (req: Request, res: Response) => {
   const { employees } = req.body;
 
   if (!Array.isArray(employees) || employees.length === 0) {
@@ -498,15 +1136,21 @@ app.post('/api/master-employees/import', authenticateToken, requireAdminRole, (r
     return;
   }
 
-  const master = readJsonFile<Record<string, any>>(MASTER_FILE, {});
-  const seenInBatch = new Set<string>();
+  // Fetch current database records to prevent overwriting
+  const currentRecords = await getAllMasterEmployeesList();
+  const existingMap = new Map<string, IMasterEmployee>();
+  for (const r of currentRecords) {
+    existingMap.set(r.enrollId, r);
+  }
 
+  const seenInBatch = new Set<string>();
   let addedCount = 0;
   let duplicateCount = 0;
   let failedCount = 0;
 
   const sampleDuplicates: string[] = [];
   const sampleFailed: string[] = [];
+  const recordsToInsert: IMasterEmployee[] = [];
 
   for (let i = 0; i < employees.length; i++) {
     const emp = employees[i];
@@ -518,7 +1162,7 @@ app.post('/api/master-employees/import', authenticateToken, requireAdminRole, (r
     const rawEnrollId = emp.enrollId !== undefined && emp.enrollId !== null ? String(emp.enrollId).trim() : '';
     const rawName = emp.name !== undefined && emp.name !== null ? String(emp.name).trim() : '';
 
-    // Validate required fields: Enrollment ID and Name
+    // Validate required fields
     if (!rawEnrollId || !rawName) {
       failedCount++;
       if (sampleFailed.length < 10) {
@@ -538,7 +1182,7 @@ app.post('/api/master-employees/import', authenticateToken, requireAdminRole, (r
     seenInBatch.add(rawEnrollId);
 
     // Duplicate detection against existing database records: NEVER silently overwrite
-    if (master[rawEnrollId]) {
+    if (existingMap.has(rawEnrollId)) {
       duplicateCount++;
       if (sampleDuplicates.length < 15) {
         sampleDuplicates.push(`${rawEnrollId} (already in database)`);
@@ -546,8 +1190,7 @@ app.post('/api/master-employees/import', authenticateToken, requireAdminRole, (r
       continue;
     }
 
-    // Valid and unique: save normalized employee record maintaining all fields
-    const record = {
+    const record: IMasterEmployee = {
       enrollId: rawEnrollId,
       name: rawName,
       designation: String(emp.designation || '').trim(),
@@ -564,12 +1207,26 @@ app.post('/api/master-employees/import', authenticateToken, requireAdminRole, (r
       importedAt: new Date().toISOString(),
     };
 
-    master[rawEnrollId] = record;
+    recordsToInsert.push(record);
+    existingMap.set(rawEnrollId, record);
     addedCount++;
   }
 
-  // Atomically write once for the entire batch
-  writeJsonFile(MASTER_FILE, master);
+  // Atomically persist to MongoDB collection if connected
+  if (isMongoConnected && recordsToInsert.length > 0) {
+    try {
+      await MasterEmployeeModel.insertMany(recordsToInsert);
+    } catch (err: any) {
+      console.warn('[MongoDB] Batch import insert error:', err.message);
+    }
+  }
+
+  // Sync to local JSON file
+  const localMaster = readJsonFile<Record<string, any>>(MASTER_FILE, {});
+  for (const r of recordsToInsert) {
+    localMaster[r.enrollId] = r;
+  }
+  writeJsonFile(MASTER_FILE, localMaster);
 
   res.json({
     success: true,
@@ -582,74 +1239,67 @@ app.post('/api/master-employees/import', authenticateToken, requireAdminRole, (r
     sampleDuplicates,
     sampleFailed,
     message: `Import completed: ${addedCount} added successfully, ${duplicateCount} duplicates skipped, ${failedCount} invalid records skipped.`,
-    totalRecords: Object.keys(master).length,
+    totalRecords: existingMap.size,
   });
 });
 
-app.put('/api/master-employees/:enrollId', authenticateToken, requireAdminRole, (req: Request, res: Response) => {
+app.put('/api/master-employees/:enrollId', authenticateToken, requireAdminRole, async (req: Request, res: Response) => {
   const { enrollId } = req.params;
-  const master = readJsonFile<Record<string, any>>(MASTER_FILE, {});
+  const existing = await getMasterEmployeeRecord(enrollId);
 
-  if (!master[enrollId]) {
+  if (!existing) {
     res.status(404).json({ error: `Employee with Enrollment ID "${enrollId}" not found.` });
     return;
   }
 
-  const existing = master[enrollId];
   const b = req.body;
+  const updates: Partial<IMasterEmployee> = {};
 
-  if (b.name !== undefined) existing.name = String(b.name).trim();
-  if (b.designation !== undefined) existing.designation = String(b.designation).trim();
-  if (b.department !== undefined) existing.department = String(b.department).trim();
-  if (b.jobType !== undefined) existing.jobType = String(b.jobType).trim();
-  if (b.joiningDate !== undefined) existing.joiningDate = String(b.joiningDate).trim();
-  if (b.cardIssue !== undefined) existing.cardIssue = String(b.cardIssue).trim();
-  if (b.emergencyContact !== undefined) existing.emergencyContact = String(b.emergencyContact).trim();
-  if (b.permanentAddress !== undefined) existing.permanentAddress = String(b.permanentAddress).trim();
-  if (b.bloodGroup !== undefined) existing.bloodGroup = String(b.bloodGroup).trim();
-  if (b.nationalId !== undefined) existing.nationalId = String(b.nationalId).trim();
-  if (b.photo !== undefined) existing.photo = String(b.photo).trim();
-  if (b.signature !== undefined) existing.signature = String(b.signature).trim();
-  existing.updatedAt = new Date().toISOString();
+  if (b.name !== undefined) updates.name = String(b.name).trim();
+  if (b.designation !== undefined) updates.designation = String(b.designation).trim();
+  if (b.department !== undefined) updates.department = String(b.department).trim();
+  if (b.jobType !== undefined) updates.jobType = String(b.jobType).trim();
+  if (b.joiningDate !== undefined) updates.joiningDate = String(b.joiningDate).trim();
+  if (b.cardIssue !== undefined) updates.cardIssue = String(b.cardIssue).trim();
+  if (b.emergencyContact !== undefined) updates.emergencyContact = String(b.emergencyContact).trim();
+  if (b.permanentAddress !== undefined) updates.permanentAddress = String(b.permanentAddress).trim();
+  if (b.bloodGroup !== undefined) updates.bloodGroup = String(b.bloodGroup).trim();
+  if (b.nationalId !== undefined) updates.nationalId = String(b.nationalId).trim();
+  if (b.photo !== undefined) updates.photo = String(b.photo).trim();
+  if (b.signature !== undefined) updates.signature = String(b.signature).trim();
 
-  master[enrollId] = existing;
-  writeJsonFile(MASTER_FILE, master);
+  const updated = await updateMasterEmployeeRecord(enrollId, updates);
 
   res.json({
     success: true,
     message: `Employee ${enrollId} updated successfully.`,
-    employee: existing,
+    employee: updated,
   });
 });
 
-app.delete('/api/master-employees/:enrollId', authenticateToken, requireAdminRole, (req: Request, res: Response) => {
+app.delete('/api/master-employees/:enrollId', authenticateToken, requireAdminRole, async (req: Request, res: Response) => {
   const { enrollId } = req.params;
-  const master = readJsonFile<Record<string, any>>(MASTER_FILE, {});
+  const existing = await getMasterEmployeeRecord(enrollId);
 
-  if (!master[enrollId]) {
+  if (!existing) {
     res.status(404).json({ error: `Employee with Enrollment ID "${enrollId}" not found.` });
     return;
   }
 
-  delete master[enrollId];
-  writeJsonFile(MASTER_FILE, master);
+  await deleteMasterEmployeeRecord(enrollId);
   res.json({ success: true, message: `Employee ${enrollId} deleted from master database.` });
 });
 
-app.delete('/api/master-employees', authenticateToken, requireAdminRole, (_req: Request, res: Response) => {
-  writeJsonFile(MASTER_FILE, {});
+app.delete('/api/master-employees', authenticateToken, requireAdminRole, async (_req: Request, res: Response) => {
+  await clearAllMasterEmployeesRecords();
   res.json({ success: true, message: 'All master employee records have been cleared.' });
 });
 
-// --- LOOKUP EMPLOYEE (AUTHENTICATED DATA ENTRY & ADMIN) ---
-// Retrieves employee read-only info, checks if already submitted
-app.get('/api/lookup-employee/:enrollId', authenticateToken, (req: Request, res: Response) => {
+// --- LOOKUP EMPLOYEE (AUTHENTICATED SUPERVISOR, DATA ENTRY & ADMIN) ---
+app.get('/api/lookup-employee/:enrollId', authenticateToken, async (req: Request, res: Response) => {
   const enrollId = req.params.enrollId.trim();
-  const master = readJsonFile<Record<string, any>>(MASTER_FILE, {});
-  const submissions = readJsonFile<Record<string, any>>(SUBMISSIONS_FILE, {});
-
-  const employee = master[enrollId];
-  const submission = submissions[enrollId];
+  const employee = await getMasterEmployeeRecord(enrollId);
+  const submission = await getSubmissionRecord(enrollId);
 
   if (!employee) {
     res.status(404).json({
@@ -675,13 +1325,12 @@ app.get('/api/lookup-employee/:enrollId', authenticateToken, (req: Request, res:
   });
 });
 
-// --- SUBMISSIONS (DATA ENTRY & ADMIN) ---
+// --- SUBMISSIONS (SUPERVISOR, DATA ENTRY & ADMIN) ---
 
-// Server-side duplicate protection & saving
-app.post('/api/submissions', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
+app.post('/api/submissions', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   // SERVER-SIDE SUPERVISOR FORM ON/OFF CONTROL
   if (req.user?.role === 'supervisor') {
-    const settings = readJsonFile<AppSettings>(SETTINGS_FILE, DEFAULT_SETTINGS);
+    const settings = await getApplicationSettings();
     if (settings.supervisorFormEnabled === false) {
       res.status(403).json({
         error:
@@ -703,9 +1352,7 @@ app.post('/api/submissions', authenticateToken, (req: AuthenticatedRequest, res:
   const cleanEnrollId = String(enrollId).trim();
 
   // Validate in Master Database
-  const master = readJsonFile<Record<string, any>>(MASTER_FILE, {});
-  const masterEmp = master[cleanEnrollId];
-
+  const masterEmp = await getMasterEmployeeRecord(cleanEnrollId);
   if (!masterEmp) {
     res.status(404).json({
       error: `Cannot submit: Enrollment ID "${cleanEnrollId}" does not exist in the Master Employee Database.`,
@@ -714,17 +1361,16 @@ app.post('/api/submissions', authenticateToken, (req: AuthenticatedRequest, res:
   }
 
   // SERVER-SIDE DUPLICATE PROTECTION: Block if already submitted
-  const submissions = readJsonFile<Record<string, any>>(SUBMISSIONS_FILE, {});
-  if (submissions[cleanEnrollId]) {
-    const existing = submissions[cleanEnrollId];
+  const existingSub = await getSubmissionRecord(cleanEnrollId);
+  if (existingSub) {
     res.status(409).json({
       error: `Already submitted for Enrollment ID "${cleanEnrollId}". This record was submitted on ${new Date(
-        existing.submittedAt
-      ).toLocaleDateString()} by ${existing.submittedBy?.name || 'Operator'}. Duplicate submissions are strictly blocked.`,
+        existingSub.submittedAt
+      ).toLocaleDateString()} by ${existingSub.submittedBy?.name || 'Operator'}. Duplicate submissions are strictly blocked.`,
       alreadySubmitted: true,
       submission: {
-        submittedAt: existing.submittedAt,
-        submittedBy: existing.submittedBy?.name,
+        submittedAt: existingSub.submittedAt,
+        submittedBy: existingSub.submittedBy?.name,
       },
     });
     return;
@@ -757,7 +1403,7 @@ app.post('/api/submissions', authenticateToken, (req: AuthenticatedRequest, res:
     return;
   }
 
-  const newSubmission = {
+  const newSubmission: ISubmission = {
     id: `sub-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
     enrollId: cleanEnrollId,
     nationalId: String(nationalId).trim(),
@@ -778,11 +1424,9 @@ app.post('/api/submissions', authenticateToken, (req: AuthenticatedRequest, res:
     reprintHistory: [],
   };
 
-  submissions[cleanEnrollId] = newSubmission;
-  writeJsonFile(SUBMISSIONS_FILE, submissions);
+  await createSubmissionRecord(newSubmission);
 
-  // Retrieve current configured success message from settings
-  const currentSettings = readJsonFile<AppSettings>(SETTINGS_FILE, DEFAULT_SETTINGS);
+  const currentSettings = await getApplicationSettings();
 
   res.status(201).json({
     success: true,
@@ -797,9 +1441,9 @@ app.post('/api/submissions', authenticateToken, (req: AuthenticatedRequest, res:
 });
 
 // Admin-only: list all submissions with normalized print status
-app.get('/api/submissions', authenticateToken, requireAdminRole, (_req: Request, res: Response) => {
-  const submissions = readJsonFile<Record<string, any>>(SUBMISSIONS_FILE, {});
-  const normalized = Object.values(submissions).map((sub: any) => ({
+app.get('/api/submissions', authenticateToken, requireAdminRole, async (_req: Request, res: Response) => {
+  const submissions = await getAllSubmissionsList();
+  const normalized = submissions.map((sub: any) => ({
     ...sub,
     printStatus: sub.printStatus === 'printed' ? 'printed' : 'pending',
     printCount: typeof sub.printCount === 'number' ? sub.printCount : sub.printStatus === 'printed' ? 1 : 0,
@@ -809,10 +1453,9 @@ app.get('/api/submissions', authenticateToken, requireAdminRole, (_req: Request,
 });
 
 // Admin-only: mark single submission as printed
-app.post('/api/submissions/:enrollId/mark-printed', authenticateToken, requireAdminRole, (req: AuthenticatedRequest, res: Response) => {
+app.post('/api/submissions/:enrollId/mark-printed', authenticateToken, requireAdminRole, async (req: AuthenticatedRequest, res: Response) => {
   const { enrollId } = req.params;
-  const submissions = readJsonFile<Record<string, any>>(SUBMISSIONS_FILE, {});
-  const record = submissions[enrollId];
+  const record = await getSubmissionRecord(enrollId);
 
   if (!record) {
     res.status(404).json({ error: `Submission for Enrollment ID "${enrollId}" not found.` });
@@ -821,33 +1464,34 @@ app.post('/api/submissions/:enrollId/mark-printed', authenticateToken, requireAd
 
   const now = new Date().toISOString();
   const isFirstPrint = record.printStatus !== 'printed';
-  record.printStatus = 'printed';
-  record.printedAt = now;
-  record.printCount = (record.printCount || 0) + 1;
-  if (!Array.isArray(record.reprintHistory)) record.reprintHistory = [];
+  const newPrintCount = (record.printCount || 0) + 1;
+  const reprintHistory = Array.isArray(record.reprintHistory) ? [...record.reprintHistory] : [];
 
-  record.reprintHistory.push({
+  reprintHistory.push({
     printedAt: now,
     printedBy: req.user.name || req.user.username,
     action: isFirstPrint ? 'initial_print' : 'reprint',
     note: req.body?.note || (isFirstPrint ? 'Initial ID card printed' : 'Card reprint completed'),
   });
 
-  submissions[enrollId] = record;
-  writeJsonFile(SUBMISSIONS_FILE, submissions);
+  const updated = await updateSubmissionRecord(enrollId, {
+    printStatus: 'printed',
+    printedAt: now,
+    printCount: newPrintCount,
+    reprintHistory,
+  });
 
   res.json({
     success: true,
     message: `Card for ${enrollId} marked as printed.`,
-    record,
+    record: updated,
   });
 });
 
 // Admin-only: log a reprint action
-app.post('/api/submissions/:enrollId/reprint', authenticateToken, requireAdminRole, (req: AuthenticatedRequest, res: Response) => {
+app.post('/api/submissions/:enrollId/reprint', authenticateToken, requireAdminRole, async (req: AuthenticatedRequest, res: Response) => {
   const { enrollId } = req.params;
-  const submissions = readJsonFile<Record<string, any>>(SUBMISSIONS_FILE, {});
-  const record = submissions[enrollId];
+  const record = await getSubmissionRecord(enrollId);
 
   if (!record) {
     res.status(404).json({ error: `Submission for Enrollment ID "${enrollId}" not found.` });
@@ -855,62 +1499,66 @@ app.post('/api/submissions/:enrollId/reprint', authenticateToken, requireAdminRo
   }
 
   const now = new Date().toISOString();
-  record.printStatus = 'printed';
-  record.printedAt = now;
-  record.printCount = (record.printCount || 1) + 1;
-  if (!Array.isArray(record.reprintHistory)) record.reprintHistory = [];
+  const newPrintCount = (record.printCount || 1) + 1;
+  const reprintHistory = Array.isArray(record.reprintHistory) ? [...record.reprintHistory] : [];
 
-  record.reprintHistory.push({
+  reprintHistory.push({
     printedAt: now,
     printedBy: req.user.name || req.user.username,
     action: 'reprint',
     note: req.body?.note || 'Reprint issued by administrator',
   });
 
-  submissions[enrollId] = record;
-  writeJsonFile(SUBMISSIONS_FILE, submissions);
+  const updated = await updateSubmissionRecord(enrollId, {
+    printStatus: 'printed',
+    printedAt: now,
+    printCount: newPrintCount,
+    reprintHistory,
+  });
 
   res.json({
     success: true,
-    message: `Card for ${enrollId} marked as reprinted (Print #${record.printCount}).`,
-    record,
+    message: `Card for ${enrollId} marked as reprinted (Print #${newPrintCount}).`,
+    record: updated,
   });
 });
 
 // Admin-only: bulk mark multiple submissions as printed
-app.post('/api/submissions/bulk-mark-printed', authenticateToken, requireAdminRole, (req: AuthenticatedRequest, res: Response) => {
+app.post('/api/submissions/bulk-mark-printed', authenticateToken, requireAdminRole, async (req: AuthenticatedRequest, res: Response) => {
   const { enrollIds, note } = req.body;
   if (!Array.isArray(enrollIds) || enrollIds.length === 0) {
     res.status(400).json({ error: 'Expected non-empty array of enrollIds.' });
     return;
   }
 
-  const submissions = readJsonFile<Record<string, any>>(SUBMISSIONS_FILE, {});
   const now = new Date().toISOString();
   let updatedCount = 0;
 
   for (const enrollId of enrollIds) {
-    const record = submissions[enrollId];
+    const record = await getSubmissionRecord(enrollId);
     if (record) {
       const isFirstPrint = record.printStatus !== 'printed';
-      record.printStatus = 'printed';
-      record.printedAt = now;
-      record.printCount = (record.printCount || 0) + 1;
-      if (!Array.isArray(record.reprintHistory)) record.reprintHistory = [];
+      const newPrintCount = (record.printCount || 0) + 1;
+      const reprintHistory = Array.isArray(record.reprintHistory) ? [...record.reprintHistory] : [];
 
-      record.reprintHistory.push({
+      reprintHistory.push({
         printedAt: now,
         printedBy: req.user.name || req.user.username,
         action: isFirstPrint ? 'initial_print' : 'reprint',
         note: note || (isFirstPrint ? 'Batch print output' : 'Batch reprint output'),
       });
 
-      submissions[enrollId] = record;
+      await updateSubmissionRecord(enrollId, {
+        printStatus: 'printed',
+        printedAt: now,
+        printCount: newPrintCount,
+        reprintHistory,
+      });
+
       updatedCount++;
     }
   }
 
-  writeJsonFile(SUBMISSIONS_FILE, submissions);
   res.json({
     success: true,
     message: `Successfully marked ${updatedCount} submissions as printed.`,
@@ -919,61 +1567,56 @@ app.post('/api/submissions/bulk-mark-printed', authenticateToken, requireAdminRo
 });
 
 // Admin-only: delete submission to allow resubmission if needed
-app.delete('/api/submissions/:enrollId', authenticateToken, requireAdminRole, (req: Request, res: Response) => {
+app.delete('/api/submissions/:enrollId', authenticateToken, requireAdminRole, async (req: Request, res: Response) => {
   const { enrollId } = req.params;
-  const submissions = readJsonFile<Record<string, any>>(SUBMISSIONS_FILE, {});
+  const existing = await getSubmissionRecord(enrollId);
 
-  if (!submissions[enrollId]) {
+  if (!existing) {
     res.status(404).json({ error: `Submission for Enrollment ID "${enrollId}" not found.` });
     return;
   }
 
-  delete submissions[enrollId];
-  writeJsonFile(SUBMISSIONS_FILE, submissions);
+  await deleteSubmissionRecord(enrollId);
   res.json({ success: true, message: `Submission for ${enrollId} deleted.` });
 });
 
 // --- SETTINGS (ADMIN CONFIGURABLE & PUBLIC CONFIRMATION MESSAGE) ---
 
-// Authenticated users (including supervisors): get public confirmation message & form status
-app.get('/api/settings/public', authenticateToken, (_req: Request, res: Response) => {
-  const settings = readJsonFile<AppSettings>(SETTINGS_FILE, DEFAULT_SETTINGS);
+// Public settings endpoint: get public confirmation message & form status without requiring authentication
+app.get('/api/settings/public', async (_req: Request, res: Response) => {
+  const settings = await getApplicationSettings();
   res.json({
-    supervisorSuccessMessage: settings.supervisorSuccessMessage || DEFAULT_SETTINGS.supervisorSuccessMessage,
+    supervisorSuccessMessage: settings.supervisorSuccessMessage,
     supervisorFormEnabled: settings.supervisorFormEnabled !== false,
-    supervisorFormDisabledMessage:
-      settings.supervisorFormDisabledMessage || DEFAULT_SETTINGS.supervisorFormDisabledMessage,
-    pdfPrintLayout: settings.pdfPrintLayout || DEFAULT_SETTINGS.pdfPrintLayout,
+    supervisorFormDisabledMessage: settings.supervisorFormDisabledMessage,
+    pdfPrintLayout: settings.pdfPrintLayout,
   });
 });
 
 // Admin-only: get full application settings
-app.get('/api/settings', authenticateToken, requireAdminRole, (_req: Request, res: Response) => {
-  const settings = readJsonFile<AppSettings>(SETTINGS_FILE, DEFAULT_SETTINGS);
+app.get('/api/settings', authenticateToken, requireAdminRole, async (_req: Request, res: Response) => {
+  const settings = await getApplicationSettings();
   res.json(settings);
 });
 
 // Admin-only: update application settings
-app.put('/api/settings', authenticateToken, requireAdminRole, (req: Request, res: Response) => {
-  const current = readJsonFile<AppSettings>(SETTINGS_FILE, DEFAULT_SETTINGS);
-  const updated: AppSettings = {
-    ...current,
-    supervisorSuccessMessage:
-      req.body.supervisorSuccessMessage !== undefined
-        ? String(req.body.supervisorSuccessMessage).trim()
-        : current.supervisorSuccessMessage,
-    supervisorFormEnabled:
-      req.body.supervisorFormEnabled !== undefined
-        ? Boolean(req.body.supervisorFormEnabled)
-        : current.supervisorFormEnabled !== false,
-    supervisorFormDisabledMessage:
-      req.body.supervisorFormDisabledMessage !== undefined
-        ? String(req.body.supervisorFormDisabledMessage).trim()
-        : current.supervisorFormDisabledMessage,
-    pdfPrintLayout: req.body.pdfPrintLayout === 'top_bottom' ? 'top_bottom' : 'side_by_side',
-  };
-  writeJsonFile(SETTINGS_FILE, updated);
+app.put('/api/settings', authenticateToken, requireAdminRole, async (req: Request, res: Response) => {
+  const updated = await updateApplicationSettings({
+    supervisorSuccessMessage: req.body.supervisorSuccessMessage,
+    supervisorFormEnabled: req.body.supervisorFormEnabled,
+    supervisorFormDisabledMessage: req.body.supervisorFormDisabledMessage,
+    pdfPrintLayout: req.body.pdfPrintLayout,
+  });
   res.json(updated);
+});
+
+// Database status endpoint (Admin view)
+app.get('/api/system/db-status', authenticateToken, requireAdminRole, (_req: Request, res: Response) => {
+  res.json({
+    databaseType: isMongoConnected ? 'MongoDB Atlas' : 'Local Persistent Storage (Fallback)',
+    isMongoConnected,
+    hasMongoUriConfigured: Boolean(process.env.MONGODB_URI),
+  });
 });
 
 // =========================================================================
@@ -981,6 +1624,9 @@ app.put('/api/settings', authenticateToken, requireAdminRole, (req: Request, res
 // =========================================================================
 
 async function startServer() {
+  // Asynchronously connect to MongoDB Atlas on startup
+  await connectMongoDB();
+
   const isProduction = process.env.NODE_ENV === 'production';
   const distPath = path.resolve(__dirname, 'dist');
 
@@ -990,7 +1636,7 @@ async function startServer() {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   } else {
-    // Mount Vite middleware in development (HMR WebSocket disabled to prevent port 24678 collisions)
+    // Mount Vite middleware in development (HMR WebSocket disabled to prevent port collisions)
     const vite = await createViteServer({
       server: {
         middlewareMode: true,
@@ -1003,6 +1649,11 @@ async function startServer() {
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server is running at http://0.0.0.0:${PORT}`);
+    if (isMongoConnected) {
+      console.log(`Connected to MongoDB Atlas using collections: users, master_employees, submissions, settings`);
+    } else {
+      console.log(`Running with local storage. Set MONGODB_URI in environment to connect to MongoDB Atlas.`);
+    }
   });
 }
 

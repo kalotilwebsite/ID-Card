@@ -5,7 +5,11 @@ const USER_KEY = 'idcard_auth_user';
 
 export function getStoredToken(): string | null {
   try {
-    return localStorage.getItem(TOKEN_KEY);
+    const token = localStorage.getItem(TOKEN_KEY);
+    if (!token || token === 'undefined' || token === 'null' || !token.trim()) {
+      return null;
+    }
+    return token.trim();
   } catch {
     return null;
   }
@@ -13,8 +17,8 @@ export function getStoredToken(): string | null {
 
 export function setStoredToken(token: string | null) {
   try {
-    if (token) {
-      localStorage.setItem(TOKEN_KEY, token);
+    if (token && token !== 'undefined' && token !== 'null' && token.trim()) {
+      localStorage.setItem(TOKEN_KEY, token.trim());
     } else {
       localStorage.removeItem(TOKEN_KEY);
     }
@@ -26,7 +30,14 @@ export function setStoredToken(token: string | null) {
 export function getStoredUser(): AuthUser | null {
   try {
     const raw = localStorage.getItem(USER_KEY);
-    return raw ? JSON.parse(raw) : null;
+    if (!raw || raw === 'undefined' || raw === 'null') {
+      return null;
+    }
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || !parsed.role) {
+      return null;
+    }
+    return parsed;
   } catch {
     return null;
   }
@@ -44,8 +55,38 @@ export function setStoredUser(user: AuthUser | null) {
   }
 }
 
+type UnauthorizedListener = () => void;
+const unauthorizedListeners = new Set<UnauthorizedListener>();
+
+export function subscribeToUnauthorized(listener: UnauthorizedListener): () => void {
+  unauthorizedListeners.add(listener);
+  return () => {
+    unauthorizedListeners.delete(listener);
+  };
+}
+
 async function request<T>(endpoint: string, options: RequestInit = {}, retryOn401 = true): Promise<T> {
+  const isPublicEndpoint =
+    endpoint.startsWith('/api/auth/login') ||
+    endpoint.startsWith('/api/auth/supervisor-login') ||
+    endpoint.startsWith('/api/settings/public');
+
   const token = getStoredToken();
+
+  // If token is missing on a protected endpoint, prevent unauthenticated network failure
+  if (!token && !isPublicEndpoint) {
+    setStoredToken(null);
+    setStoredUser(null);
+    unauthorizedListeners.forEach((fn) => {
+      try {
+        fn();
+      } catch {}
+    });
+    const error = new Error('Authentication required. Please sign in.') as any;
+    error.status = 401;
+    throw error;
+  }
+
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string>),
@@ -66,6 +107,11 @@ async function request<T>(endpoint: string, options: RequestInit = {}, retryOn40
     if (response.status === 401) {
       setStoredToken(null);
       setStoredUser(null);
+      unauthorizedListeners.forEach((fn) => {
+        try {
+          fn();
+        } catch {}
+      });
     }
 
     const errorMsg = data?.error || `Request failed with status ${response.status}`;

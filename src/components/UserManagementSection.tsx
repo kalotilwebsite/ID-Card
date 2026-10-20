@@ -13,7 +13,7 @@ import {
   Briefcase,
   IdCard,
 } from 'lucide-react';
-import { apiService } from '../services/apiService';
+import { apiService, getStoredToken } from '../services/apiService';
 import { AuthUser, UserRole } from '../types';
 
 export function UserManagementSection() {
@@ -43,11 +43,22 @@ export function UserManagementSection() {
   const [editPassword, setEditPassword] = useState('');
 
   const loadUsers = async () => {
+    const token = getStoredToken();
+    if (!token) return;
+
     setIsLoading(true);
     try {
       const data = await apiService.getUsers();
       setUsers(data);
     } catch (err: any) {
+      if (
+        err?.status === 401 ||
+        err?.status === 403 ||
+        err?.message?.includes('Authentication required') ||
+        err?.message?.includes('Session expired')
+      ) {
+        return;
+      }
       console.error('Failed to load users:', err);
       setStatusMessage({ type: 'error', text: err.message || 'Failed to load user accounts.' });
     } finally {

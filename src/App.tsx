@@ -56,7 +56,14 @@ import { UserManagementSection } from './components/UserManagementSection';
 import { SubmissionsSection } from './components/SubmissionsSection';
 import { LoginModal } from './components/LoginModal';
 import { AdminSettingsModal } from './components/AdminSettingsModal';
-import { apiService, getStoredUser, getStoredToken } from './services/apiService';
+import {
+  apiService,
+  getStoredUser,
+  getStoredToken,
+  setStoredToken,
+  setStoredUser,
+  subscribeToUnauthorized,
+} from './services/apiService';
 
 type MainNavTab =
   | 'submissions'
@@ -67,8 +74,12 @@ type MainNavTab =
   | 'card_studio';
 
 export default function App() {
-  // Authentication State
-  const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => getStoredUser());
+  // Authentication State: only initialize if both token and user profile exist
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => {
+    const token = getStoredToken();
+    if (!token) return null;
+    return getStoredUser();
+  });
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [loginInitialMode, setLoginInitialMode] = useState<'supervisor' | 'system'>('supervisor');
@@ -143,35 +154,68 @@ export default function App() {
 
   // Auto-authenticate on initial mount
   useEffect(() => {
+    let isMounted = true;
+
     const initAuth = async () => {
       setIsAuthLoading(true);
       const token = getStoredToken();
       if (token) {
-        const user = await apiService.getCurrentUser();
-        if (user) {
-          setCurrentUser(user);
-          if (user.role === 'supervisor') {
-            setActiveNavTab('supervisor_submission');
-          } else if (user.role === 'data_entry') {
-            setActiveNavTab('data_entry_form');
+        try {
+          const user = await apiService.getCurrentUser();
+          if (isMounted) {
+            if (user) {
+              setCurrentUser(user);
+              if (user.role === 'supervisor') {
+                setActiveNavTab('supervisor_submission');
+              } else if (user.role === 'data_entry') {
+                setActiveNavTab('data_entry_form');
+              }
+            } else {
+              setCurrentUser(null);
+            }
           }
+        } catch {
+          if (isMounted) {
+            setCurrentUser(null);
+          }
+        }
+      } else {
+        if (isMounted) {
+          setCurrentUser(null);
         }
       }
 
       // Sync saved print layout settings
       try {
         const settings = await apiService.getPublicSettings();
-        if (settings?.pdfPrintLayout === 'top_bottom') {
-          setPrintSettings((prev) => ({ ...prev, layoutMode: 'top-and-bottom' }));
-        } else {
-          setPrintSettings((prev) => ({ ...prev, layoutMode: 'side-by-side' }));
+        if (isMounted) {
+          if (settings?.pdfPrintLayout === 'top_bottom') {
+            setPrintSettings((prev) => ({ ...prev, layoutMode: 'top-and-bottom' }));
+          } else {
+            setPrintSettings((prev) => ({ ...prev, layoutMode: 'side-by-side' }));
+          }
         }
       } catch (e) {}
 
-      setIsAuthLoading(false);
+      if (isMounted) {
+        setIsAuthLoading(false);
+      }
     };
 
     initAuth();
+
+    // Subscribe to unauthorized session expirations
+    const unsubscribe = subscribeToUnauthorized(() => {
+      if (isMounted) {
+        setCurrentUser(null);
+        setIsLoginModalOpen(true);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
   }, []);
 
   // Enforce role-based tab restrictions:
@@ -582,6 +626,7 @@ export default function App() {
                 frontTemplateUrl={frontTemplateUrl}
                 backTemplateUrl={backTemplateUrl}
                 onSendToPrintStudio={handleSendToPrintStudio}
+                currentUser={currentUser}
               />
             )}
 

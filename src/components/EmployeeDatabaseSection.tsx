@@ -15,7 +15,7 @@ import {
   Image as ImageIcon,
   Check,
 } from 'lucide-react';
-import { apiService } from '../services/apiService';
+import { apiService, getStoredToken } from '../services/apiService';
 import { MasterEmployee, ColumnMapping } from '../types';
 import { parseExcelFile } from '../services/excelService';
 import { ColumnMappingModal } from './ColumnMappingModal';
@@ -71,11 +71,22 @@ export function EmployeeDatabaseSection({ onRefreshData }: EmployeeDatabaseSecti
   const editSigInputRef = useRef<HTMLInputElement>(null);
 
   const loadMasterEmployees = async () => {
+    const token = getStoredToken();
+    if (!token) return;
+
     setIsLoading(true);
     try {
       const data = await apiService.getMasterEmployees();
       setEmployees(data);
     } catch (err: any) {
+      if (
+        err?.status === 401 ||
+        err?.status === 403 ||
+        err?.message?.includes('Authentication required') ||
+        err?.message?.includes('Session expired')
+      ) {
+        return;
+      }
       console.error('Failed to load master employees:', err);
       setStatusMessage({ type: 'error', text: err.message || 'Failed to load master employees.' });
     } finally {

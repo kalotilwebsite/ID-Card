@@ -55,8 +55,8 @@
     "nationalId": "1998543210123",
     "photo": "",
     "signature": "",
-    "importedAt": "2026-10-20T19:11:51.940Z",
-    "updatedAt": "2026-10-20T19:11:51.944Z"
+    "importedAt": "2026-10-20T19:43:30.207Z",
+    "updatedAt": "2026-10-20T19:43:30.211Z"
   },
   "BULK-TEST-002": {
     "enrollId": "BULK-TEST-002",
@@ -72,6 +72,6 @@
     "nationalId": "",
     "photo": "",
     "signature": "",
-    "importedAt": "2026-10-20T19:11:51.940Z"
+    "importedAt": "2026-10-20T19:43:30.207Z"
   }
 }

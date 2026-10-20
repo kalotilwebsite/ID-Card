@@ -1,4 +1,5 @@
 {
+  "key": "global",
   "supervisorSuccessMessage": "Employee ID Card data has been submitted successfully and queued for administrative review and printing. Thank you!",
   "supervisorFormEnabled": true,
   "supervisorFormDisabledMessage": "Maintenance Mode: ID Card submissions are currently disabled.",

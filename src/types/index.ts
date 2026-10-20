@@ -80,7 +80,7 @@ export const DEFAULT_CALIBRATION: CardCalibrationSettings = {
     name: {
       x: 18,
       y: 126,
-      fontSize: 14.5,
+      fontSize: 15.5,
       fontWeight: '900',
       color: '#000000',
       textAlign: 'left',
@@ -91,7 +91,7 @@ export const DEFAULT_CALIBRATION: CardCalibrationSettings = {
     designation: {
       x: 18,
       y: 162,
-      fontSize: 13.5,
+      fontSize: 14.2,
       fontWeight: 'bold',
       color: '#000000',
       textAlign: 'left',
@@ -101,7 +101,7 @@ export const DEFAULT_CALIBRATION: CardCalibrationSettings = {
     department: {
       x: 18,
       y: 190,
-      fontSize: 13.5,
+      fontSize: 14.2,
       fontWeight: 'bold',
       color: '#000000',
       textAlign: 'left',
@@ -163,13 +163,13 @@ export const DEFAULT_CALIBRATION: CardCalibrationSettings = {
     signature: {
       x: 16,
       y: 372,
-      width: 76,
+      width: 68,
       height: 26,
       fontSize: 10,
       fontWeight: 'normal',
       color: '#000000',
       textAlign: 'center',
-      whiteoutWidth: 76,
+      whiteoutWidth: 68,
       whiteoutHeight: 26,
     },
   },

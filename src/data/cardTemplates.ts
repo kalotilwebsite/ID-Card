@@ -27,11 +27,11 @@ export const FRONT_TEMPLATE_SVG = `data:image/svg+xml;utf8,${encodeURIComponent(
     <text x="152" y="300" font-family="'Arial Black', Arial, sans-serif" font-weight="900" font-size="9" fill="#000000" letter-spacing="0.4">CARD ISSUE</text>
     
     <!-- Issuing Authority Signature & Line (Exact reference asset) -->
-    <image href="/assets/issuing_authority_signature.png" x="78" y="356" width="70" height="52" preserveAspectRatio="xMidYMid meet"/>
+    <image href="/assets/issuing_authority_signature.png" x="92" y="365" width="70" height="50" preserveAspectRatio="xMidYMid meet"/>
     
     <!-- Employee Signature Caption (Area above it is reserved for signature overlay, no box) -->
-    <line x1="16" y1="398" x2="92" y2="398" stroke="#94A3B8" stroke-width="0.8"/>
-    <text x="54" y="408" font-family="Arial, Helvetica, sans-serif" font-size="7.5" fill="#334155" text-anchor="middle">employee</text>
+    <line x1="16" y1="398" x2="84" y2="398" stroke="#94A3B8" stroke-width="0.8"/>
+    <text x="50" y="408" font-family="Arial, Helvetica, sans-serif" font-size="7.5" fill="#334155" text-anchor="middle">employee</text>
 
     <!-- Bottom Red Banner -->
     <rect x="0" y="438" width="284" height="62" fill="#E31B23"/>
@@ -94,21 +94,8 @@ export const BACK_TEMPLATE_SVG = `data:image/svg+xml;utf8,${encodeURIComponent(`
     <!-- Bottom Black Banner -->
     <rect x="0" y="438" width="284" height="62" fill="#000000"/>
     
-    <!-- AKIJ BASHIR GROUP Logo -->
-    <g transform="translate(68, 450)">
-      <!-- Red Interlocking Dual-Drop / Quote Emblem -->
-      <g transform="translate(0, 2)">
-        <path d="M11 0 C17 0 19 5 17 9 C15 12 12 13 10 11 C8 9 8 5 11 0 Z" fill="#E32636"/>
-        <path d="M7 15 C1 15 0 10 2 6 C4 3 6 2 8 4 C10 6 10 9 7 15 Z" fill="#E32636"/>
-        <circle cx="12" cy="5" r="1.8" fill="#E32636"/>
-        <circle cx="5" cy="10" r="1.8" fill="#E32636"/>
-      </g>
-      
-      <!-- Text: AKIJ BASHIR GROUP -->
-      <text x="24" y="15" font-family="Georgia, serif" font-weight="bold" font-size="14" fill="#FFFFFF" letter-spacing="0.8">AKIJ</text>
-      <text x="61" y="15" font-family="Georgia, serif" font-size="14" fill="#FFFFFF" letter-spacing="0.8">BASHIR</text>
-      <text x="25" y="25" font-family="Arial, sans-serif" font-weight="bold" font-size="6.5" fill="#FFFFFF" letter-spacing="1.5">GROUP</text>
-    </g>
+    <!-- Exact AKIJ BASHIR GROUP PNG Logo -->
+    <image href="/assets/akij_bashir_footer_logo.png" x="0" y="438" width="284" height="62" preserveAspectRatio="xMidYMid meet"/>
   </g>
 </svg>
 `)}`;

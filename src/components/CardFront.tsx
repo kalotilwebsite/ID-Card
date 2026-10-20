@@ -111,7 +111,7 @@ export const CardFront: React.FC<CardFrontProps> = ({
         }}
         className="flex-shrink-0 px-4 pt-1.5"
       >
-        {/* 1. Employee Name */}
+        {/* 1. Employee Name (Increased by exactly one size step to 15.5px) */}
         <div
           style={{
             position: 'absolute',
@@ -122,7 +122,7 @@ export const CardFront: React.FC<CardFrontProps> = ({
         >
           <span
             style={{
-              fontSize: `${calibration.name.fontSize}px`,
+              fontSize: `${calibration.name.fontSize && calibration.name.fontSize > 14.5 ? calibration.name.fontSize : 15.5}px`,
               fontWeight: calibration.name.fontWeight,
               color: calibration.name.color,
               textAlign: calibration.name.textAlign,
@@ -135,7 +135,7 @@ export const CardFront: React.FC<CardFrontProps> = ({
           </span>
         </div>
 
-        {/* 2. Designation */}
+        {/* 2. Designation (Subtly taller, more elongated, slightly increased font size) */}
         <div
           style={{
             position: 'absolute',
@@ -146,11 +146,14 @@ export const CardFront: React.FC<CardFrontProps> = ({
         >
           <span
             style={{
-              fontSize: `${calibration.designation.fontSize}px`,
+              fontSize: `${calibration.designation.fontSize && calibration.designation.fontSize > 13.5 ? calibration.designation.fontSize : 14.2}px`,
               fontWeight: calibration.designation.fontWeight,
               color: calibration.designation.color,
               textAlign: calibration.designation.textAlign,
               fontFamily: 'Arial, Helvetica, sans-serif',
+              display: 'inline-block',
+              transform: 'scaleY(1.08)',
+              transformOrigin: 'left',
             }}
             className="leading-snug truncate block max-w-full"
           >
@@ -158,7 +161,7 @@ export const CardFront: React.FC<CardFrontProps> = ({
           </span>
         </div>
 
-        {/* 3. Department */}
+        {/* 3. Department (Subtly taller, more elongated, slightly increased font size) */}
         <div
           style={{
             position: 'absolute',
@@ -169,11 +172,14 @@ export const CardFront: React.FC<CardFrontProps> = ({
         >
           <span
             style={{
-              fontSize: `${calibration.department.fontSize}px`,
+              fontSize: `${calibration.department.fontSize && calibration.department.fontSize > 13.5 ? calibration.department.fontSize : 14.2}px`,
               fontWeight: calibration.department.fontWeight,
               color: calibration.department.color,
               textAlign: calibration.department.textAlign,
               fontFamily: 'Arial, Helvetica, sans-serif',
+              display: 'inline-block',
+              transform: 'scaleY(1.08)',
+              transformOrigin: 'left',
             }}
             className="leading-snug truncate block max-w-full"
           >
@@ -190,7 +196,10 @@ export const CardFront: React.FC<CardFrontProps> = ({
             top: calibration.jobType.y - HEADER_HEIGHT - 12,
           }}
         >
-          <span className="font-['Arial_Black',Arial,sans-serif] font-black text-[8.5px] uppercase tracking-wider text-black block">
+          <span
+            style={{ display: 'inline-block', transform: 'scaleY(1.1)', transformOrigin: 'left' }}
+            className="font-['Arial_Black',Arial,sans-serif] font-black text-[9.2px] uppercase tracking-wider text-black block"
+          >
             JOB TYPE
           </span>
           <span
@@ -213,7 +222,10 @@ export const CardFront: React.FC<CardFrontProps> = ({
             top: calibration.joiningDate.y - HEADER_HEIGHT - 12,
           }}
         >
-          <span className="font-['Arial_Black',Arial,sans-serif] font-black text-[8.5px] uppercase tracking-wider text-black block">
+          <span
+            style={{ display: 'inline-block', transform: 'scaleY(1.1)', transformOrigin: 'left' }}
+            className="font-['Arial_Black',Arial,sans-serif] font-black text-[9.2px] uppercase tracking-wider text-black block"
+          >
             JOINING DATE
           </span>
           <span
@@ -237,7 +249,10 @@ export const CardFront: React.FC<CardFrontProps> = ({
             top: calibration.enrollId.y - HEADER_HEIGHT - 12,
           }}
         >
-          <span className="font-['Arial_Black',Arial,sans-serif] font-black text-[8.5px] uppercase tracking-wider text-black block">
+          <span
+            style={{ display: 'inline-block', transform: 'scaleY(1.1)', transformOrigin: 'left' }}
+            className="font-['Arial_Black',Arial,sans-serif] font-black text-[9.2px] uppercase tracking-wider text-black block"
+          >
             ENROLL ID
           </span>
           <span
@@ -260,7 +275,10 @@ export const CardFront: React.FC<CardFrontProps> = ({
             top: calibration.cardIssue.y - HEADER_HEIGHT - 12,
           }}
         >
-          <span className="font-['Arial_Black',Arial,sans-serif] font-black text-[8.5px] uppercase tracking-wider text-black block">
+          <span
+            style={{ display: 'inline-block', transform: 'scaleY(1.1)', transformOrigin: 'left' }}
+            className="font-['Arial_Black',Arial,sans-serif] font-black text-[9.2px] uppercase tracking-wider text-black block"
+          >
             CARD ISSUE
           </span>
           <span
@@ -314,13 +332,13 @@ export const CardFront: React.FC<CardFrontProps> = ({
           }}
         />
 
-        {/* 1. EMPLOYEE SIGNATURE (Kept exactly as currently implemented) */}
+        {/* 1. EMPLOYEE SIGNATURE (Fixed area, neatly displaying signature; blank with no border if absent) */}
         <div
           style={{
             position: 'absolute',
             left: calibration.signature.x,
             top: calibration.signature.y - LOWER_START_Y,
-            width: calibration.signature.width || 76,
+            width: 68,
             height: calibration.signature.height || 26,
             backgroundColor: '#FFFFFF',
           }}
@@ -329,8 +347,8 @@ export const CardFront: React.FC<CardFrontProps> = ({
           {employee.signatureUrl ? (
             <img
               src={employee.signatureUrl}
-              alt="Signature"
-              className="max-h-full max-w-full object-contain"
+              alt={`${employee.name} Signature`}
+              className="w-full h-full object-contain pointer-events-none select-none"
               referrerPolicy="no-referrer"
             />
           ) : null}
@@ -341,24 +359,24 @@ export const CardFront: React.FC<CardFrontProps> = ({
             position: 'absolute',
             left: calibration.signature.x,
             top: calibration.signature.y - LOWER_START_Y + (calibration.signature.height || 26),
-            width: calibration.signature.width || 76,
+            width: 68,
           }}
           className="text-center"
         >
           <div className="w-full border-t border-gray-400 mt-0.5" />
-          <span className="text-[7.5px] font-sans text-slate-700 block mt-0.5">
-            employee
+          <span className="text-[7.5px] font-sans font-bold text-slate-700 block mt-0.5">
+            Employee
           </span>
         </div>
 
-        {/* 2. ISSUING AUTHORITY SIGNATURE (Exact signature from user cropped reference) */}
+        {/* 2. ISSUING / AUTHORIZED SIGNATURE (Positioned with clear 8px gap from Employee Signature) */}
         <div
           style={{
             position: 'absolute',
-            left: 78,
-            top: 24,
+            left: 92,
+            top: (calibration.signature.y - LOWER_START_Y) + (calibration.signature.height || 26) + 2 - 33,
             width: 70,
-            height: 52,
+            height: 50,
           }}
           className="flex items-center justify-center pointer-events-none select-none"
         >
@@ -406,28 +424,30 @@ export const CardFront: React.FC<CardFrontProps> = ({
         </div>
 
         {/* 4. FOOTER: BLACK PILLAR ICON & TEXT ("BEYOND TOMORROW") */}
-        {/* Black pillar logo icon placed immediately to the left of the text, overlapping the red banner */}
+        {/* Crisp vector icon placed beside text with small visible gap, clear of Authorized Signature */}
         <div
           style={{
             position: 'absolute',
-            left: 135,
-            top: 84,
-            width: 28,
+            left: 140,
+            top: 92,
+            width: 22,
             height: 44,
             zIndex: 10,
           }}
           className="pointer-events-none select-none"
         >
-          <img
-            src="/assets/footer_pillar_icon.png"
-            alt="Logo Icon"
-            style={{
-              width: '100%',
-              height: '100%',
-              objectFit: 'contain',
-            }}
-            referrerPolicy="no-referrer"
-          />
+          <svg
+            viewBox="0 0 22 44"
+            width="22"
+            height="44"
+            fill="none"
+            className="w-full h-full"
+          >
+            <path
+              d="M 2 43 L 2 13 C 2 5.5, 7 1, 14 1 C 18 1, 20.5 2.5, 22 4.5 L 19.5 8 C 18 6.8, 16 6, 13.5 6 C 8.5 6, 6.5 9.5, 6.5 14 L 6.5 38.5 L 16.5 38.5 L 16.5 15.5 L 21 13 L 21 43 Z"
+              fill="#000000"
+            />
+          </svg>
         </div>
 
         {/* White "BEYOND TOMORROW" typography matching reference */}

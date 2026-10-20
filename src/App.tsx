@@ -154,6 +154,12 @@ export default function App() {
         photoUrl = row['__embedded_photo__'];
       }
 
+      // Check if row has an embedded signature
+      let signatureUrl = getVal('signatureUrl');
+      if (!signatureUrl && row['__embedded_signature__']) {
+        signatureUrl = row['__embedded_signature__'];
+      }
+
       const isValid = Boolean(name && designation && department && enrollId);
 
       return {
@@ -169,7 +175,7 @@ export default function App() {
         emergencyContact: getVal('emergencyContact') || '01920-694100',
         nationalId: getVal('nationalId') || '',
         bloodGroup: getVal('bloodGroup') || 'O+',
-        signatureUrl: getVal('signatureUrl') || undefined,
+        signatureUrl: signatureUrl || undefined,
         isValid,
       };
     });

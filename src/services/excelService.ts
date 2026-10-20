@@ -108,9 +108,10 @@ export const parseExcelFile = async (
     throw new Error('Workbook contains no valid worksheets');
   }
 
-  // 1. Extract embedded images and their row positions
+  // 1. Extract embedded images and their row/column positions
   // In ExcelJS, worksheet.getImages() returns [{ type: 'image', imageId: string, range: { tl: { col, row }, br: { col, row } } }]
-  const embeddedImageByRow: Record<number, string> = {};
+  const embeddedImageByRowCol: Record<string, string> = {};
+  const imagesByRow: Record<number, string[]> = {};
   let imagesCount = 0;
 
   try {
@@ -123,10 +124,15 @@ export const parseExcelFile = async (
         const media = workbook.getImage(imageId);
         if (media && media.buffer) {
           const dataUrl = bufferToDataUrl(media.buffer as any, media.extension);
-          // ExcelJS range.tl.row is 0-indexed or 1-indexed. Let's record the row index.
           const topRow = img.range?.tl?.row !== undefined ? Math.floor(img.range.tl.row) : null;
+          const topCol = img.range?.tl?.col !== undefined ? Math.floor(img.range.tl.col) : null;
           if (topRow !== null) {
-            embeddedImageByRow[topRow] = dataUrl;
+            if (!imagesByRow[topRow]) imagesByRow[topRow] = [];
+            imagesByRow[topRow].push(dataUrl);
+
+            if (topCol !== null) {
+              embeddedImageByRowCol[`${topRow}_${topCol}`] = dataUrl;
+            }
           }
         }
       } catch (err) {
@@ -165,17 +171,42 @@ export const parseExcelFile = async (
         rowObj[header] = val;
       });
 
-      // Check if this row has an embedded image
-      // Note: check rowNumber (1-based), rowNumber - 1 (0-based), and row index offsets
+      // Check for embedded images in this row:
       const zeroBasedRow = rowNumber - 1;
-      const associatedImage =
-        embeddedImageByRow[zeroBasedRow] ||
-        embeddedImageByRow[rowNumber] ||
-        embeddedImageByRow[zeroBasedRow - (headerRowIndex - 1)];
+      
+      // Match by exact cell column if available
+      headers.forEach((header, colIdx) => {
+        const imgAtCell =
+          embeddedImageByRowCol[`${zeroBasedRow}_${colIdx}`] ||
+          embeddedImageByRowCol[`${rowNumber}_${colIdx}`] ||
+          embeddedImageByRowCol[`${zeroBasedRow - (headerRowIndex - 1)}_${colIdx}`];
+        if (imgAtCell) {
+          rowObj[header] = imgAtCell;
+          hasData = true;
+          const lowerH = header.toLowerCase();
+          if (lowerH.includes('sign')) {
+            rowObj['__embedded_signature__'] = imgAtCell;
+          } else {
+            rowObj['__embedded_photo__'] = imgAtCell;
+          }
+        }
+      });
 
-      if (associatedImage) {
-        rowObj['__embedded_photo__'] = associatedImage;
-        hasData = true;
+      // Match sequential images by row if column match was not found
+      const rowImages =
+        imagesByRow[zeroBasedRow] ||
+        imagesByRow[rowNumber] ||
+        imagesByRow[zeroBasedRow - (headerRowIndex - 1)];
+
+      if (rowImages && rowImages.length > 0) {
+        if (!rowObj['__embedded_photo__'] && rowImages[0]) {
+          rowObj['__embedded_photo__'] = rowImages[0];
+          hasData = true;
+        }
+        if (!rowObj['__embedded_signature__'] && rowImages.length > 1 && rowImages[1]) {
+          rowObj['__embedded_signature__'] = rowImages[1];
+          hasData = true;
+        }
       }
 
       if (hasData) {
@@ -184,12 +215,24 @@ export const parseExcelFile = async (
     }
   });
 
-  // If embedded images exists, add an auto header if not present
-  if (imagesCount > 0 && !headers.includes('Embedded Photo') && !headers.includes('Photo')) {
+  // If embedded images exists, add auto headers for photo and signature if not present
+  const hasEmbeddedPhotos = rows.some((r) => Boolean(r['__embedded_photo__']));
+  const hasEmbeddedSignatures = rows.some((r) => Boolean(r['__embedded_signature__']));
+
+  if (hasEmbeddedPhotos && !headers.includes('Embedded Photo') && !headers.includes('Photo')) {
     headers.push('Embedded Photo');
     rows.forEach((r) => {
       if (r['__embedded_photo__']) {
         r['Embedded Photo'] = r['__embedded_photo__'];
+      }
+    });
+  }
+
+  if (hasEmbeddedSignatures && !headers.includes('Embedded Signature') && !headers.includes('Signature')) {
+    headers.push('Embedded Signature');
+    rows.forEach((r) => {
+      if (r['__embedded_signature__']) {
+        r['Embedded Signature'] = r['__embedded_signature__'];
       }
     });
   }

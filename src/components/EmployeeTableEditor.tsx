@@ -127,6 +127,18 @@ export const EmployeeTableEditor: React.FC<EmployeeTableEditorProps> = ({
     reader.readAsDataURL(file);
   };
 
+  const handleSignatureUpload = (empId: string, file: File) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const dataUrl = e.target?.result as string;
+      const updated = employees.map((emp) =>
+        emp.id === empId ? { ...emp, signatureUrl: dataUrl } : emp
+      );
+      onUpdateEmployees(updated);
+    };
+    reader.readAsDataURL(file);
+  };
+
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden flex flex-col h-full">
       {/* Top Toolbar */}
@@ -199,6 +211,7 @@ export const EmployeeTableEditor: React.FC<EmployeeTableEditorProps> = ({
             <tr className="bg-gray-100/70 text-gray-600 uppercase text-[10px] font-bold tracking-wider border-b border-gray-200 sticky top-0 z-10 backdrop-blur-sm">
               <th className="py-2.5 px-3">Status</th>
               <th className="py-2.5 px-3">Photo</th>
+              <th className="py-2.5 px-3">Sign</th>
               <th className="py-2.5 px-3">Name</th>
               <th className="py-2.5 px-3">Designation</th>
               <th className="py-2.5 px-3">Department</th>
@@ -269,6 +282,37 @@ export const EmployeeTableEditor: React.FC<EmployeeTableEditorProps> = ({
                           onChange={(e) => {
                             if (e.target.files && e.target.files[0]) {
                               handlePhotoUpload(emp.id, e.target.files[0]);
+                            }
+                          }}
+                        />
+                      </label>
+                    </div>
+                  </td>
+
+                  {/* Signature thumbnail / upload */}
+                  <td className="py-2 px-3" onClick={(e) => e.stopPropagation()}>
+                    <div className="relative group w-12 h-8 rounded border border-gray-300 bg-gray-50 overflow-hidden flex items-center justify-center">
+                      {emp.signatureUrl ? (
+                        <img
+                          src={emp.signatureUrl}
+                          alt=""
+                          className="w-full h-full object-contain"
+                        />
+                      ) : (
+                        <span className="text-[8px] text-gray-400 font-medium">None</span>
+                      )}
+                      <label
+                        className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer text-white text-[8px] font-bold"
+                        title="Upload/Change Signature"
+                      >
+                        Upload
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => {
+                            if (e.target.files && e.target.files[0]) {
+                              handleSignatureUpload(emp.id, e.target.files[0]);
                             }
                           }}
                         />

@@ -258,6 +258,7 @@ export const DataImportModal: React.FC<DataImportModalProps> = ({
       { header: 'Emergency Contact', key: 'emergency', width: 18 },
       { header: 'National ID', key: 'nid', width: 20 },
       { header: 'Blood Group', key: 'blood', width: 12 },
+      { header: 'Employee Signature', key: 'signature', width: 22 },
     ];
 
     ws.addRow({

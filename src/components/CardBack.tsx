@@ -156,6 +156,30 @@ export const CardBack: React.FC<CardBackProps> = ({
           {employee.bloodGroup || 'O+'}
         </span>
       </div>
+
+      {/* 3. Footer Area: Exact Akij Bashir Group PNG logo directly over existing black footer background */}
+      <div
+        style={{
+          position: 'absolute',
+          left: 0,
+          top: 438,
+          width: CARD_WIDTH,
+          height: 62,
+          backgroundColor: '#000000',
+        }}
+        className="flex items-center justify-center overflow-hidden pointer-events-none select-none"
+      >
+        <img
+          src="/assets/akij_bashir_footer_logo.png"
+          alt="Akij Bashir Group"
+          style={{
+            width: '100%',
+            height: '100%',
+            objectFit: 'contain',
+          }}
+          referrerPolicy="no-referrer"
+        />
+      </div>
     </div>
   );
 };

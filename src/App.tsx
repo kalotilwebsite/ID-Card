@@ -132,7 +132,36 @@ export default function App() {
   };
 
   const handleConfirmMapping = (mappings: ColumnMapping[]) => {
-    const generated: EmployeeCardData[] = rawRows.map((row, idx) => {
+    const formatCardDate = (val: string, fallback: string): string => {
+      if (!val || !val.trim()) return fallback;
+      const trimmed = val.trim();
+      if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+        const [y, m, d] = trimmed.split('-');
+        return `${d}/${m}/${y}`;
+      }
+      return trimmed;
+    };
+
+    const sourceRows: Record<string, any>[] =
+      rawRows.length > 0
+        ? rawRows
+        : employees.map((emp) => ({
+            'Employee Name': emp.name,
+            'Designation': emp.designation,
+            'Department': emp.department,
+            'Job Type': emp.jobType,
+            'Join Date': emp.joiningDate,
+            'Enroll ID': emp.enrollId,
+            'Card Issue Date': emp.cardIssue,
+            'Contact Number': emp.emergencyContact,
+            'Permanent Address': emp.permanentAddress || 'Mukkhopur, Trishal, Mymensingh',
+            'National ID': emp.nationalId,
+            'Blood Group': emp.bloodGroup,
+            'Employee Photo': emp.photoUrl || '',
+            'Employee Signature': emp.signatureUrl || '',
+          }));
+
+    const generated: EmployeeCardData[] = sourceRows.map((row, idx) => {
       const getVal = (key: string): string => {
         const m = mappings.find((item) => item.fieldKey === key);
         if (!m) return '';
@@ -168,10 +197,11 @@ export default function App() {
         designation: designation || 'Staff',
         department: department || 'General',
         jobType: getVal('jobType') || 'Permanent',
-        joiningDate: getVal('joiningDate') || new Date().toLocaleDateString('en-GB'),
+        joiningDate: formatCardDate(getVal('joiningDate'), '01/03/2026'),
         enrollId: enrollId || String(100000 + idx),
-        cardIssue: getVal('cardIssue') || new Date().toLocaleDateString('en-GB'),
+        cardIssue: formatCardDate(getVal('cardIssue'), '19/10/2026'),
         photoUrl: photoUrl || undefined,
+        permanentAddress: getVal('permanentAddress') || 'Mukkhopur, Trishal, Mymensingh',
         emergencyContact: getVal('emergencyContact') || '01920-694100',
         nationalId: getVal('nationalId') || '',
         bloodGroup: getVal('bloodGroup') || 'O+',
@@ -228,15 +258,14 @@ export default function App() {
             <span>Import Data</span>
           </button>
 
-          {rawHeaders.length > 0 && (
-            <button
-              onClick={() => setIsMappingModalOpen(true)}
-              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-semibold transition-all border border-slate-700 flex items-center gap-1.5"
-            >
-              <Settings className="w-3.5 h-3.5" />
-              <span>Map Columns</span>
-            </button>
-          )}
+          <button
+            onClick={() => setIsMappingModalOpen(true)}
+            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-semibold transition-all border border-slate-700 flex items-center gap-1.5"
+            title="Configure or adjust column mapping"
+          >
+            <Settings className="w-3.5 h-3.5 text-rose-400" />
+            <span>Map Columns</span>
+          </button>
 
           <button
             onClick={() => setIsCalibrationModalOpen(true)}
@@ -573,13 +602,14 @@ export default function App() {
         </div>
       </div>
 
-      {/* Hidden Offscreen Container for Export Rendering */}
+      {/* Offscreen Container for Export Rendering with valid coordinates */}
       <div
         ref={exportRenderRef}
         style={{
-          position: 'absolute',
-          left: -99999,
-          top: -99999,
+          position: 'fixed',
+          left: 0,
+          top: 0,
+          zIndex: -9999,
           pointerEvents: 'none',
           opacity: 1,
         }}
@@ -613,14 +643,56 @@ export default function App() {
         onLoadSample={handleLoadSample}
       />
 
-      <ColumnMappingModal
-        isOpen={isMappingModalOpen}
-        onClose={() => setIsMappingModalOpen(false)}
-        headers={rawHeaders}
-        sampleRows={rawRows}
-        sourceName={currentSourceName}
-        onConfirmMapping={handleConfirmMapping}
-      />
+      {(() => {
+        const effectiveHeaders =
+          rawHeaders.length > 0
+            ? rawHeaders
+            : [
+                'Employee Name',
+                'Designation',
+                'Department',
+                'Job Type',
+                'Join Date',
+                'Enroll ID',
+                'Card Issue Date',
+                'Contact Number',
+                'Permanent Address',
+                'National ID',
+                'Blood Group',
+                'Employee Photo',
+                'Employee Signature',
+              ];
+
+        const effectiveRows =
+          rawRows.length > 0
+            ? rawRows
+            : employees.map((emp) => ({
+                'Employee Name': emp.name,
+                'Designation': emp.designation,
+                'Department': emp.department,
+                'Job Type': emp.jobType,
+                'Join Date': emp.joiningDate,
+                'Enroll ID': emp.enrollId,
+                'Card Issue Date': emp.cardIssue,
+                'Contact Number': emp.emergencyContact,
+                'Permanent Address': emp.permanentAddress || 'Mukkhopur, Trishal, Mymensingh',
+                'National ID': emp.nationalId,
+                'Blood Group': emp.bloodGroup,
+                'Employee Photo': emp.photoUrl || '',
+                'Employee Signature': emp.signatureUrl || '',
+              }));
+
+        return (
+          <ColumnMappingModal
+            isOpen={isMappingModalOpen}
+            onClose={() => setIsMappingModalOpen(false)}
+            headers={effectiveHeaders}
+            sampleRows={effectiveRows}
+            sourceName={currentSourceName}
+            onConfirmMapping={handleConfirmMapping}
+          />
+        );
+      })()}
 
       <FieldCalibrationModal
         isOpen={isCalibrationModalOpen}

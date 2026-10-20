@@ -8,11 +8,13 @@ import {
   AlertCircle,
   FileDown,
   Printer,
+  FileSpreadsheet,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { EmployeeCardData, PrintSettings, CompanyTemplateConfig } from '../types';
 import { exportCardsToPdf } from '../services/pdfExportService';
 import { exportCardsToDocx } from '../services/docxExportService';
+import { exportCardsToExcel } from '../services/excelService';
 
 interface ExportModalProps {
   isOpen: boolean;
@@ -32,7 +34,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   getCardElement,
 }) => {
   const [isExporting, setIsExporting] = useState(false);
-  const [exportType, setExportType] = useState<'pdf' | 'docx' | null>(null);
+  const [exportType, setExportType] = useState<'pdf' | 'docx' | 'excel' | null>(null);
   const [progressMsg, setProgressMsg] = useState('');
   const [progressPercent, setProgressPercent] = useState(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -133,6 +135,45 @@ export const ExportModal: React.FC<ExportModalProps> = ({
     }
   };
 
+  const handleExportExcel = async () => {
+    setIsExporting(true);
+    setExportType('excel');
+    setErrorMessage(null);
+    setDownloadSuccess(false);
+    setProgressPercent(10);
+    setProgressMsg('Compiling employee records for Excel spreadsheet...');
+
+    try {
+      const blob = await exportCardsToExcel(
+        employees,
+        getCardElement,
+        (current, total, msg) => {
+          const pct = Math.round((current / total) * 90);
+          setProgressPercent(pct);
+          setProgressMsg(msg);
+        }
+      );
+
+      setProgressPercent(100);
+      setProgressMsg('Excel spreadsheet generated successfully!');
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Employee_ID_Cards_Akij_Rosa_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+
+      setDownloadSuccess(true);
+      triggerConfetti();
+    } catch (err: any) {
+      console.error('Excel export error:', err);
+      setErrorMessage(err.message || 'Failed to generate Excel file.');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border border-gray-100 animate-in fade-in zoom-in-95 duration-150">
@@ -209,6 +250,28 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                 </div>
               </div>
               <FileDown className="w-5 h-5 text-blue-600 group-hover:translate-y-0.5 transition-transform" />
+            </button>
+
+            {/* Excel .xlsx Button */}
+            <button
+              onClick={handleExportExcel}
+              disabled={isExporting}
+              className="w-full p-4 rounded-xl border-2 border-emerald-200 bg-emerald-50/40 hover:bg-emerald-50 hover:border-emerald-500 transition-all text-left flex items-center justify-between group disabled:opacity-50"
+            >
+              <div className="flex items-center gap-3.5">
+                <div className="w-11 h-11 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-md shadow-emerald-200 group-hover:scale-105 transition-transform">
+                  <FileSpreadsheet className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-gray-900">
+                    Export to Microsoft Excel (.xlsx)
+                  </h3>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Complete spreadsheet with employee details, dates, IDs, and embedded photos
+                  </p>
+                </div>
+              </div>
+              <FileDown className="w-5 h-5 text-emerald-600 group-hover:translate-y-0.5 transition-transform" />
             </button>
           </div>
 

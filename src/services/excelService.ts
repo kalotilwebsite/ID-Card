@@ -1,5 +1,6 @@
 import ExcelJS from 'exceljs';
 import { parseCSVText } from './googleSheetsService';
+import { EmployeeCardData } from '../types';
 
 export interface ParsedExcelResult {
   sheetNames: string[];
@@ -244,4 +245,132 @@ export const parseExcelFile = async (
     rows,
     embeddedImagesCount: imagesCount,
   };
+};
+
+export const exportCardsToExcel = async (
+  employees: EmployeeCardData[],
+  renderElementGetter?: (empId: string, side: 'front' | 'back') => HTMLElement | null,
+  onProgress?: (current: number, total: number, message: string) => void
+): Promise<Blob> => {
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'Akij Ceramics / Rosa ID Card System';
+  wb.lastModifiedBy = 'Akij Ceramics / Rosa ID Card System';
+  wb.created = new Date();
+  wb.modified = new Date();
+
+  const ws = wb.addWorksheet('Employee ID Cards', {
+    views: [{ showGridLines: true }],
+  });
+
+  ws.columns = [
+    { header: 'SL', key: 'sl', width: 6 },
+    { header: 'Enroll ID', key: 'enrollId', width: 14 },
+    { header: 'Employee Name', key: 'name', width: 28 },
+    { header: 'Designation', key: 'designation', width: 22 },
+    { header: 'Department', key: 'department', width: 20 },
+    { header: 'Job Type', key: 'jobType', width: 16 },
+    { header: 'Join Date', key: 'joiningDate', width: 16 },
+    { header: 'Card Issue Date', key: 'cardIssue', width: 16 },
+    { header: 'Contact Number', key: 'emergencyContact', width: 18 },
+    { header: 'Permanent Address', key: 'permanentAddress', width: 34 },
+    { header: 'National ID', key: 'nationalId', width: 18 },
+    { header: 'Blood Group', key: 'bloodGroup', width: 14 },
+    { header: 'Photo Status', key: 'photoStatus', width: 15 },
+    { header: 'Signature Status', key: 'signatureStatus', width: 16 },
+  ];
+
+  // Header row styling
+  const headerRow = ws.getRow(1);
+  headerRow.height = 28;
+  headerRow.eachCell((cell) => {
+    cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+    cell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF1E293B' },
+    };
+    cell.alignment = { vertical: 'middle', horizontal: 'center' };
+    cell.border = {
+      top: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+      bottom: { style: 'medium', color: { argb: 'FF94A3B8' } },
+      left: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+      right: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+    };
+  });
+
+  const total = employees.length;
+  for (let i = 0; i < total; i++) {
+    const emp = employees[i];
+    if (onProgress) {
+      onProgress(i + 1, total, `Exporting employee ${i + 1} of ${total} to Excel...`);
+    }
+
+    const rowNumber = i + 2;
+    const row = ws.addRow({
+      sl: i + 1,
+      enrollId: emp.enrollId || '',
+      name: emp.name || '',
+      designation: emp.designation || '',
+      department: emp.department || '',
+      jobType: emp.jobType || 'Permanent',
+      joiningDate: emp.joiningDate || '',
+      cardIssue: emp.cardIssue || '',
+      emergencyContact: emp.emergencyContact || '',
+      permanentAddress: emp.permanentAddress || 'Mukkhopur, Trishal, Mymensingh',
+      nationalId: emp.nationalId || '',
+      bloodGroup: emp.bloodGroup || '',
+      photoStatus: emp.photoUrl ? 'Attached' : 'None',
+      signatureStatus: emp.signatureUrl ? 'Attached' : 'None',
+    });
+
+    row.height = 24;
+    row.eachCell((cell, colNum) => {
+      cell.alignment = {
+        vertical: 'middle',
+        horizontal:
+          colNum === 1 || colNum === 2 || colNum === 7 || colNum === 8 || colNum === 12
+            ? 'center'
+            : 'left',
+      };
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+        bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+        left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+        right: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+      };
+      if (i % 2 === 1) {
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFF8FAFC' },
+        };
+      }
+    });
+
+    if (emp.photoUrl && emp.photoUrl.startsWith('data:image')) {
+      try {
+        const matches = emp.photoUrl.match(/^data:image\/([a-zA-Z]+);base64,(.+)$/);
+        if (matches) {
+          const ext = matches[1].toLowerCase() === 'jpg' ? 'jpeg' : matches[1].toLowerCase();
+          const base64Data = matches[2];
+          const imageId = wb.addImage({
+            base64: base64Data,
+            extension: (ext === 'png' ? 'png' : 'jpeg') as any,
+          });
+          ws.addImage(imageId, {
+            tl: { col: 12.1, row: rowNumber - 0.9 },
+            ext: { width: 30, height: 32 },
+          });
+          row.height = 36;
+        }
+      } catch (e) {
+        // Continue gracefully
+      }
+    }
+  }
+
+  const buffer = await wb.xlsx.writeBuffer();
+  return new Blob([buffer], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  });
 };

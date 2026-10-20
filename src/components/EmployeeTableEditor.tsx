@@ -94,25 +94,100 @@ export const EmployeeTableEditor: React.FC<EmployeeTableEditorProps> = ({
     }
   };
 
-  const handleAddNewEmployee = () => {
-    const newEmp: EmployeeCardData = {
-      id: `emp-${Date.now()}`,
-      name: 'NEW EMPLOYEE',
-      designation: 'Staff',
-      department: 'General',
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [newEmployeeForm, setNewEmployeeForm] = useState({
+    name: '',
+    designation: '',
+    department: '',
+    jobType: 'Permanent',
+    joiningDate: '01/03/2026',
+    enrollId: '',
+    cardIssue: '19/10/2026',
+    permanentAddress: 'Mukkhopur, Trishal, Mymensingh',
+    emergencyContact: '01920-694100',
+    nationalId: '',
+    bloodGroup: 'O+',
+    photoUrl: '',
+    signatureUrl: '',
+  });
+  const [addFormErrors, setAddFormErrors] = useState<string[]>([]);
+
+  const formatToCardDate = (dateVal: string): string => {
+    if (!dateVal || !dateVal.trim()) return '';
+    const trimmed = dateVal.trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+      const [y, m, d] = trimmed.split('-');
+      return `${d}/${m}/${y}`;
+    }
+    return trimmed;
+  };
+
+  const formatToInputDate = (dateVal: string): string => {
+    if (!dateVal || !dateVal.trim()) return '';
+    const match = dateVal.trim().match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+    if (match) {
+      const d = match[1].padStart(2, '0');
+      const m = match[2].padStart(2, '0');
+      const y = match[3];
+      return `${y}-${m}-${d}`;
+    }
+    return '';
+  };
+
+  const handleOpenAddModal = () => {
+    setNewEmployeeForm({
+      name: '',
+      designation: '',
+      department: '',
       jobType: 'Permanent',
-      joiningDate: new Date().toLocaleDateString('en-GB'),
+      joiningDate: '01/03/2026',
       enrollId: String(Math.floor(100000 + Math.random() * 900000)),
-      cardIssue: new Date().toLocaleDateString('en-GB'),
+      cardIssue: '19/10/2026',
       permanentAddress: 'Mukkhopur, Trishal, Mymensingh',
       emergencyContact: '01920-694100',
       nationalId: '',
       bloodGroup: 'O+',
+      photoUrl: '',
+      signatureUrl: '',
+    });
+    setAddFormErrors([]);
+    setIsAddModalOpen(true);
+  };
+
+  const handleSaveNewEmployee = (e: React.FormEvent) => {
+    e.preventDefault();
+    const errors: string[] = [];
+    if (!newEmployeeForm.name.trim()) errors.push('Employee Name is required');
+    if (!newEmployeeForm.designation.trim()) errors.push('Designation is required');
+    if (!newEmployeeForm.department.trim()) errors.push('Department is required');
+    if (!newEmployeeForm.enrollId.trim()) errors.push('Enroll ID is required');
+
+    if (errors.length > 0) {
+      setAddFormErrors(errors);
+      return;
+    }
+
+    const newEmp: EmployeeCardData = {
+      id: `emp-${Date.now()}`,
+      name: newEmployeeForm.name.trim(),
+      designation: newEmployeeForm.designation.trim(),
+      department: newEmployeeForm.department.trim(),
+      jobType: newEmployeeForm.jobType.trim() || 'Permanent',
+      joiningDate: formatToCardDate(newEmployeeForm.joiningDate) || '01/03/2026',
+      enrollId: newEmployeeForm.enrollId.trim(),
+      cardIssue: formatToCardDate(newEmployeeForm.cardIssue) || '19/10/2026',
+      permanentAddress: newEmployeeForm.permanentAddress.trim() || 'Mukkhopur, Trishal, Mymensingh',
+      emergencyContact: newEmployeeForm.emergencyContact.trim() || '01920-694100',
+      nationalId: newEmployeeForm.nationalId.trim(),
+      bloodGroup: newEmployeeForm.bloodGroup.trim() || 'O+',
+      photoUrl: newEmployeeForm.photoUrl || undefined,
+      signatureUrl: newEmployeeForm.signatureUrl || undefined,
       isValid: true,
     };
+
     onUpdateEmployees([newEmp, ...employees]);
     onSelectEmployeeForPreview(newEmp.id);
-    handleStartEdit(newEmp);
+    setIsAddModalOpen(false);
   };
 
   const handlePhotoUpload = (empId: string, file: File) => {
@@ -195,11 +270,11 @@ export const EmployeeTableEditor: React.FC<EmployeeTableEditorProps> = ({
           </div>
 
           <button
-            onClick={handleAddNewEmployee}
-            className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-sm transition-colors flex items-center gap-1.5"
+            onClick={handleOpenAddModal}
+            className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-sm transition-colors flex items-center gap-1.5"
           >
             <Plus className="w-3.5 h-3.5" />
-            Add Row
+            Add Employee
           </button>
         </div>
       </div>
@@ -217,6 +292,8 @@ export const EmployeeTableEditor: React.FC<EmployeeTableEditorProps> = ({
               <th className="py-2.5 px-3">Department</th>
               <th className="py-2.5 px-3">Enroll ID</th>
               <th className="py-2.5 px-3">Job Type</th>
+              <th className="py-2.5 px-3">Join Date</th>
+              <th className="py-2.5 px-3">Card Issue</th>
               <th className="py-2.5 px-3">Blood</th>
               <th className="py-2.5 px-3">NID</th>
               <th className="py-2.5 px-3 text-right">Actions</th>
@@ -329,7 +406,8 @@ export const EmployeeTableEditor: React.FC<EmployeeTableEditorProps> = ({
                         onChange={(e) =>
                           setEditFormData({ ...editFormData, name: e.target.value })
                         }
-                        className="w-full border border-gray-300 rounded px-2 py-1 text-xs"
+                        style={{ color: '#0f172a', backgroundColor: '#ffffff', colorScheme: 'light' }}
+                        className="w-full bg-white border border-gray-300 rounded px-2 py-1 text-xs text-slate-900 font-bold focus:border-rose-500 focus:outline-none"
                       />
                     ) : (
                       <span className="font-bold text-gray-900">{emp.name}</span>
@@ -345,7 +423,8 @@ export const EmployeeTableEditor: React.FC<EmployeeTableEditorProps> = ({
                         onChange={(e) =>
                           setEditFormData({ ...editFormData, designation: e.target.value })
                         }
-                        className="w-full border border-gray-300 rounded px-2 py-1 text-xs"
+                        style={{ color: '#0f172a', backgroundColor: '#ffffff', colorScheme: 'light' }}
+                        className="w-full bg-white border border-gray-300 rounded px-2 py-1 text-xs text-slate-900 font-semibold focus:border-rose-500 focus:outline-none"
                       />
                     ) : (
                       <span className="text-gray-700">{emp.designation}</span>
@@ -361,7 +440,8 @@ export const EmployeeTableEditor: React.FC<EmployeeTableEditorProps> = ({
                         onChange={(e) =>
                           setEditFormData({ ...editFormData, department: e.target.value })
                         }
-                        className="w-full border border-gray-300 rounded px-2 py-1 text-xs"
+                        style={{ color: '#0f172a', backgroundColor: '#ffffff', colorScheme: 'light' }}
+                        className="w-full bg-white border border-gray-300 rounded px-2 py-1 text-xs text-slate-900 font-semibold focus:border-rose-500 focus:outline-none"
                       />
                     ) : (
                       <span className="text-gray-700">{emp.department}</span>
@@ -377,7 +457,8 @@ export const EmployeeTableEditor: React.FC<EmployeeTableEditorProps> = ({
                         onChange={(e) =>
                           setEditFormData({ ...editFormData, enrollId: e.target.value })
                         }
-                        className="w-full border border-gray-300 rounded px-2 py-1 text-xs font-mono"
+                        style={{ color: '#0f172a', backgroundColor: '#ffffff', colorScheme: 'light' }}
+                        className="w-full bg-white border border-gray-300 rounded px-2 py-1 text-xs font-mono text-slate-900 font-bold focus:border-rose-500 focus:outline-none"
                       />
                     ) : (
                       <span className="bg-gray-100 text-gray-800 px-1.5 py-0.5 rounded font-bold">
@@ -395,10 +476,47 @@ export const EmployeeTableEditor: React.FC<EmployeeTableEditorProps> = ({
                         onChange={(e) =>
                           setEditFormData({ ...editFormData, jobType: e.target.value })
                         }
-                        className="w-full border border-gray-300 rounded px-2 py-1 text-xs"
+                        style={{ color: '#0f172a', backgroundColor: '#ffffff', colorScheme: 'light' }}
+                        className="w-full bg-white border border-gray-300 rounded px-2 py-1 text-xs text-slate-900 font-medium focus:border-rose-500 focus:outline-none"
                       />
                     ) : (
                       <span className="text-gray-600">{emp.jobType}</span>
+                    )}
+                  </td>
+
+                  {/* Join Date */}
+                  <td className="py-2 px-3 font-mono text-[11px]">
+                    {isEditing ? (
+                      <input
+                        type="text"
+                        value={editFormData.joiningDate || ''}
+                        onChange={(e) =>
+                          setEditFormData({ ...editFormData, joiningDate: e.target.value })
+                        }
+                        placeholder="DD/MM/YYYY"
+                        style={{ color: '#0f172a', backgroundColor: '#ffffff', colorScheme: 'light' }}
+                        className="w-24 bg-white border border-gray-300 rounded px-2 py-1 text-xs font-mono text-slate-900 font-bold focus:border-rose-500 focus:outline-none"
+                      />
+                    ) : (
+                      <span className="text-gray-700">{emp.joiningDate || '-'}</span>
+                    )}
+                  </td>
+
+                  {/* Card Issue Date */}
+                  <td className="py-2 px-3 font-mono text-[11px]">
+                    {isEditing ? (
+                      <input
+                        type="text"
+                        value={editFormData.cardIssue || ''}
+                        onChange={(e) =>
+                          setEditFormData({ ...editFormData, cardIssue: e.target.value })
+                        }
+                        placeholder="DD/MM/YYYY"
+                        style={{ color: '#0f172a', backgroundColor: '#ffffff', colorScheme: 'light' }}
+                        className="w-24 bg-white border border-gray-300 rounded px-2 py-1 text-xs font-mono text-slate-900 font-bold focus:border-rose-500 focus:outline-none"
+                      />
+                    ) : (
+                      <span className="text-gray-700">{emp.cardIssue || '-'}</span>
                     )}
                   </td>
 
@@ -411,7 +529,8 @@ export const EmployeeTableEditor: React.FC<EmployeeTableEditorProps> = ({
                         onChange={(e) =>
                           setEditFormData({ ...editFormData, bloodGroup: e.target.value })
                         }
-                        className="w-16 border border-gray-300 rounded px-2 py-1 text-xs"
+                        style={{ color: '#0f172a', backgroundColor: '#ffffff', colorScheme: 'light' }}
+                        className="w-16 bg-white border border-gray-300 rounded px-2 py-1 text-xs text-slate-900 font-bold focus:border-rose-500 focus:outline-none"
                       />
                     ) : (
                       emp.bloodGroup || '-'
@@ -486,6 +605,376 @@ export const EmployeeTableEditor: React.FC<EmployeeTableEditorProps> = ({
         </span>
         <span>Click any row to view instant card preview on the right</span>
       </div>
+
+      {/* Add New Employee Modal */}
+      {isAddModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden border border-gray-100 animate-in fade-in zoom-in-95 duration-150">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-gray-900 via-gray-800 to-black p-5 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center">
+                  <Plus className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold">Add New Employee</h2>
+                  <p className="text-xs text-gray-300">
+                    Create an ID card with custom details and manual dates
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAddModalOpen(false)}
+                className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 text-gray-300 hover:text-white flex items-center justify-center"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Form */}
+            <form onSubmit={handleSaveNewEmployee} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
+              {addFormErrors.length > 0 && (
+                <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 text-xs text-rose-800 space-y-1">
+                  {addFormErrors.map((err, i) => (
+                    <div key={i} className="flex items-center gap-1.5 font-medium">
+                      <AlertTriangle className="w-3.5 h-3.5 text-rose-600 flex-shrink-0" />
+                      <span>{err}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Employee Name */}
+                <div className="space-y-1 sm:col-span-2">
+                  <label className="block text-xs font-bold text-gray-800">
+                    Employee Name <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. JONAID AL AKANDH AKANDH"
+                    value={newEmployeeForm.name}
+                    onChange={(e) =>
+                      setNewEmployeeForm({ ...newEmployeeForm, name: e.target.value })
+                    }
+                    style={{ color: '#0f172a', backgroundColor: '#ffffff', colorScheme: 'light' }}
+                    className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 placeholder:text-gray-400 placeholder:font-normal focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20 focus:outline-none"
+                  />
+                </div>
+
+                {/* Designation */}
+                <div className="space-y-1">
+                  <label className="block text-xs font-bold text-gray-800">
+                    Designation / Role <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Asst.Caster"
+                    value={newEmployeeForm.designation}
+                    onChange={(e) =>
+                      setNewEmployeeForm({ ...newEmployeeForm, designation: e.target.value })
+                    }
+                    style={{ color: '#0f172a', backgroundColor: '#ffffff', colorScheme: 'light' }}
+                    className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 placeholder:text-gray-400 placeholder:font-normal focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20 focus:outline-none"
+                  />
+                </div>
+
+                {/* Department */}
+                <div className="space-y-1">
+                  <label className="block text-xs font-bold text-gray-800">
+                    Department <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Casting"
+                    value={newEmployeeForm.department}
+                    onChange={(e) =>
+                      setNewEmployeeForm({ ...newEmployeeForm, department: e.target.value })
+                    }
+                    style={{ color: '#0f172a', backgroundColor: '#ffffff', colorScheme: 'light' }}
+                    className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 placeholder:text-gray-400 placeholder:font-normal focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20 focus:outline-none"
+                  />
+                </div>
+
+                {/* Enroll ID */}
+                <div className="space-y-1">
+                  <label className="block text-xs font-bold text-gray-800">
+                    Enroll ID <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. 586665"
+                    value={newEmployeeForm.enrollId}
+                    onChange={(e) =>
+                      setNewEmployeeForm({ ...newEmployeeForm, enrollId: e.target.value })
+                    }
+                    style={{ color: '#0f172a', backgroundColor: '#ffffff', colorScheme: 'light' }}
+                    className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-xs font-mono font-bold text-slate-900 placeholder:text-gray-400 placeholder:font-normal focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20 focus:outline-none"
+                  />
+                </div>
+
+                {/* Job Type */}
+                <div className="space-y-1">
+                  <label className="block text-xs font-bold text-gray-800">Job Type</label>
+                  <input
+                    type="text"
+                    placeholder="Permanent"
+                    value={newEmployeeForm.jobType}
+                    onChange={(e) =>
+                      setNewEmployeeForm({ ...newEmployeeForm, jobType: e.target.value })
+                    }
+                    style={{ color: '#0f172a', backgroundColor: '#ffffff', colorScheme: 'light' }}
+                    className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 placeholder:text-gray-400 placeholder:font-normal focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20 focus:outline-none"
+                  />
+                </div>
+
+                {/* SEPARATE MANUAL DATE FIELD 1: JOIN DATE */}
+                <div className="space-y-1 p-3 bg-rose-50/40 rounded-xl border border-rose-100">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-bold text-gray-900">
+                      Join Date <span className="text-rose-600">*</span>
+                    </label>
+                    <span className="text-[10px] text-rose-700 font-bold bg-rose-100 px-1.5 py-0.5 rounded">
+                      Manual Selection
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="date"
+                      value={formatToInputDate(newEmployeeForm.joiningDate)}
+                      onChange={(e) => {
+                        if (e.target.value) {
+                          setNewEmployeeForm({
+                            ...newEmployeeForm,
+                            joiningDate: formatToCardDate(e.target.value),
+                          });
+                        }
+                      }}
+                      style={{ color: '#0f172a', backgroundColor: '#ffffff', colorScheme: 'light' }}
+                      className="bg-white border border-gray-300 rounded-lg px-2 py-1.5 text-xs font-medium text-slate-900 focus:ring-2 focus:ring-rose-500"
+                      title="Select date using calendar"
+                    />
+                    <input
+                      type="text"
+                      placeholder="DD/MM/YYYY"
+                      value={newEmployeeForm.joiningDate}
+                      onChange={(e) =>
+                        setNewEmployeeForm({ ...newEmployeeForm, joiningDate: e.target.value })
+                      }
+                      style={{ color: '#0f172a', backgroundColor: '#ffffff', colorScheme: 'light' }}
+                      className="flex-1 bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-slate-900 placeholder:text-gray-400 placeholder:font-normal focus:ring-2 focus:ring-rose-500 focus:outline-none"
+                    />
+                  </div>
+                  <p className="text-[10px] text-gray-500">
+                    Use calendar picker or type date in DD/MM/YYYY format
+                  </p>
+                </div>
+
+                {/* SEPARATE MANUAL DATE FIELD 2: CARD ISSUE DATE */}
+                <div className="space-y-1 p-3 bg-rose-50/40 rounded-xl border border-rose-100">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-bold text-gray-900">
+                      Card Issue Date <span className="text-rose-600">*</span>
+                    </label>
+                    <span className="text-[10px] text-rose-700 font-bold bg-rose-100 px-1.5 py-0.5 rounded">
+                      Manual Selection
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="date"
+                      value={formatToInputDate(newEmployeeForm.cardIssue)}
+                      onChange={(e) => {
+                        if (e.target.value) {
+                          setNewEmployeeForm({
+                            ...newEmployeeForm,
+                            cardIssue: formatToCardDate(e.target.value),
+                          });
+                        }
+                      }}
+                      style={{ color: '#0f172a', backgroundColor: '#ffffff', colorScheme: 'light' }}
+                      className="bg-white border border-gray-300 rounded-lg px-2 py-1.5 text-xs font-medium text-slate-900 focus:ring-2 focus:ring-rose-500"
+                      title="Select date using calendar"
+                    />
+                    <input
+                      type="text"
+                      placeholder="DD/MM/YYYY"
+                      value={newEmployeeForm.cardIssue}
+                      onChange={(e) =>
+                        setNewEmployeeForm({ ...newEmployeeForm, cardIssue: e.target.value })
+                      }
+                      style={{ color: '#0f172a', backgroundColor: '#ffffff', colorScheme: 'light' }}
+                      className="flex-1 bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-slate-900 placeholder:text-gray-400 placeholder:font-normal focus:ring-2 focus:ring-rose-500 focus:outline-none"
+                    />
+                  </div>
+                  <p className="text-[10px] text-gray-500">
+                    Use calendar picker or type date in DD/MM/YYYY format
+                  </p>
+                </div>
+
+                {/* Contact Number */}
+                <div className="space-y-1">
+                  <label className="block text-xs font-bold text-gray-800">Contact Number</label>
+                  <input
+                    type="text"
+                    placeholder="01920-694100"
+                    value={newEmployeeForm.emergencyContact}
+                    onChange={(e) =>
+                      setNewEmployeeForm({ ...newEmployeeForm, emergencyContact: e.target.value })
+                    }
+                    style={{ color: '#0f172a', backgroundColor: '#ffffff', colorScheme: 'light' }}
+                    className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 placeholder:text-gray-400 placeholder:font-normal focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20 focus:outline-none"
+                  />
+                </div>
+
+                {/* Permanent Address */}
+                <div className="space-y-1">
+                  <label className="block text-xs font-bold text-gray-800">Permanent Address</label>
+                  <input
+                    type="text"
+                    placeholder="Mukkhopur, Trishal, Mymensingh"
+                    value={newEmployeeForm.permanentAddress}
+                    onChange={(e) =>
+                      setNewEmployeeForm({ ...newEmployeeForm, permanentAddress: e.target.value })
+                    }
+                    style={{ color: '#0f172a', backgroundColor: '#ffffff', colorScheme: 'light' }}
+                    className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 placeholder:text-gray-400 placeholder:font-normal focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20 focus:outline-none"
+                  />
+                </div>
+
+                {/* National ID */}
+                <div className="space-y-1">
+                  <label className="block text-xs font-bold text-gray-800">National ID / NID</label>
+                  <input
+                    type="text"
+                    placeholder="01643970731"
+                    value={newEmployeeForm.nationalId}
+                    onChange={(e) =>
+                      setNewEmployeeForm({ ...newEmployeeForm, nationalId: e.target.value })
+                    }
+                    style={{ color: '#0f172a', backgroundColor: '#ffffff', colorScheme: 'light' }}
+                    className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-xs font-mono font-bold text-slate-900 placeholder:text-gray-400 placeholder:font-normal focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20 focus:outline-none"
+                  />
+                </div>
+
+                {/* Blood Group */}
+                <div className="space-y-1">
+                  <label className="block text-xs font-bold text-gray-800">Blood Group</label>
+                  <select
+                    value={newEmployeeForm.bloodGroup}
+                    onChange={(e) =>
+                      setNewEmployeeForm({ ...newEmployeeForm, bloodGroup: e.target.value })
+                    }
+                    style={{ color: '#0f172a', backgroundColor: '#ffffff', colorScheme: 'light' }}
+                    className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20 focus:outline-none"
+                  >
+                    <option style={{ color: '#0f172a', backgroundColor: '#ffffff' }} value="O+">O+</option>
+                    <option style={{ color: '#0f172a', backgroundColor: '#ffffff' }} value="A+">A+</option>
+                    <option style={{ color: '#0f172a', backgroundColor: '#ffffff' }} value="B+">B+</option>
+                    <option style={{ color: '#0f172a', backgroundColor: '#ffffff' }} value="AB+">AB+</option>
+                    <option style={{ color: '#0f172a', backgroundColor: '#ffffff' }} value="O-">O-</option>
+                    <option style={{ color: '#0f172a', backgroundColor: '#ffffff' }} value="A-">A-</option>
+                    <option style={{ color: '#0f172a', backgroundColor: '#ffffff' }} value="B-">B-</option>
+                    <option style={{ color: '#0f172a', backgroundColor: '#ffffff' }} value="AB-">AB-</option>
+                  </select>
+                </div>
+
+                {/* Photo & Signature Uploads */}
+                <div className="space-y-1 sm:col-span-2 pt-2 border-t border-gray-100 flex flex-wrap gap-4 items-center">
+                  <div className="flex items-center gap-2">
+                    <div className="w-10 h-12 rounded border border-gray-300 bg-gray-50 overflow-hidden flex items-center justify-center">
+                      {newEmployeeForm.photoUrl ? (
+                        <img src={newEmployeeForm.photoUrl} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        <ImageIcon className="w-5 h-5 text-gray-400" />
+                      )}
+                    </div>
+                    <div>
+                      <span className="text-xs font-bold text-gray-700 block">Employee Photo</span>
+                      <label className="cursor-pointer text-[11px] text-rose-600 hover:text-rose-700 font-bold underline">
+                        Upload Image
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => {
+                            if (e.target.files && e.target.files[0]) {
+                              const reader = new FileReader();
+                              reader.onload = (ev) => {
+                                setNewEmployeeForm({
+                                  ...newEmployeeForm,
+                                  photoUrl: ev.target?.result as string,
+                                });
+                              };
+                              reader.readAsDataURL(e.target.files[0]);
+                            }
+                          }}
+                        />
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <div className="w-14 h-10 rounded border border-gray-300 bg-gray-50 overflow-hidden flex items-center justify-center">
+                      {newEmployeeForm.signatureUrl ? (
+                        <img src={newEmployeeForm.signatureUrl} alt="" className="w-full h-full object-contain" />
+                      ) : (
+                        <span className="text-[9px] text-gray-400">None</span>
+                      )}
+                    </div>
+                    <div>
+                      <span className="text-xs font-bold text-gray-700 block">Signature</span>
+                      <label className="cursor-pointer text-[11px] text-rose-600 hover:text-rose-700 font-bold underline">
+                        Upload Signature
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => {
+                            if (e.target.files && e.target.files[0]) {
+                              const reader = new FileReader();
+                              reader.onload = (ev) => {
+                                setNewEmployeeForm({
+                                  ...newEmployeeForm,
+                                  signatureUrl: ev.target?.result as string,
+                                });
+                              };
+                              reader.readAsDataURL(e.target.files[0]);
+                            }
+                          }}
+                        />
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="pt-4 border-t border-gray-200 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsAddModalOpen(false)}
+                  className="px-4 py-2 border border-gray-300 rounded-xl text-xs font-semibold text-gray-700 hover:bg-gray-100 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-md transition-all flex items-center gap-1.5"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Save & Create ID Card
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

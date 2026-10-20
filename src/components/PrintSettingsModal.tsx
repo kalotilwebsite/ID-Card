@@ -12,6 +12,8 @@ interface PrintSettingsModalProps {
 
 export const DEFAULT_PRINT_SETTINGS: PrintSettings = {
   paperSize: 'a4',
+  customWidthMm: 210,
+  customHeightMm: 297,
   orientation: 'portrait',
   cardWidthMm: 54, // Standard CR80 badge width
   cardHeightMm: 85.6, // Standard CR80 badge height
@@ -106,19 +108,19 @@ export const PrintSettingsModal: React.FC<PrintSettingsModalProps> = ({
               1. Paper Size & Orientation
             </h3>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-3">
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">
+                <label className="block text-xs font-bold text-gray-800 mb-1">
                   Paper Format:
                 </label>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-3 gap-2">
                   <button
                     type="button"
                     onClick={() => update({ paperSize: 'a4' })}
-                    className={`py-2 px-3 rounded-xl text-xs font-bold border text-center transition-all ${
+                    className={`py-2 px-2.5 rounded-xl text-xs font-bold border text-center transition-all ${
                       settings.paperSize === 'a4'
-                        ? 'border-rose-600 bg-rose-50 text-rose-700'
-                        : 'border-gray-200 hover:border-gray-300 text-gray-700'
+                        ? 'border-rose-600 bg-rose-50 text-rose-700 ring-1 ring-rose-500 shadow-sm'
+                        : 'border-gray-200 hover:border-gray-300 text-gray-700 bg-white'
                     }`}
                   >
                     A4 (210 × 297 mm)
@@ -126,19 +128,105 @@ export const PrintSettingsModal: React.FC<PrintSettingsModalProps> = ({
                   <button
                     type="button"
                     onClick={() => update({ paperSize: 'letter' })}
-                    className={`py-2 px-3 rounded-xl text-xs font-bold border text-center transition-all ${
+                    className={`py-2 px-2.5 rounded-xl text-xs font-bold border text-center transition-all ${
                       settings.paperSize === 'letter'
-                        ? 'border-rose-600 bg-rose-50 text-rose-700'
-                        : 'border-gray-200 hover:border-gray-300 text-gray-700'
+                        ? 'border-rose-600 bg-rose-50 text-rose-700 ring-1 ring-rose-500 shadow-sm'
+                        : 'border-gray-200 hover:border-gray-300 text-gray-700 bg-white'
                     }`}
                   >
                     US Letter (8.5 × 11 in)
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => update({ paperSize: 'custom' })}
+                    className={`py-2 px-2.5 rounded-xl text-xs font-bold border text-center transition-all ${
+                      settings.paperSize === 'custom'
+                        ? 'border-rose-600 bg-rose-50 text-rose-700 ring-1 ring-rose-500 shadow-sm'
+                        : 'border-gray-200 hover:border-gray-300 text-gray-700 bg-white'
+                    }`}
+                  >
+                    Custom Size
+                  </button>
                 </div>
               </div>
 
+              {/* Custom Paper Size Inputs */}
+              {settings.paperSize === 'custom' && (
+                <div className="p-3.5 bg-rose-50/50 rounded-xl border border-rose-200 space-y-2.5 animate-in fade-in duration-150">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-rose-950">
+                      User-Defined Sheet Dimensions (mm)
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <span className="text-[10px] text-gray-500 font-semibold">Presets:</span>
+                      <button
+                        type="button"
+                        onClick={() => update({ customWidthMm: 297, customHeightMm: 420 })}
+                        className="text-[10px] px-2 py-0.5 rounded-md bg-white border border-rose-200 text-rose-700 font-bold hover:bg-rose-100 transition-colors"
+                      >
+                        A3
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => update({ customWidthMm: 215.9, customHeightMm: 355.6 })}
+                        className="text-[10px] px-2 py-0.5 rounded-md bg-white border border-rose-200 text-rose-700 font-bold hover:bg-rose-100 transition-colors"
+                      >
+                        Legal
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => update({ customWidthMm: 148, customHeightMm: 210 })}
+                        className="text-[10px] px-2 py-0.5 rounded-md bg-white border border-rose-200 text-rose-700 font-bold hover:bg-rose-100 transition-colors"
+                      >
+                        A5
+                      </button>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-bold text-gray-700 mb-1">
+                        Sheet Width (mm):
+                      </label>
+                      <input
+                        type="number"
+                        min="20"
+                        max="2000"
+                        step="1"
+                        value={settings.customWidthMm || 210}
+                        onChange={(e) =>
+                          update({
+                            customWidthMm: Math.max(20, Number(e.target.value) || 210),
+                          })
+                        }
+                        style={{ color: '#0f172a', backgroundColor: '#ffffff', colorScheme: 'light' }}
+                        className="w-full bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-slate-900 focus:ring-2 focus:ring-rose-500 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-gray-700 mb-1">
+                        Sheet Height (mm):
+                      </label>
+                      <input
+                        type="number"
+                        min="20"
+                        max="2000"
+                        step="1"
+                        value={settings.customHeightMm || 297}
+                        onChange={(e) =>
+                          update({
+                            customHeightMm: Math.max(20, Number(e.target.value) || 297),
+                          })
+                        }
+                        style={{ color: '#0f172a', backgroundColor: '#ffffff', colorScheme: 'light' }}
+                        className="w-full bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-slate-900 focus:ring-2 focus:ring-rose-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">
+                <label className="block text-xs font-bold text-gray-800 mb-1">
                   Sheet Orientation:
                 </label>
                 <div className="grid grid-cols-2 gap-2">
@@ -147,8 +235,8 @@ export const PrintSettingsModal: React.FC<PrintSettingsModalProps> = ({
                     onClick={() => update({ orientation: 'portrait' })}
                     className={`py-2 px-3 rounded-xl text-xs font-bold border text-center transition-all ${
                       settings.orientation === 'portrait'
-                        ? 'border-rose-600 bg-rose-50 text-rose-700'
-                        : 'border-gray-200 hover:border-gray-300 text-gray-700'
+                        ? 'border-rose-600 bg-rose-50 text-rose-700 ring-1 ring-rose-500 shadow-sm'
+                        : 'border-gray-200 hover:border-gray-300 text-gray-700 bg-white'
                     }`}
                   >
                     Portrait (Vertical)
@@ -158,8 +246,8 @@ export const PrintSettingsModal: React.FC<PrintSettingsModalProps> = ({
                     onClick={() => update({ orientation: 'landscape' })}
                     className={`py-2 px-3 rounded-xl text-xs font-bold border text-center transition-all ${
                       settings.orientation === 'landscape'
-                        ? 'border-rose-600 bg-rose-50 text-rose-700'
-                        : 'border-gray-200 hover:border-gray-300 text-gray-700'
+                        ? 'border-rose-600 bg-rose-50 text-rose-700 ring-1 ring-rose-500 shadow-sm'
+                        : 'border-gray-200 hover:border-gray-300 text-gray-700 bg-white'
                     }`}
                   >
                     Landscape (Horizontal)
@@ -263,13 +351,14 @@ export const PrintSettingsModal: React.FC<PrintSettingsModalProps> = ({
 
           {/* Section 3: Dimensions & Grid */}
           <div className="space-y-3 pt-3 border-t border-gray-100">
-            <h3 className="text-xs font-bold text-gray-900 uppercase tracking-wider">
-              3. Physical Card Dimensions & Grid (mm)
+            <h3 className="text-xs font-bold text-gray-900 uppercase tracking-wider flex items-center justify-between">
+              <span>3. Physical Card Dimensions & Grid (mm)</span>
+              <span className="text-[10px] text-gray-400 font-normal">Standard CR80: 54 × 85.6 mm</span>
             </h3>
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <div>
-                <label className="block text-[11px] text-gray-600 font-medium mb-1">
+                <label className="block text-[11px] text-gray-700 font-bold mb-1">
                   Card Width (mm):
                 </label>
                 <input
@@ -277,13 +366,13 @@ export const PrintSettingsModal: React.FC<PrintSettingsModalProps> = ({
                   step="0.5"
                   value={settings.cardWidthMm}
                   onChange={(e) => update({ cardWidthMm: Number(e.target.value) || 54 })}
-                  className="w-full bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-gray-800"
+                  style={{ color: '#0f172a', backgroundColor: '#ffffff', colorScheme: 'light' }}
+                  className="w-full bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-slate-900 focus:ring-2 focus:ring-rose-500"
                 />
-                <span className="text-[10px] text-gray-400">CR80: 54mm</span>
               </div>
 
               <div>
-                <label className="block text-[11px] text-gray-600 font-medium mb-1">
+                <label className="block text-[11px] text-gray-700 font-bold mb-1">
                   Card Height (mm):
                 </label>
                 <input
@@ -291,13 +380,13 @@ export const PrintSettingsModal: React.FC<PrintSettingsModalProps> = ({
                   step="0.5"
                   value={settings.cardHeightMm}
                   onChange={(e) => update({ cardHeightMm: Number(e.target.value) || 85.6 })}
-                  className="w-full bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-gray-800"
+                  style={{ color: '#0f172a', backgroundColor: '#ffffff', colorScheme: 'light' }}
+                  className="w-full bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-slate-900 focus:ring-2 focus:ring-rose-500"
                 />
-                <span className="text-[10px] text-gray-400">CR80: 85.6mm</span>
               </div>
 
               <div>
-                <label className="block text-[11px] text-gray-600 font-medium mb-1">
+                <label className="block text-[11px] text-gray-700 font-bold mb-1">
                   Cols Per Page:
                 </label>
                 <input
@@ -308,12 +397,13 @@ export const PrintSettingsModal: React.FC<PrintSettingsModalProps> = ({
                   onChange={(e) =>
                     update({ columnsPerPage: Math.max(1, Number(e.target.value) || 1) })
                   }
-                  className="w-full bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-gray-800"
+                  style={{ color: '#0f172a', backgroundColor: '#ffffff', colorScheme: 'light' }}
+                  className="w-full bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-slate-900 focus:ring-2 focus:ring-rose-500"
                 />
               </div>
 
               <div>
-                <label className="block text-[11px] text-gray-600 font-medium mb-1">
+                <label className="block text-[11px] text-gray-700 font-bold mb-1">
                   Rows Per Page:
                 </label>
                 <input
@@ -324,7 +414,8 @@ export const PrintSettingsModal: React.FC<PrintSettingsModalProps> = ({
                   onChange={(e) =>
                     update({ rowsPerPage: Math.max(1, Number(e.target.value) || 1) })
                   }
-                  className="w-full bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-gray-800"
+                  style={{ color: '#0f172a', backgroundColor: '#ffffff', colorScheme: 'light' }}
+                  className="w-full bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-slate-900 focus:ring-2 focus:ring-rose-500"
                 />
               </div>
             </div>
@@ -332,7 +423,7 @@ export const PrintSettingsModal: React.FC<PrintSettingsModalProps> = ({
             {/* Margins and Spacing */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
               <div>
-                <label className="block text-[11px] text-gray-600 font-medium mb-1">
+                <label className="block text-[11px] text-gray-700 font-bold mb-1">
                   Page Margin X (mm):
                 </label>
                 <input
@@ -344,12 +435,13 @@ export const PrintSettingsModal: React.FC<PrintSettingsModalProps> = ({
                     updateMargin('left', val);
                     updateMargin('right', val);
                   }}
-                  className="w-full bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs"
+                  style={{ color: '#0f172a', backgroundColor: '#ffffff', colorScheme: 'light' }}
+                  className="w-full bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-slate-900 focus:ring-2 focus:ring-rose-500"
                 />
               </div>
 
               <div>
-                <label className="block text-[11px] text-gray-600 font-medium mb-1">
+                <label className="block text-[11px] text-gray-700 font-bold mb-1">
                   Page Margin Y (mm):
                 </label>
                 <input
@@ -361,12 +453,13 @@ export const PrintSettingsModal: React.FC<PrintSettingsModalProps> = ({
                     updateMargin('top', val);
                     updateMargin('bottom', val);
                   }}
-                  className="w-full bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs"
+                  style={{ color: '#0f172a', backgroundColor: '#ffffff', colorScheme: 'light' }}
+                  className="w-full bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-slate-900 focus:ring-2 focus:ring-rose-500"
                 />
               </div>
 
               <div>
-                <label className="block text-[11px] text-gray-600 font-medium mb-1">
+                <label className="block text-[11px] text-gray-700 font-bold mb-1">
                   Card Spacing X (mm):
                 </label>
                 <input
@@ -374,12 +467,13 @@ export const PrintSettingsModal: React.FC<PrintSettingsModalProps> = ({
                   min="0"
                   value={settings.spacingMm.horizontal}
                   onChange={(e) => updateSpacing('horizontal', Number(e.target.value) || 0)}
-                  className="w-full bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs"
+                  style={{ color: '#0f172a', backgroundColor: '#ffffff', colorScheme: 'light' }}
+                  className="w-full bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-slate-900 focus:ring-2 focus:ring-rose-500"
                 />
               </div>
 
               <div>
-                <label className="block text-[11px] text-gray-600 font-medium mb-1">
+                <label className="block text-[11px] text-gray-700 font-bold mb-1">
                   Card Spacing Y (mm):
                 </label>
                 <input
@@ -387,14 +481,15 @@ export const PrintSettingsModal: React.FC<PrintSettingsModalProps> = ({
                   min="0"
                   value={settings.spacingMm.vertical}
                   onChange={(e) => updateSpacing('vertical', Number(e.target.value) || 0)}
-                  className="w-full bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs"
+                  style={{ color: '#0f172a', backgroundColor: '#ffffff', colorScheme: 'light' }}
+                  className="w-full bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-slate-900 focus:ring-2 focus:ring-rose-500"
                 />
               </div>
             </div>
 
             {/* Cut marks checkbox */}
             <div className="pt-2 flex items-center justify-between">
-              <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-gray-800">
+              <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-gray-800">
                 <input
                   type="checkbox"
                   checked={settings.showCutMarks}
@@ -407,28 +502,138 @@ export const PrintSettingsModal: React.FC<PrintSettingsModalProps> = ({
               <button
                 type="button"
                 onClick={() => onChangeSettings(DEFAULT_PRINT_SETTINGS)}
-                className="text-[11px] text-rose-600 hover:underline font-semibold"
+                className="text-[11px] text-rose-600 hover:underline font-bold"
               >
                 Reset to Standard Defaults
               </button>
             </div>
           </div>
 
+          {/* Section 4: Live Sheet Layout Visualizer */}
+          {(() => {
+            const paperDimensions =
+              settings.paperSize === 'custom'
+                ? {
+                    width: Math.max(20, Number(settings.customWidthMm) || 210),
+                    height: Math.max(20, Number(settings.customHeightMm) || 297),
+                  }
+                : settings.paperSize === 'letter'
+                ? { width: 215.9, height: 279.4 }
+                : { width: 210, height: 297 };
+
+            const isLandscape = settings.orientation === 'landscape';
+            const sheetW = isLandscape
+              ? Math.max(paperDimensions.width, paperDimensions.height)
+              : Math.min(paperDimensions.width, paperDimensions.height);
+            const sheetH = isLandscape
+              ? Math.min(paperDimensions.width, paperDimensions.height)
+              : Math.max(paperDimensions.width, paperDimensions.height);
+
+            const gridW =
+              settings.columnsPerPage * settings.cardWidthMm +
+              (settings.columnsPerPage - 1) * settings.spacingMm.horizontal;
+            const gridH =
+              settings.rowsPerPage * settings.cardHeightMm +
+              (settings.rowsPerPage - 1) * settings.spacingMm.vertical;
+
+            const printableW = sheetW - settings.marginsMm.left - settings.marginsMm.right;
+            const printableH = sheetH - settings.marginsMm.top - settings.marginsMm.bottom;
+
+            const fits = gridW <= printableW + 0.5 && gridH <= printableH + 0.5;
+
+            return (
+              <div className="space-y-3 pt-3 border-t border-gray-100">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-bold text-gray-900 uppercase tracking-wider">
+                    4. Sheet Layout Arrangement Preview
+                  </h3>
+                  <span
+                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                      fits
+                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                        : 'bg-amber-100 text-amber-800 border border-amber-300'
+                    }`}
+                  >
+                    {fits ? '✓ Fits Sheet Perfectly' : '⚠ Caution: Adjust Spacing/Margins'}
+                  </span>
+                </div>
+
+                <div className="bg-slate-100 rounded-xl p-4 flex flex-col items-center justify-center border border-slate-200">
+                  {/* Miniature Sheet Representation */}
+                  <div
+                    style={{
+                      width: isLandscape ? 260 : 180,
+                      height: isLandscape ? 180 : 250,
+                      backgroundColor: '#FFFFFF',
+                    }}
+                    className="relative rounded-lg shadow-md border-2 border-slate-300 flex flex-col justify-center items-center overflow-hidden p-2"
+                  >
+                    {/* Inner Margin Guide Box */}
+                    <div className="w-full h-full border border-dashed border-rose-300 rounded p-1 flex flex-col justify-center items-center">
+                      {/* Grid of Cards */}
+                      <div
+                        className="grid gap-1 w-full h-full"
+                        style={{
+                          gridTemplateColumns: `repeat(${settings.columnsPerPage}, minmax(0, 1fr))`,
+                          gridTemplateRows: `repeat(${settings.rowsPerPage}, minmax(0, 1fr))`,
+                        }}
+                      >
+                        {Array.from({ length: cardsPerPage }).map((_, idx) => (
+                          <div
+                            key={idx}
+                            className="bg-rose-50 border border-rose-400 rounded-sm flex flex-col items-center justify-center text-[8px] font-bold text-rose-800 shadow-xs"
+                          >
+                            <span className="leading-none">#{idx + 1}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 text-[11px] text-gray-600 text-center space-y-0.5">
+                    <div>
+                      <span className="font-bold text-gray-900">Sheet:</span> {sheetW.toFixed(1)} ×{' '}
+                      {sheetH.toFixed(1)} mm ({settings.paperSize.toUpperCase()},{' '}
+                      {settings.orientation})
+                    </div>
+                    <div>
+                      <span className="font-bold text-gray-900">Card Grid:</span>{' '}
+                      {settings.columnsPerPage} cols × {settings.rowsPerPage} rows ={' '}
+                      <span className="font-bold text-rose-700">{cardsPerPage} cards per sheet</span>{' '}
+                      ({gridW.toFixed(1)} × {gridH.toFixed(1)} mm)
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
           {/* Summary Banner */}
-          <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-700 flex items-center justify-between">
+          <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-800 flex items-center justify-between">
             <div>
-              <span className="font-bold">Estimated Output:</span> {totalCardsCount} cards on{' '}
+              <span className="font-bold text-gray-900">Estimated Output:</span> {totalCardsCount} cards on{' '}
               <span className="font-bold text-rose-600">{estimatedPages} pages</span> (
               {cardsPerPage} cards per page)
             </div>
-            <span className="text-[11px] text-gray-500">
-              {settings.paperSize.toUpperCase()} · {settings.orientation}
+            <span className="text-[11px] font-bold text-gray-600 uppercase bg-gray-200/80 px-2 py-0.5 rounded">
+              {settings.paperSize} · {settings.orientation}
             </span>
           </div>
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-gray-200 bg-gray-50 flex items-center justify-end gap-2 flex-shrink-0">
+        <div className="p-4 border-t border-gray-200 bg-gray-50 flex items-center justify-between flex-shrink-0">
+          <button
+            type="button"
+            onClick={() => {
+              window.print();
+            }}
+            className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold shadow transition-colors flex items-center gap-1.5"
+          >
+            <Printer className="w-3.5 h-3.5" />
+            <span>Print Current View</span>
+          </button>
+
           <button
             onClick={onClose}
             className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow transition-colors"

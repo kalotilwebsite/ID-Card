@@ -18,6 +18,7 @@ import {
   getSpreadsheetTabs,
   fetchSheetValues,
   fetchPublicSheetCsv,
+  extractSpreadsheetId,
 } from '../services/googleSheetsService';
 import { parseExcelFile, ParsedExcelResult } from '../services/excelService';
 import { GoogleDriveFile } from '../types';
@@ -102,14 +103,15 @@ export const DataImportModal: React.FC<DataImportModalProps> = ({
   };
 
   const handleSelectSpreadsheet = async (sheetId: string, token?: string) => {
-    setSelectedSpreadsheetId(sheetId);
+    const cleanId = extractSpreadsheetId(sheetId);
+    setSelectedSpreadsheetId(cleanId);
     const tok = token || accessToken;
-    if (!tok || !sheetId) return;
+    if (!tok || !cleanId) return;
 
     setIsLoadingTabs(true);
     setGoogleError(null);
     try {
-      const tabs = await getSpreadsheetTabs(sheetId, tok);
+      const tabs = await getSpreadsheetTabs(cleanId, tok);
       setSheetTabs(tabs);
       if (tabs.length > 0) {
         setSelectedTab(tabs[0]);
@@ -145,9 +147,16 @@ export const DataImportModal: React.FC<DataImportModalProps> = ({
     setSpreadsheets([]);
   };
 
-  const handleImportGoogleSheet = async () => {
-    if (!selectedSpreadsheetId) {
+  const handleImportGoogleSheet = async (overrideTarget?: string) => {
+    const rawTarget = (overrideTarget || selectedSpreadsheetId || manualSheetUrl || '').trim();
+    if (!rawTarget) {
       setGoogleError('Please choose or paste a spreadsheet ID / URL.');
+      return;
+    }
+
+    const cleanSpreadsheetId = extractSpreadsheetId(rawTarget);
+    if (!cleanSpreadsheetId) {
+      setGoogleError('Could not determine spreadsheet ID from the provided link or ID.');
       return;
     }
 
@@ -156,7 +165,7 @@ export const DataImportModal: React.FC<DataImportModalProps> = ({
     try {
       if (accessToken) {
         const data = await fetchSheetValues(
-          selectedSpreadsheetId,
+          cleanSpreadsheetId,
           selectedTab || 'Sheet1',
           accessToken
         );
@@ -171,7 +180,7 @@ export const DataImportModal: React.FC<DataImportModalProps> = ({
         onClose();
       } else {
         // Fallback to public CSV
-        const data = await fetchPublicSheetCsv(selectedSpreadsheetId);
+        const data = await fetchPublicSheetCsv(cleanSpreadsheetId);
         onDataLoaded({
           headers: data.headers,
           rows: data.rows,
@@ -553,11 +562,8 @@ export const DataImportModal: React.FC<DataImportModalProps> = ({
                       className="flex-1 bg-white border border-gray-300 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                     />
                     <button
-                      onClick={() => {
-                        setSelectedSpreadsheetId(manualSheetUrl);
-                        handleImportGoogleSheet();
-                      }}
-                      disabled={!manualSheetUrl || isLoadingRows}
+                      onClick={() => handleImportGoogleSheet(manualSheetUrl)}
+                      disabled={!manualSheetUrl.trim() || isLoadingRows}
                       className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors disabled:opacity-50"
                     >
                       {isLoadingRows ? 'Loading...' : 'Import'}
@@ -661,7 +667,7 @@ export const DataImportModal: React.FC<DataImportModalProps> = ({
 
                   <div className="flex justify-end pt-2">
                     <button
-                      onClick={handleImportGoogleSheet}
+                      onClick={() => handleImportGoogleSheet()}
                       disabled={!selectedSpreadsheetId || isLoadingRows || isLoadingTabs}
                       className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow transition-colors flex items-center gap-1.5 disabled:opacity-50"
                     >

@@ -1,5 +1,5 @@
 import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
+import html2canvas from 'html2canvas-pro';
 import { EmployeeCardData, PrintSettings, CompanyTemplateConfig } from '../types';
 
 export interface ExportProgressCallback {
@@ -19,10 +19,13 @@ export const exportCardsToPdf = async (
   onProgress?: ExportProgressCallback
 ): Promise<Blob> => {
   const isLandscape = settings.orientation === 'landscape';
-  const paper = PAPER_DIMENSIONS_MM[settings.paperSize] || {
-    width: settings.customWidthMm || 210,
-    height: settings.customHeightMm || 297,
-  };
+  const paper =
+    settings.paperSize === 'custom'
+      ? {
+          width: Math.max(20, Number(settings.customWidthMm) || 210),
+          height: Math.max(20, Number(settings.customHeightMm) || 297),
+        }
+      : PAPER_DIMENSIONS_MM[settings.paperSize] || { width: 210, height: 297 };
 
   const pageWidthMm = isLandscape ? paper.height : paper.width;
   const pageHeightMm = isLandscape ? paper.width : paper.height;

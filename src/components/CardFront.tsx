@@ -111,29 +111,55 @@ export const CardFront: React.FC<CardFrontProps> = ({
         }}
         className="flex-shrink-0 px-4 pt-1.5"
       >
-        {/* 1. Employee Name (Increased by exactly one size step to 15.5px) */}
-        <div
-          style={{
-            position: 'absolute',
-            left: calibration.name.x,
-            top: calibration.name.y - HEADER_HEIGHT,
-            width: calibration.name.whiteoutWidth || 250,
-          }}
-        >
-          <span
-            style={{
-              fontSize: `${calibration.name.fontSize && calibration.name.fontSize > 14.5 ? calibration.name.fontSize : 15.5}px`,
-              fontWeight: calibration.name.fontWeight,
-              color: calibration.name.color,
-              textAlign: calibration.name.textAlign,
-              letterSpacing: calibration.name.letterSpacing || '0.2px',
-              fontFamily: "'Arial Black', Impact, Arial, sans-serif",
-            }}
-            className="uppercase leading-tight truncate block max-w-full"
-          >
-            {employee.name || 'JONAID AL AKANDH AKANDH'}
-          </span>
-        </div>
+        {/* 1. Employee Name (Taller-looking font style, auto-fit single line, never truncated) */}
+        {(() => {
+          const rawName = (employee.name || 'JONAID AL AKANDH AKANDH').trim().replace(/\s+/g, ' ');
+          const len = rawName.length;
+
+          // Automatically adjust font size to guarantee fitting full name on a single line without truncation
+          let fontSize = 15.5;
+          if (len > 36) {
+            fontSize = Math.max(8.5, Math.min(10.2, 246 / (len * 0.58)));
+          } else if (len > 28) {
+            fontSize = Math.max(10.2, Math.min(11.8, 246 / (len * 0.60)));
+          } else if (len > 22) {
+            fontSize = Math.max(12.0, Math.min(13.6, 246 / (len * 0.62)));
+          } else if (len > 16) {
+            fontSize = 14.2;
+          }
+
+          return (
+            <div
+              style={{
+                position: 'absolute',
+                left: calibration.name.x,
+                top: calibration.name.y - HEADER_HEIGHT,
+                width: 250,
+                maxWidth: 250,
+                overflow: 'visible',
+              }}
+            >
+              <span
+                style={{
+                  fontSize: `${fontSize}px`,
+                  fontWeight: '900',
+                  color: calibration.name.color || '#000000',
+                  textAlign: calibration.name.textAlign || 'left',
+                  letterSpacing: '0.1px',
+                  fontFamily: "'Arial Narrow', 'Arial Black', Impact, Arial, sans-serif",
+                  display: 'inline-block',
+                  transform: 'scaleY(1.18)',
+                  transformOrigin: 'left',
+                  whiteSpace: 'nowrap',
+                  lineHeight: 1.1,
+                }}
+                className="uppercase block"
+              >
+                {rawName}
+              </span>
+            </div>
+          );
+        })()}
 
         {/* 2. Designation (Subtly taller, more elongated, slightly increased font size) */}
         <div
@@ -392,27 +418,29 @@ export const CardFront: React.FC<CardFrontProps> = ({
           />
         </div>
 
-        {/* 3. EMPLOYEE PHOTO (Dynamic photo field with exact dimensions & position) */}
+        {/* 3. EMPLOYEE PHOTO (Consistent, fixed photo frame with defined size and position) */}
         <div
           style={{
             position: 'absolute',
-            left: calibration.photo.x,
-            top: calibration.photo.y - LOWER_START_Y,
-            width: calibration.photo.width || 94,
-            height: calibration.photo.height || 104,
+            left: calibration.photo.x ?? 170,
+            top: (calibration.photo.y ? calibration.photo.y - LOWER_START_Y : 2),
+            width: 94,
+            height: 104,
             backgroundColor: '#FFFFFF',
+            boxSizing: 'border-box',
           }}
-          className="overflow-hidden flex items-center justify-center rounded-sm"
+          className="overflow-hidden flex items-center justify-center rounded-[2px] border border-gray-300 shadow-sm"
         >
           {employee.photoUrl ? (
             <img
               src={employee.photoUrl}
               alt={employee.name}
-              className="w-full h-full object-cover object-top"
+              className="w-full h-full object-cover object-top select-none pointer-events-none"
+              style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'top' }}
               referrerPolicy="no-referrer"
             />
           ) : (
-            <div className="w-full h-full bg-gray-100 flex flex-col items-center justify-center text-gray-400 border border-gray-200">
+            <div className="w-full h-full bg-gray-100 flex flex-col items-center justify-center text-gray-400">
               <svg className="w-7 h-7" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
               </svg>

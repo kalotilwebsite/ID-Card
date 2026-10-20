@@ -11,7 +11,7 @@ import {
   PageOrientation,
   BorderStyle,
 } from 'docx';
-import html2canvas from 'html2canvas';
+import html2canvas from 'html2canvas-pro';
 import { EmployeeCardData, PrintSettings } from '../types';
 
 export interface DocxProgressCallback {
@@ -152,12 +152,27 @@ export const exportCardsToDocx = async (
     alignment: AlignmentType.CENTER,
   });
 
+  const paperW =
+    settings.paperSize === 'custom'
+      ? Math.max(20, Number(settings.customWidthMm) || 210)
+      : settings.paperSize === 'letter'
+      ? 215.9
+      : 210;
+  const paperH =
+    settings.paperSize === 'custom'
+      ? Math.max(20, Number(settings.customHeightMm) || 297)
+      : settings.paperSize === 'letter'
+      ? 279.4
+      : 297;
+
   const doc = new Document({
     sections: [
       {
         properties: {
           page: {
             size: {
+              width: (isLandscape ? paperH : paperW) * 56.7,
+              height: (isLandscape ? paperW : paperH) * 56.7,
               orientation: isLandscape ? PageOrientation.LANDSCAPE : PageOrientation.PORTRAIT,
             },
             margin: {

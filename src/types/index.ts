@@ -26,6 +26,7 @@ export type CardFieldKey =
   | 'enrollId'
   | 'cardIssue'
   | 'photoUrl'
+  | 'permanentAddress'
   | 'emergencyContact'
   | 'nationalId'
   | 'bloodGroup'
@@ -110,7 +111,7 @@ export const DEFAULT_CALIBRATION: CardCalibrationSettings = {
     },
     jobType: {
       x: 18,
-      y: 258,
+      y: 224,
       fontSize: 12,
       fontWeight: 'semibold',
       color: '#000000',
@@ -120,7 +121,7 @@ export const DEFAULT_CALIBRATION: CardCalibrationSettings = {
     },
     joiningDate: {
       x: 152,
-      y: 258,
+      y: 224,
       fontSize: 12,
       fontWeight: 'semibold',
       color: '#000000',
@@ -130,7 +131,7 @@ export const DEFAULT_CALIBRATION: CardCalibrationSettings = {
     },
     enrollId: {
       x: 18,
-      y: 310,
+      y: 272,
       fontSize: 12,
       fontWeight: 'semibold',
       color: '#000000',
@@ -140,7 +141,7 @@ export const DEFAULT_CALIBRATION: CardCalibrationSettings = {
     },
     cardIssue: {
       x: 152,
-      y: 310,
+      y: 272,
       fontSize: 12,
       fontWeight: 'semibold',
       color: '#000000',

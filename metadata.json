@@ -1,0 +1,6 @@
+{
+  "name": "Bulk Employee ID Card Generator",
+  "description": "Generate professional front and back employee ID cards in bulk from Excel and Google Sheets with live preview, column mapping, and print-ready PDF/Word export.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

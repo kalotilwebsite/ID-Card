@@ -147,6 +147,7 @@ export const apiService = {
     email?: string;
     employeeId?: string;
     role: UserRole;
+    allowedTabs?: string[];
   }): Promise<AuthUser> {
     return request<AuthUser>('/api/users', {
       method: 'POST',
@@ -163,6 +164,7 @@ export const apiService = {
       role?: UserRole;
       status?: 'active' | 'inactive';
       password?: string;
+      allowedTabs?: string[];
     }
   ): Promise<AuthUser> {
     return request<AuthUser>(`/api/users/${id}`, {
@@ -177,7 +179,7 @@ export const apiService = {
     });
   },
 
-  // Master Employees (Admin)
+  // Master Employees
   async getMasterEmployees(): Promise<MasterEmployee[]> {
     return request<MasterEmployee[]>('/api/master-employees');
   },
@@ -190,6 +192,19 @@ export const apiService = {
       {
         method: 'POST',
         body: JSON.stringify({ employees }),
+      }
+    );
+  },
+
+  async updateMasterEmployee(
+    enrollId: string,
+    data: { emergencyContact?: string; bloodGroup?: string }
+  ): Promise<{ success: boolean; message: string; employee: MasterEmployee }> {
+    return request<{ success: boolean; message: string; employee: MasterEmployee }>(
+      `/api/master-employees/${encodeURIComponent(enrollId)}`,
+      {
+        method: 'PUT',
+        body: JSON.stringify(data),
       }
     );
   },

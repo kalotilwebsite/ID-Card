@@ -172,7 +172,10 @@ export default function App() {
           if (user.role === 'supervisor') {
             setActiveNavTab('supervisor_submission');
           } else if (user.role === 'data_entry') {
-            setActiveNavTab('data_entry_form');
+            const allowed = Array.isArray(user.allowedTabs) && user.allowedTabs.length > 0
+              ? (user.allowedTabs as MainNavTab[])
+              : ['data_entry_form'];
+            setActiveNavTab((allowed[0] || 'data_entry_form') as MainNavTab);
           }
           setIsAuthLoading(false);
           return;
@@ -214,14 +217,36 @@ export default function App() {
       });
   }, []);
 
+  // Helper to verify if current authenticated user has access to a specific tab
+  const canAccessTab = (tabId: MainNavTab): boolean => {
+    if (!currentUser) return false;
+    if (currentUser.role === 'admin') return true;
+    if (currentUser.role === 'supervisor') return tabId === 'supervisor_submission';
+    if (currentUser.role === 'data_entry') {
+      const allowed = Array.isArray(currentUser.allowedTabs) && currentUser.allowedTabs.length > 0
+        ? (currentUser.allowedTabs as MainNavTab[])
+        : ['data_entry_form'];
+      return allowed.includes(tabId);
+    }
+    return false;
+  };
+
   // Enforce role-based tab restrictions:
-  // Data Entry users can ONLY access data_entry_form
-  // Supervisors can ONLY access supervisor_submission
+  // Data Entry users can access only their explicitly allowed tabs
+  // Supervisors can strictly access only supervisor_submission
   useEffect(() => {
-    if (currentUser?.role === 'data_entry' && activeNavTab !== 'data_entry_form') {
-      setActiveNavTab('data_entry_form');
-    } else if (currentUser?.role === 'supervisor' && activeNavTab !== 'supervisor_submission') {
-      setActiveNavTab('supervisor_submission');
+    if (!currentUser) return;
+    if (currentUser.role === 'supervisor') {
+      if (activeNavTab !== 'supervisor_submission') {
+        setActiveNavTab('supervisor_submission');
+      }
+    } else if (currentUser.role === 'data_entry') {
+      const allowed = Array.isArray(currentUser.allowedTabs) && currentUser.allowedTabs.length > 0
+        ? (currentUser.allowedTabs as MainNavTab[])
+        : ['data_entry_form'];
+      if (!allowed.includes(activeNavTab)) {
+        setActiveNavTab((allowed[0] || 'data_entry_form') as MainNavTab);
+      }
     }
   }, [currentUser, activeNavTab]);
 
@@ -602,108 +627,114 @@ export default function App() {
             </button>
           )}
 
-          {/* ADMIN ONLY MENUS */}
-          {isAdmin && (
+          {/* ADMIN & DATA ENTRY NAVIGATION TABS (ENFORCED BY ROLE & TAB PERMISSIONS) */}
+          {!isSupervisor && (
             <>
-              {/* 1. Admin: Print Queue */}
-              <button
-                onClick={() => setActiveNavTab('submissions')}
-                className={`flex items-center gap-2 px-3.5 py-2.5 text-xs font-bold border-b-2 transition-all whitespace-nowrap ${
-                  activeNavTab === 'submissions'
-                    ? 'border-rose-600 text-rose-700 bg-rose-50/60'
-                    : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-                }`}
-              >
-                <TableIcon className="w-4 h-4 text-rose-600" />
-                <span>Print Queue</span>
-              </button>
+              {/* 1. Print Queue */}
+              {canAccessTab('submissions') && (
+                <button
+                  onClick={() => setActiveNavTab('submissions')}
+                  className={`flex items-center gap-2 px-3.5 py-2.5 text-xs font-bold border-b-2 transition-all whitespace-nowrap ${
+                    activeNavTab === 'submissions'
+                      ? 'border-rose-600 text-rose-700 bg-rose-50/60'
+                      : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                  }`}
+                >
+                  <TableIcon className="w-4 h-4 text-rose-600" />
+                  <span>Print Queue</span>
+                </button>
+              )}
 
-              {/* 2. Admin: Supervisor Entry */}
-              <button
-                onClick={() => setActiveNavTab('supervisor_submission')}
-                className={`flex items-center gap-2 px-3.5 py-2.5 text-xs font-bold border-b-2 transition-all whitespace-nowrap ${
-                  activeNavTab === 'supervisor_submission'
-                    ? 'border-purple-600 text-purple-700 bg-purple-50/60'
-                    : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-                }`}
-              >
-                <Briefcase className="w-4 h-4 text-purple-600" />
-                <span>Supervisor Entry</span>
-              </button>
+              {/* 2. Supervisor Entry */}
+              {canAccessTab('supervisor_submission') && (
+                <button
+                  onClick={() => setActiveNavTab('supervisor_submission')}
+                  className={`flex items-center gap-2 px-3.5 py-2.5 text-xs font-bold border-b-2 transition-all whitespace-nowrap ${
+                    activeNavTab === 'supervisor_submission'
+                      ? 'border-purple-600 text-purple-700 bg-purple-50/60'
+                      : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                  }`}
+                >
+                  <Briefcase className="w-4 h-4 text-purple-600" />
+                  <span>Supervisor Entry</span>
+                </button>
+              )}
 
-              {/* 3. Admin: Direct Entry */}
-              <button
-                onClick={() => setActiveNavTab('data_entry_form')}
-                className={`flex items-center gap-2 px-3.5 py-2.5 text-xs font-bold border-b-2 transition-all whitespace-nowrap ${
-                  activeNavTab === 'data_entry_form'
-                    ? 'border-rose-600 text-rose-700 bg-rose-50/60'
-                    : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-                }`}
-              >
-                <IdCard className="w-4 h-4 text-rose-600" />
-                <span>Direct Entry</span>
-              </button>
+              {/* 3. Direct Entry */}
+              {canAccessTab('data_entry_form') && (
+                <button
+                  onClick={() => setActiveNavTab('data_entry_form')}
+                  className={`flex items-center gap-2 px-3.5 py-2.5 text-xs font-bold border-b-2 transition-all whitespace-nowrap ${
+                    activeNavTab === 'data_entry_form'
+                      ? 'border-rose-600 text-rose-700 bg-rose-50/60'
+                      : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                  }`}
+                >
+                  <IdCard className="w-4 h-4 text-rose-600" />
+                  <span>Direct Entry</span>
+                </button>
+              )}
 
-              {/* 4. Admin: Employees */}
-              <button
-                onClick={() => setActiveNavTab('employee_data')}
-                className={`flex items-center gap-2 px-3.5 py-2.5 text-xs font-bold border-b-2 transition-all whitespace-nowrap ${
-                  activeNavTab === 'employee_data'
-                    ? 'border-rose-600 text-rose-700 bg-rose-50/60'
-                    : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-                }`}
-              >
-                <Database className="w-4 h-4 text-rose-600" />
-                <span>Employees</span>
-              </button>
+              {/* 4. Employees */}
+              {canAccessTab('employee_data') && (
+                <button
+                  onClick={() => setActiveNavTab('employee_data')}
+                  className={`flex items-center gap-2 px-3.5 py-2.5 text-xs font-bold border-b-2 transition-all whitespace-nowrap ${
+                    activeNavTab === 'employee_data'
+                      ? 'border-rose-600 text-rose-700 bg-rose-50/60'
+                      : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                  }`}
+                >
+                  <Database className="w-4 h-4 text-rose-600" />
+                  <span>Employees</span>
+                </button>
+              )}
 
-              {/* 5. Admin: Users */}
-              <button
-                onClick={() => setActiveNavTab('user_management')}
-                className={`flex items-center gap-2 px-3.5 py-2.5 text-xs font-bold border-b-2 transition-all whitespace-nowrap ${
-                  activeNavTab === 'user_management'
-                    ? 'border-rose-600 text-rose-700 bg-rose-50/60'
-                    : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-                }`}
-              >
-                <Users className="w-4 h-4 text-rose-600" />
-                <span>Users</span>
-              </button>
+              {/* 5. Users */}
+              {canAccessTab('user_management') && (
+                <button
+                  onClick={() => setActiveNavTab('user_management')}
+                  className={`flex items-center gap-2 px-3.5 py-2.5 text-xs font-bold border-b-2 transition-all whitespace-nowrap ${
+                    activeNavTab === 'user_management'
+                      ? 'border-rose-600 text-rose-700 bg-rose-50/60'
+                      : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                  }`}
+                >
+                  <Users className="w-4 h-4 text-rose-600" />
+                  <span>Users</span>
+                </button>
+              )}
 
-              {/* 6. Admin: Card Studio */}
-              <button
-                onClick={() => setActiveNavTab('card_studio')}
-                className={`flex items-center gap-2 px-3.5 py-2.5 text-xs font-bold border-b-2 transition-all whitespace-nowrap ${
-                  activeNavTab === 'card_studio'
-                    ? 'border-rose-600 text-rose-700 bg-rose-50/60'
-                    : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-                }`}
-              >
-                <Layers className="w-4 h-4 text-rose-600" />
-                <span>Card Studio</span>
-              </button>
+              {/* 6. Card Studio */}
+              {canAccessTab('card_studio') && (
+                <button
+                  onClick={() => setActiveNavTab('card_studio')}
+                  className={`flex items-center gap-2 px-3.5 py-2.5 text-xs font-bold border-b-2 transition-all whitespace-nowrap ${
+                    activeNavTab === 'card_studio'
+                      ? 'border-rose-600 text-rose-700 bg-rose-50/60'
+                      : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                  }`}
+                >
+                  <Layers className="w-4 h-4 text-rose-600" />
+                  <span>Card Studio</span>
+                </button>
+              )}
             </>
-          )}
-
-          {/* DATA ENTRY OPERATOR ROLE */}
-          {isDataEntry && (
-            <button
-              onClick={() => setActiveNavTab('data_entry_form')}
-              className="flex items-center gap-2 px-4 py-2.5 text-xs font-bold border-b-2 border-sky-600 text-sky-700 bg-sky-50/60 transition-all whitespace-nowrap"
-            >
-              <IdCard className="w-4 h-4 text-sky-600" />
-              <span>Direct Entry</span>
-            </button>
           )}
         </div>
 
         {/* Right Role Indicator */}
-        {isSupervisor && (
+        {isSupervisor ? (
           <div className="text-[11px] text-purple-700 font-semibold flex items-center gap-1.5 py-2">
             <Briefcase className="w-3.5 h-3.5 text-purple-600 shrink-0" />
             <span>Supervisor Portal</span>
           </div>
-        )}
+        ) : isDataEntry ? (
+          <div className="text-[11px] text-sky-700 font-semibold flex items-center gap-1.5 py-2">
+            <Lock className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+            <span>Operator Access</span>
+          </div>
+        ) : null}
       </nav>
 
       {/* Main Content Area Based on Active Section */}
@@ -715,8 +746,8 @@ export default function App() {
           </div>
         ) : (
           <>
-            {/* SECTION 1: Admin Data Entry & Printing (Submitted Records Table, Filtering & Bulk Printing) */}
-            {isAdmin && activeNavTab === 'submissions' && (
+            {/* SECTION 1: Print Queue & Submissions */}
+            {canAccessTab('submissions') && activeNavTab === 'submissions' && (
               <SubmissionsSection
                 frontTemplateUrl={frontTemplateUrl}
                 backTemplateUrl={backTemplateUrl}
@@ -724,39 +755,35 @@ export default function App() {
               />
             )}
 
-        {/* SECTION 2: Dedicated Supervisor Submission Form (Strictly No Card Preview) */}
-        {(isSupervisor || (isAdmin && activeNavTab === 'supervisor_submission')) && activeNavTab === 'supervisor_submission' && (
-          <SupervisorSubmissionForm
-            currentUser={currentUser}
-            onSubmissionSuccess={() => {
-              // optional callback
-            }}
-          />
-        )}
+            {/* SECTION 2: Dedicated Supervisor Submission Form */}
+            {canAccessTab('supervisor_submission') && activeNavTab === 'supervisor_submission' && (
+              <SupervisorSubmissionForm
+                currentUser={currentUser}
+                onSubmissionSuccess={() => {}}
+              />
+            )}
 
-        {/* SECTION 3: Dedicated Data Entry Form (Enrollment ID lookup, 3 fields, passport framing guide, duplicate protection) */}
-        {(isDataEntry || (isAdmin && activeNavTab === 'data_entry_form')) && activeNavTab === 'data_entry_form' && (
-          <DataEntryForm
-            frontTemplateUrl={frontTemplateUrl}
-            backTemplateUrl={backTemplateUrl}
-            onSubmissionSuccess={() => {
-              // optional callback
-            }}
-          />
-        )}
+            {/* SECTION 3: Dedicated Data Entry Form */}
+            {canAccessTab('data_entry_form') && activeNavTab === 'data_entry_form' && (
+              <DataEntryForm
+                frontTemplateUrl={frontTemplateUrl}
+                backTemplateUrl={backTemplateUrl}
+                onSubmissionSuccess={() => {}}
+              />
+            )}
 
-        {/* SECTION 4: Admin-Only Employee Database (Master Excel import & Enrollment ID keying) */}
-        {isAdmin && activeNavTab === 'employee_data' && (
-          <EmployeeDatabaseSection />
-        )}
+            {/* SECTION 4: Employee Database */}
+            {canAccessTab('employee_data') && activeNavTab === 'employee_data' && (
+              <EmployeeDatabaseSection />
+            )}
 
-        {/* SECTION 4: Admin-Only User Management (Create & manage authorized accounts) */}
-        {isAdmin && activeNavTab === 'user_management' && (
-          <UserManagementSection />
-        )}
+            {/* SECTION 5: User Management */}
+            {canAccessTab('user_management') && activeNavTab === 'user_management' && (
+              <UserManagementSection />
+            )}
 
-        {/* SECTION 5: Admin-Only Card Studio & Designer (Full Original Card Studio with Calibration & Export) */}
-        {isAdmin && activeNavTab === 'card_studio' && (
+            {/* SECTION 6: Card Studio & Designer */}
+            {canAccessTab('card_studio') && activeNavTab === 'card_studio' && (
           <div className="flex-1 flex flex-col">
             {/* Card Studio Subheader Toolbar */}
             <div className="bg-white border-b border-slate-200 px-4 py-2 flex flex-wrap items-center justify-between gap-2 shadow-2xs">

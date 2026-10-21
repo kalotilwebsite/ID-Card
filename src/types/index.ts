@@ -270,7 +270,58 @@ export interface AuthUser {
   role: UserRole;
   status?: 'active' | 'inactive';
   createdAt?: string;
+  allowedTabs?: string[];
 }
+
+export type AppTabId =
+  | 'submissions'
+  | 'supervisor_submission'
+  | 'data_entry_form'
+  | 'employee_data'
+  | 'user_management'
+  | 'card_studio';
+
+export interface AppTabOption {
+  id: AppTabId;
+  label: string;
+  description: string;
+  defaultForDataEntry?: boolean;
+}
+
+export const ALL_APP_TABS: AppTabOption[] = [
+  {
+    id: 'submissions',
+    label: '1. Print Queue & Submissions',
+    description: 'Print queue, status monitoring, reprint history, and printing approvals',
+  },
+  {
+    id: 'supervisor_submission',
+    label: '2. Supervisor Entry',
+    description: 'Dedicated supervisor photo, signature, and NID submission portal',
+  },
+  {
+    id: 'data_entry_form',
+    label: '3. Data Entry Form',
+    description: 'Interactive employee lookup and ID card data submission',
+    defaultForDataEntry: true,
+  },
+  {
+    id: 'employee_data',
+    label: '4. Employee Master Database',
+    description: 'Master employee records, Excel import, and restricted contact/blood editing',
+  },
+  {
+    id: 'user_management',
+    label: '5. User Management',
+    description: 'User accounts, supervisor credentials, and role permissions',
+  },
+  {
+    id: 'card_studio',
+    label: '6. Card Studio & Print Layout',
+    description: 'ID card design layout, canvas calibration, and batch export tools',
+  },
+];
+
 
 export interface MasterEmployee {
   enrollId: string;

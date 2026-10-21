@@ -13,11 +13,19 @@ import {
   User,
   Hash,
   Filter,
+  Edit2,
+  Lock,
+  X,
+  Phone,
+  Droplet,
+  ShieldAlert,
 } from 'lucide-react';
 import { apiService } from '../services/apiService';
 import { MasterEmployee, ColumnMapping } from '../types';
 import { parseExcelFile } from '../services/excelService';
 import { ColumnMappingModal } from './ColumnMappingModal';
+
+const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'];
 
 interface EmployeeDatabaseSectionProps {
   onRefreshData?: () => void;
@@ -37,6 +45,17 @@ export function EmployeeDatabaseSection({ onRefreshData }: EmployeeDatabaseSecti
   const [rawRows, setRawRows] = useState<Record<string, any>[]>([]);
   const [currentFileName, setCurrentFileName] = useState('');
   const [importWarnings, setImportWarnings] = useState<string[]>([]);
+
+  // Modals for Delete Confirmation
+  const [employeeToDelete, setEmployeeToDelete] = useState<MasterEmployee | null>(null);
+  const [isDeleteAllModalOpen, setIsDeleteAllModalOpen] = useState(false);
+
+  // Modals for Restricted Edit (Contact Number & Blood Group ONLY)
+  const [editingEmployee, setEditingEmployee] = useState<MasterEmployee | null>(null);
+  const [editContact, setEditContact] = useState('');
+  const [editBloodGroup, setEditBloodGroup] = useState('O+');
+  const [editError, setEditError] = useState<string | null>(null);
+  const [isSubmittingEdit, setIsSubmittingEdit] = useState(false);
 
   const loadMasterEmployees = async () => {
     setIsLoading(true);
@@ -134,33 +153,106 @@ export function EmployeeDatabaseSection({ onRefreshData }: EmployeeDatabaseSecti
     }
   };
 
-  const handleDeleteEmployee = async (enrollId: string) => {
-    if (!window.confirm(`Are you sure you want to remove employee "${enrollId}" from the master database?`)) {
-      return;
-    }
+  // --- INDIVIDUAL DELETE WORKFLOW ---
+  const handleOpenDelete = (emp: MasterEmployee) => {
+    setEmployeeToDelete(emp);
+  };
+
+  const handleConfirmIndividualDelete = async () => {
+    if (!employeeToDelete) return;
+    const targetId = employeeToDelete.enrollId;
+    const targetName = employeeToDelete.name;
+
+    setIsLoading(true);
+    setStatusMessage(null);
+
     try {
-      await apiService.deleteMasterEmployee(enrollId);
-      setEmployees((prev) => prev.filter((e) => e.enrollId !== enrollId));
-      setStatusMessage({ type: 'success', text: `Employee ${enrollId} removed from master database.` });
+      await apiService.deleteMasterEmployee(targetId);
+      setEmployees((prev) => prev.filter((e) => e.enrollId !== targetId));
+      setStatusMessage({
+        type: 'success',
+        text: `Employee record "${targetName}" (Enroll ID: ${targetId}) deleted successfully.`,
+      });
+      setEmployeeToDelete(null);
+      if (onRefreshData) onRefreshData();
     } catch (err: any) {
       setStatusMessage({ type: 'error', text: err.message || 'Failed to delete employee.' });
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const handleClearAll = async () => {
-    if (
-      !window.confirm(
-        'WARNING: This will delete ALL master employee records from the database. This action cannot be undone. Do you wish to proceed?'
-      )
-    ) {
-      return;
-    }
+  // --- BULK DELETE ALL WORKFLOW ---
+  const handleConfirmDeleteAll = async () => {
+    setIsLoading(true);
+    setStatusMessage(null);
+
     try {
       await apiService.clearMasterEmployees();
       setEmployees([]);
-      setStatusMessage({ type: 'success', text: 'All master employee records have been cleared.' });
+      setStatusMessage({
+        type: 'success',
+        text: 'All master employee records have been permanently cleared from database.',
+      });
+      setIsDeleteAllModalOpen(false);
+      if (onRefreshData) onRefreshData();
     } catch (err: any) {
       setStatusMessage({ type: 'error', text: err.message || 'Failed to clear master database.' });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // --- RESTRICTED EDIT WORKFLOW (Contact Number & Blood Group ONLY) ---
+  const handleOpenEdit = (emp: MasterEmployee) => {
+    setEditingEmployee(emp);
+    setEditContact(emp.emergencyContact || '');
+    setEditBloodGroup(emp.bloodGroup || 'O+');
+    setEditError(null);
+  };
+
+  const handleSaveRestrictedEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingEmployee) return;
+
+    if (!editContact.trim()) {
+      setEditError('Contact Number is required and cannot be empty.');
+      return;
+    }
+
+    if (!BLOOD_GROUPS.includes(editBloodGroup)) {
+      setEditError(`Blood Group must be one of: ${BLOOD_GROUPS.join(', ')}`);
+      return;
+    }
+
+    setIsSubmittingEdit(true);
+    setEditError(null);
+
+    try {
+      const res = await apiService.updateMasterEmployee(editingEmployee.enrollId, {
+        emergencyContact: editContact.trim(),
+        bloodGroup: editBloodGroup,
+      });
+
+      setEmployees((prev) =>
+        prev.map((emp) =>
+          emp.enrollId === editingEmployee.enrollId
+            ? { ...emp, emergencyContact: editContact.trim(), bloodGroup: editBloodGroup }
+            : emp
+        )
+      );
+
+      setStatusMessage({
+        type: 'success',
+        text: `Updated Contact Number and Blood Group for ${editingEmployee.name} (Enroll ID: ${editingEmployee.enrollId}).`,
+      });
+
+      setEditingEmployee(null);
+      if (onRefreshData) onRefreshData();
+    } catch (err: any) {
+      setEditError(err.message || 'Failed to update employee details.');
+    } finally {
+      setIsSubmittingEdit(false);
     }
   };
 
@@ -220,24 +312,26 @@ export function EmployeeDatabaseSection({ onRefreshData }: EmployeeDatabaseSecti
   };
 
   return (
-    <div className="max-w-7xl mx-auto p-4 sm:p-6 space-y-6">
+    <div className="max-w-7xl mx-auto p-4 sm:p-6 space-y-4">
       {/* Header Banner */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-rose-50 text-rose-700 border border-rose-200">
-              Admin Only
-            </span>
-            <h2 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight flex items-center gap-2">
-              <Database className="w-5 h-5 text-rose-600" />
-              <span>Master Employee Database</span>
-            </h2>
+      <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 rounded-xl bg-rose-50 text-rose-600 border border-rose-200">
+            <Database className="w-5 h-5" />
           </div>
-          <p className="text-xs text-slate-600 max-w-2xl">
-            Import and maintain master employee records from Excel with column mapping. The
-            <strong className="text-slate-900"> Enrollment ID</strong> serves as the unique lookup key
-            for supervisors. This master data is strictly kept separate from submitted cards.
-          </p>
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-base font-bold text-slate-900 tracking-tight">
+                Employee Master Database
+              </h2>
+              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
+                {employees.length} Records
+              </span>
+            </div>
+            <p className="text-xs text-slate-500">
+              Master employee records with restricted editing (Contact Number &amp; Blood Group only).
+            </p>
+          </div>
         </div>
 
         {/* Action Buttons */}
@@ -252,10 +346,10 @@ export function EmployeeDatabaseSection({ onRefreshData }: EmployeeDatabaseSecti
 
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-2"
+            className="px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5"
           >
             <Upload className="w-3.5 h-3.5" />
-            <span>Import from Excel</span>
+            <span>Import Excel</span>
           </button>
 
           <button
@@ -277,11 +371,12 @@ export function EmployeeDatabaseSection({ onRefreshData }: EmployeeDatabaseSecti
 
           {employees.length > 0 && (
             <button
-              onClick={handleClearAll}
-              className="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors"
+              onClick={() => setIsDeleteAllModalOpen(true)}
+              className="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors"
+              title="Delete all master employee records"
             >
               <Trash2 className="w-3.5 h-3.5" />
-              <span>Clear All</span>
+              <span>Delete All</span>
             </button>
           )}
         </div>
@@ -314,7 +409,7 @@ export function EmployeeDatabaseSection({ onRefreshData }: EmployeeDatabaseSecti
       )}
 
       {/* Filter and Search Bar */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xs">
+      <div className="bg-white border border-slate-200 rounded-2xl p-3.5 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xs">
         <div className="flex items-center gap-2 w-full sm:w-auto">
           {/* Search */}
           <div className="relative flex-1 sm:w-72">
@@ -383,8 +478,8 @@ export function EmployeeDatabaseSection({ onRefreshData }: EmployeeDatabaseSecti
                   <th className="py-3 px-4">Department</th>
                   <th className="py-3 px-4">Job Type</th>
                   <th className="py-3 px-4">Join Date</th>
-                  <th className="py-3 px-4">Contact</th>
-                  <th className="py-3 px-4">Blood</th>
+                  <th className="py-3 px-4">Contact Number</th>
+                  <th className="py-3 px-4">Blood Group</th>
                   <th className="py-3 px-4 text-right">Actions</th>
                 </tr>
               </thead>
@@ -401,16 +496,31 @@ export function EmployeeDatabaseSection({ onRefreshData }: EmployeeDatabaseSecti
                     </td>
                     <td className="py-3 px-4 text-slate-600">{emp.jobType}</td>
                     <td className="py-3 px-4 font-mono text-slate-600">{emp.joiningDate}</td>
-                    <td className="py-3 px-4 font-mono text-slate-600">{emp.emergencyContact}</td>
-                    <td className="py-3 px-4 font-bold text-rose-600">{emp.bloodGroup}</td>
+                    <td className="py-3 px-4 font-mono text-slate-800 font-semibold">
+                      {emp.emergencyContact}
+                    </td>
+                    <td className="py-3 px-4 font-bold text-rose-600">
+                      <span className="px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 border border-rose-200 text-[11px]">
+                        {emp.bloodGroup}
+                      </span>
+                    </td>
                     <td className="py-3 px-4 text-right">
-                      <button
-                        onClick={() => handleDeleteEmployee(emp.enrollId)}
-                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                        title="Delete from master database"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          onClick={() => handleOpenEdit(emp)}
+                          className="p-1.5 text-slate-500 hover:text-sky-700 hover:bg-sky-50 rounded-lg transition-colors"
+                          title={`Edit Contact Number & Blood Group for ${emp.name}`}
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleOpenDelete(emp)}
+                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                          title={`Delete employee ${emp.enrollId}`}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -419,6 +529,225 @@ export function EmployeeDatabaseSection({ onRefreshData }: EmployeeDatabaseSecti
           </div>
         )}
       </div>
+
+      {/* Individual Employee Delete Confirmation Modal */}
+      {employeeToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white border border-slate-200 w-full max-w-sm rounded-2xl shadow-2xl p-5 space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="p-2.5 rounded-xl bg-rose-50 text-rose-600 border border-rose-200 shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">Delete Employee Record</h3>
+                <p className="text-xs text-slate-600 mt-1">
+                  Are you sure you want to remove employee <strong className="text-slate-900">{employeeToDelete.name}</strong> (Enrollment ID: <span className="font-mono text-purple-700 font-bold">{employeeToDelete.enrollId}</span>)?
+                </p>
+                <p className="text-[11px] text-slate-500 mt-1.5">
+                  This will remove the master record for this employee only. Other records remain unaffected.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setEmployeeToDelete(null)}
+                className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmIndividualDelete}
+                disabled={isLoading}
+                className="px-4 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs"
+              >
+                Delete Record
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Delete All Confirmation Modal */}
+      {isDeleteAllModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white border border-rose-200 w-full max-w-md rounded-2xl shadow-2xl p-5 space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="p-2.5 rounded-xl bg-rose-100 text-rose-700 border border-rose-300 shrink-0">
+                <ShieldAlert className="w-5 h-5 text-rose-600" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-rose-900">Delete All Employee Records?</h3>
+                <p className="text-xs text-slate-700 mt-1">
+                  WARNING: This will permanently delete <strong>ALL {employees.length} master employee records</strong> from the database.
+                </p>
+                <p className="text-[11px] text-rose-600 mt-1 font-semibold">
+                  This action cannot be undone. You will need to re-import records from Excel.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setIsDeleteAllModalOpen(false)}
+                className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteAll}
+                disabled={isLoading}
+                className="px-4 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs"
+              >
+                Yes, Delete All Records
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Restricted Edit Employee Modal: ONLY Contact Number and Blood Group can be updated */}
+      {editingEmployee && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white border border-slate-200 w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between shrink-0">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                  <Edit2 className="w-4 h-4 text-sky-600" />
+                  <span>Edit Employee Record</span>
+                  <span className="font-mono text-purple-700 text-xs px-2 py-0.5 rounded bg-purple-50 border border-purple-200">
+                    ID: {editingEmployee.enrollId}
+                  </span>
+                </h3>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  Restricted Editing: Only Contact Number and Blood Group can be modified.
+                </p>
+              </div>
+              <button
+                onClick={() => setEditingEmployee(null)}
+                className="p-1.5 text-slate-400 hover:text-slate-700"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveRestrictedEdit} className="p-5 space-y-4 overflow-y-auto">
+              {editError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>{editError}</span>
+                </div>
+              )}
+
+              {/* READ-ONLY LOCKED FIELDS SECTION */}
+              <div className="bg-slate-50/80 border border-slate-200 rounded-xl p-3.5 space-y-2.5">
+                <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-600 uppercase tracking-wider">
+                  <Lock className="w-3.5 h-3.5 text-slate-400" />
+                  <span>Read-Only Master Fields (Protected)</span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2.5 text-xs">
+                  <div>
+                    <span className="text-[10px] text-slate-400 block">Employee Name</span>
+                    <span className="font-bold text-slate-800 block truncate">{editingEmployee.name}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-400 block">Designation</span>
+                    <span className="font-semibold text-slate-700 block truncate">{editingEmployee.designation}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-400 block">Department</span>
+                    <span className="font-semibold text-slate-700 block">{editingEmployee.department}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-400 block">Job Type</span>
+                    <span className="font-semibold text-slate-700 block">{editingEmployee.jobType}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-400 block">Joining Date</span>
+                    <span className="font-mono text-slate-700 block">{editingEmployee.joiningDate}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-400 block">Card Issue Date</span>
+                    <span className="font-mono text-slate-700 block">{editingEmployee.cardIssue}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* EDITABLE FIELDS SECTION */}
+              <div className="space-y-3.5 pt-1">
+                <div className="text-xs font-bold text-sky-900 flex items-center gap-1.5 pb-1 border-b border-sky-100">
+                  <span className="w-2 h-2 rounded-full bg-sky-500" />
+                  <span>Editable Employee Fields</span>
+                </div>
+
+                {/* 1. Contact Number */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-800 mb-1 flex items-center gap-1.5">
+                    <Phone className="w-3.5 h-3.5 text-sky-600" />
+                    <span>Contact Number (Emergency Contact) *</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editContact}
+                    onChange={(e) => setEditContact(e.target.value)}
+                    placeholder="e.g. 01920-694100"
+                    className="w-full bg-white border border-slate-300 focus:border-sky-600 focus:ring-1 focus:ring-sky-500 rounded-xl px-3 py-2 text-xs text-slate-900 font-mono font-semibold"
+                  />
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    Enter valid employee phone / emergency contact number.
+                  </p>
+                </div>
+
+                {/* 2. Blood Group */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-800 mb-1 flex items-center gap-1.5">
+                    <Droplet className="w-3.5 h-3.5 text-rose-600" />
+                    <span>Blood Group *</span>
+                  </label>
+                  <select
+                    value={editBloodGroup}
+                    onChange={(e) => setEditBloodGroup(e.target.value)}
+                    className="w-full bg-white border border-slate-300 focus:border-rose-600 focus:ring-1 focus:ring-rose-500 rounded-xl px-3 py-2 text-xs text-slate-900 font-bold"
+                  >
+                    {BLOOD_GROUPS.map((bg) => (
+                      <option key={bg} value={bg}>
+                        {bg}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    Select verified blood group from standard medical classifications.
+                  </p>
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-slate-200 flex items-center justify-end gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setEditingEmployee(null)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingEdit}
+                  className="px-5 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5"
+                >
+                  {isSubmittingEdit && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                  <span>Save Changes</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Column Mapping Modal for Master Import */}
       <ColumnMappingModal

@@ -276,6 +276,58 @@ function requireAdminRole(req: AuthenticatedRequest, res: Response, next: NextFu
   next();
 }
 
+const VALID_APP_TABS = [
+  'submissions',
+  'supervisor_submission',
+  'data_entry_form',
+  'employee_data',
+  'user_management',
+  'card_studio',
+];
+
+function getEffectiveAllowedTabs(user: any): string[] {
+  if (user.role === 'admin') {
+    return [...VALID_APP_TABS];
+  }
+  if (user.role === 'supervisor') {
+    return ['supervisor_submission'];
+  }
+  if (Array.isArray(user.allowedTabs) && user.allowedTabs.length > 0) {
+    const valid = user.allowedTabs.filter((t: string) => VALID_APP_TABS.includes(t));
+    if (valid.length > 0) return valid;
+  }
+  return ['data_entry_form'];
+}
+
+// Tab Permission Enforcement Middleware
+function requireTabAccess(tabId: string) {
+  return (req: AuthenticatedRequest, res: Response, next: NextFunction): void => {
+    if (!req.user) {
+      res.status(401).json({ error: 'Authentication required. Please sign in.' });
+      return;
+    }
+    if (req.user.role === 'admin') {
+      return next();
+    }
+    if (req.user.role === 'supervisor') {
+      if (tabId === 'supervisor_submission') {
+        return next();
+      }
+      res.status(403).json({ error: 'Access forbidden for supervisor role.' });
+      return;
+    }
+    if (req.user.role === 'data_entry') {
+      const allowed = getEffectiveAllowedTabs(req.user);
+      if (allowed.includes(tabId)) {
+        return next();
+      }
+      res.status(403).json({ error: `Access forbidden. You do not have permission to access the ${tabId} module.` });
+      return;
+    }
+    res.status(403).json({ error: 'Unauthorized role.' });
+  };
+}
+
 // =========================================================================
 // API ROUTES
 // =========================================================================
@@ -322,6 +374,7 @@ app.post('/api/auth/login', (req: Request, res: Response) => {
       email: user.email,
       role: user.role,
       status: user.status,
+      allowedTabs: getEffectiveAllowedTabs(user),
     },
   });
 });
@@ -382,25 +435,34 @@ app.post('/api/auth/supervisor-login', (req: Request, res: Response) => {
       email: supervisor.email,
       role: supervisor.role,
       status: supervisor.status,
+      allowedTabs: getEffectiveAllowedTabs(supervisor),
     },
   });
 });
 
 app.get('/api/auth/me', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
   const { passwordHash, ...safeUser } = req.user;
-  res.json({ user: safeUser });
+  res.json({
+    user: {
+      ...safeUser,
+      allowedTabs: getEffectiveAllowedTabs(req.user),
+    },
+  });
 });
 
-// --- USER MANAGEMENT (ADMIN ONLY) ---
+// --- USER MANAGEMENT ---
 
-app.get('/api/users', authenticateToken, requireAdminRole, (_req: Request, res: Response) => {
+app.get('/api/users', authenticateToken, requireTabAccess('user_management'), (_req: Request, res: Response) => {
   const users = readJsonFile<any[]>(USERS_FILE, []);
-  const safeUsers = users.map(({ passwordHash, ...u }) => u);
+  const safeUsers = users.map(({ passwordHash, ...u }) => ({
+    ...u,
+    allowedTabs: getEffectiveAllowedTabs(u),
+  }));
   res.json(safeUsers);
 });
 
-app.post('/api/users', authenticateToken, requireAdminRole, (req: Request, res: Response) => {
-  const { username, password, name, email, role, employeeId } = req.body;
+app.post('/api/users', authenticateToken, requireTabAccess('user_management'), (req: Request, res: Response) => {
+  const { username, password, name, email, role, employeeId, allowedTabs } = req.body;
 
   if (!username || !password || !name) {
     res.status(400).json({ error: 'Username, password, and name are required.' });
@@ -421,6 +483,21 @@ app.post('/api/users', authenticateToken, requireAdminRole, (req: Request, res: 
 
   const cleanEmployeeId = employeeId ? String(employeeId).trim() : cleanUsername;
 
+  // Determine permitted tabs
+  let sanitizedAllowedTabs: string[];
+  if (assignedRole === 'admin') {
+    sanitizedAllowedTabs = [...VALID_APP_TABS];
+  } else if (assignedRole === 'supervisor') {
+    sanitizedAllowedTabs = ['supervisor_submission'];
+  } else {
+    sanitizedAllowedTabs = Array.isArray(allowedTabs)
+      ? allowedTabs.filter((t: string) => VALID_APP_TABS.includes(t))
+      : ['data_entry_form'];
+    if (sanitizedAllowedTabs.length === 0) {
+      sanitizedAllowedTabs = ['data_entry_form'];
+    }
+  }
+
   const newUser = {
     id: `user-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
     username: cleanUsername,
@@ -430,6 +507,7 @@ app.post('/api/users', authenticateToken, requireAdminRole, (req: Request, res: 
     email: (email || '').trim(),
     role: assignedRole,
     status: 'active',
+    allowedTabs: sanitizedAllowedTabs,
     createdAt: new Date().toISOString(),
   };
 
@@ -437,12 +515,15 @@ app.post('/api/users', authenticateToken, requireAdminRole, (req: Request, res: 
   writeJsonFile(USERS_FILE, users);
 
   const { passwordHash, ...safeUser } = newUser;
-  res.status(201).json(safeUser);
+  res.status(201).json({
+    ...safeUser,
+    allowedTabs: getEffectiveAllowedTabs(newUser),
+  });
 });
 
-app.put('/api/users/:id', authenticateToken, requireAdminRole, (req: Request, res: Response) => {
+app.put('/api/users/:id', authenticateToken, requireTabAccess('user_management'), (req: Request, res: Response) => {
   const { id } = req.params;
-  const { name, email, role, status, password, employeeId } = req.body;
+  const { name, email, role, status, password, employeeId, allowedTabs } = req.body;
 
   const users = readJsonFile<any[]>(USERS_FILE, []);
   const index = users.findIndex((u) => u.id === id);
@@ -466,11 +547,25 @@ app.put('/api/users/:id', authenticateToken, requireAdminRole, (req: Request, re
     existing.passwordHash = hashPassword(password.trim());
   }
 
+  if (existing.role === 'data_entry') {
+    if (Array.isArray(allowedTabs)) {
+      const sanitized = allowedTabs.filter((t: string) => VALID_APP_TABS.includes(t));
+      existing.allowedTabs = sanitized.length > 0 ? sanitized : ['data_entry_form'];
+    }
+  } else if (existing.role === 'admin') {
+    existing.allowedTabs = [...VALID_APP_TABS];
+  } else if (existing.role === 'supervisor') {
+    existing.allowedTabs = ['supervisor_submission'];
+  }
+
   users[index] = existing;
   writeJsonFile(USERS_FILE, users);
 
   const { passwordHash, ...safeUser } = existing;
-  res.json(safeUser);
+  res.json({
+    ...safeUser,
+    allowedTabs: getEffectiveAllowedTabs(existing),
+  });
 });
 
 app.delete('/api/users/:id', authenticateToken, requireAdminRole, (req: Request, res: Response) => {
@@ -497,14 +592,14 @@ app.delete('/api/users/:id', authenticateToken, requireAdminRole, (req: Request,
   res.json({ success: true, message: 'User deleted successfully.' });
 });
 
-// --- EMPLOYEE MASTER DATABASE (ADMIN ONLY FOR MANAGEMENT) ---
+// --- EMPLOYEE MASTER DATABASE ---
 
-app.get('/api/master-employees', authenticateToken, requireAdminRole, (_req: Request, res: Response) => {
+app.get('/api/master-employees', authenticateToken, requireTabAccess('employee_data'), (_req: Request, res: Response) => {
   const master = readJsonFile<Record<string, any>>(MASTER_FILE, {});
   res.json(Object.values(master));
 });
 
-app.post('/api/master-employees/import', authenticateToken, requireAdminRole, (req: Request, res: Response) => {
+app.post('/api/master-employees/import', authenticateToken, requireTabAccess('employee_data'), (req: Request, res: Response) => {
   const { employees } = req.body;
 
   if (!Array.isArray(employees) || employees.length === 0) {
@@ -551,7 +646,53 @@ app.post('/api/master-employees/import', authenticateToken, requireAdminRole, (r
   });
 });
 
-app.delete('/api/master-employees/:enrollId', authenticateToken, requireAdminRole, (req: Request, res: Response) => {
+// Restricted Employee Edit: ONLY Contact Number and Blood Group can be updated
+app.put('/api/master-employees/:enrollId', authenticateToken, requireTabAccess('employee_data'), (req: Request, res: Response) => {
+  const { enrollId } = req.params;
+  const master = readJsonFile<Record<string, any>>(MASTER_FILE, {});
+
+  if (!master[enrollId]) {
+    res.status(404).json({ error: `Employee with Enrollment ID "${enrollId}" not found.` });
+    return;
+  }
+
+  const { emergencyContact, bloodGroup } = req.body;
+
+  // Validate Contact Number (required, non-empty)
+  if (emergencyContact !== undefined) {
+    const contactStr = String(emergencyContact).trim();
+    if (!contactStr) {
+      res.status(400).json({ error: 'Contact Number is required and cannot be empty.' });
+      return;
+    }
+    master[enrollId].emergencyContact = contactStr;
+  }
+
+  // Validate Blood Group (required, valid blood group format)
+  if (bloodGroup !== undefined) {
+    const validBloodGroups = ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'];
+    const bgStr = String(bloodGroup).trim().toUpperCase();
+    if (!validBloodGroups.includes(bgStr)) {
+      res.status(400).json({
+        error: `Invalid Blood Group "${bloodGroup}". Must be one of: ${validBloodGroups.join(', ')}`,
+      });
+      return;
+    }
+    master[enrollId].bloodGroup = bgStr;
+  }
+
+  // Strictly enforce that NO OTHER employee fields can be altered via edit
+  master[enrollId].updatedAt = new Date().toISOString();
+
+  writeJsonFile(MASTER_FILE, master);
+  res.json({
+    success: true,
+    message: `Employee ${enrollId} updated successfully (Contact Number & Blood Group).`,
+    employee: master[enrollId],
+  });
+});
+
+app.delete('/api/master-employees/:enrollId', authenticateToken, requireTabAccess('employee_data'), (req: Request, res: Response) => {
   const { enrollId } = req.params;
   const master = readJsonFile<Record<string, any>>(MASTER_FILE, {});
 
@@ -565,14 +706,22 @@ app.delete('/api/master-employees/:enrollId', authenticateToken, requireAdminRol
   res.json({ success: true, message: `Employee ${enrollId} deleted from master database.` });
 });
 
-app.delete('/api/master-employees', authenticateToken, requireAdminRole, (_req: Request, res: Response) => {
+app.delete('/api/master-employees', authenticateToken, requireTabAccess('employee_data'), (_req: Request, res: Response) => {
   writeJsonFile(MASTER_FILE, {});
   res.json({ success: true, message: 'All master employee records have been cleared.' });
 });
 
 // --- LOOKUP EMPLOYEE (AUTHENTICATED DATA ENTRY & ADMIN) ---
 // Retrieves employee read-only info, checks if already submitted
-app.get('/api/lookup-employee/:enrollId', authenticateToken, (req: Request, res: Response) => {
+app.get('/api/lookup-employee/:enrollId', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
+  if (req.user?.role === 'data_entry') {
+    const allowed = getEffectiveAllowedTabs(req.user);
+    if (!allowed.includes('data_entry_form') && !allowed.includes('supervisor_submission')) {
+      res.status(403).json({ error: 'Access forbidden. You do not have permission for employee lookup.' });
+      return;
+    }
+  }
+
   const enrollId = req.params.enrollId.trim();
   const master = readJsonFile<Record<string, any>>(MASTER_FILE, {});
   const submissions = readJsonFile<Record<string, any>>(SUBMISSIONS_FILE, {});
@@ -609,6 +758,15 @@ app.get('/api/lookup-employee/:enrollId', authenticateToken, (req: Request, res:
 // Server-side duplicate protection & saving
 app.post('/api/submissions', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
   const { enrollId, nationalId, photoUrl, signatureUrl } = req.body;
+
+  // Enforce Data Entry tab permissions
+  if (req.user?.role === 'data_entry') {
+    const allowed = getEffectiveAllowedTabs(req.user);
+    if (!allowed.includes('data_entry_form') && !allowed.includes('supervisor_submission')) {
+      res.status(403).json({ error: 'Access forbidden. You do not have permission to submit records.' });
+      return;
+    }
+  }
 
   // Enforce Admin-controlled Supervisor Entry availability
   const currentSettings = readJsonFile<AppSettings>(SETTINGS_FILE, DEFAULT_SETTINGS);
@@ -712,8 +870,8 @@ app.post('/api/submissions', authenticateToken, (req: AuthenticatedRequest, res:
   });
 });
 
-// Admin-only: list all submissions with normalized print status
-app.get('/api/submissions', authenticateToken, requireAdminRole, (_req: Request, res: Response) => {
+// Print Queue & Submissions: authorized staff with 'submissions' tab access
+app.get('/api/submissions', authenticateToken, requireTabAccess('submissions'), (_req: Request, res: Response) => {
   const submissions = readJsonFile<Record<string, any>>(SUBMISSIONS_FILE, {});
   const normalized = Object.values(submissions).map((sub: any) => ({
     ...sub,
@@ -724,8 +882,8 @@ app.get('/api/submissions', authenticateToken, requireAdminRole, (_req: Request,
   res.json(normalized);
 });
 
-// Admin-only: mark single submission as printed
-app.post('/api/submissions/:enrollId/mark-printed', authenticateToken, requireAdminRole, (req: AuthenticatedRequest, res: Response) => {
+// Mark single submission as printed
+app.post('/api/submissions/:enrollId/mark-printed', authenticateToken, requireTabAccess('submissions'), (req: AuthenticatedRequest, res: Response) => {
   const { enrollId } = req.params;
   const submissions = readJsonFile<Record<string, any>>(SUBMISSIONS_FILE, {});
   const record = submissions[enrollId];
@@ -759,8 +917,8 @@ app.post('/api/submissions/:enrollId/mark-printed', authenticateToken, requireAd
   });
 });
 
-// Admin-only: log a reprint action
-app.post('/api/submissions/:enrollId/reprint', authenticateToken, requireAdminRole, (req: AuthenticatedRequest, res: Response) => {
+// Log a reprint action
+app.post('/api/submissions/:enrollId/reprint', authenticateToken, requireTabAccess('submissions'), (req: AuthenticatedRequest, res: Response) => {
   const { enrollId } = req.params;
   const submissions = readJsonFile<Record<string, any>>(SUBMISSIONS_FILE, {});
   const record = submissions[enrollId];
@@ -793,8 +951,8 @@ app.post('/api/submissions/:enrollId/reprint', authenticateToken, requireAdminRo
   });
 });
 
-// Admin-only: bulk mark multiple submissions as printed
-app.post('/api/submissions/bulk-mark-printed', authenticateToken, requireAdminRole, (req: AuthenticatedRequest, res: Response) => {
+// Bulk mark multiple submissions as printed
+app.post('/api/submissions/bulk-mark-printed', authenticateToken, requireTabAccess('submissions'), (req: AuthenticatedRequest, res: Response) => {
   const { enrollIds, note } = req.body;
   if (!Array.isArray(enrollIds) || enrollIds.length === 0) {
     res.status(400).json({ error: 'Expected non-empty array of enrollIds.' });
@@ -834,8 +992,8 @@ app.post('/api/submissions/bulk-mark-printed', authenticateToken, requireAdminRo
   });
 });
 
-// Admin-only: reset print status back to pending
-app.post('/api/submissions/:enrollId/reset-print', authenticateToken, requireAdminRole, (req: AuthenticatedRequest, res: Response) => {
+// Reset print status back to pending
+app.post('/api/submissions/:enrollId/reset-print', authenticateToken, requireTabAccess('submissions'), (req: AuthenticatedRequest, res: Response) => {
   const { enrollId } = req.params;
   const submissions = readJsonFile<Record<string, any>>(SUBMISSIONS_FILE, {});
   const record = submissions[enrollId];
@@ -856,8 +1014,8 @@ app.post('/api/submissions/:enrollId/reset-print', authenticateToken, requireAdm
   });
 });
 
-// Admin-only: delete submission to allow resubmission if needed
-app.delete('/api/submissions/:enrollId', authenticateToken, requireAdminRole, (req: Request, res: Response) => {
+// Delete submission to allow resubmission if needed
+app.delete('/api/submissions/:enrollId', authenticateToken, requireTabAccess('submissions'), (req: Request, res: Response) => {
   const targetId = decodeURIComponent(String(req.params.enrollId)).trim();
   const submissions = readJsonFile<Record<string, any>>(SUBMISSIONS_FILE, {});
 

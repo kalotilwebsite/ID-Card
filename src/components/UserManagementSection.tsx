@@ -12,9 +12,11 @@ import {
   Lock,
   Briefcase,
   IdCard,
+  CheckSquare,
+  Square,
 } from 'lucide-react';
 import { apiService } from '../services/apiService';
-import { AuthUser, UserRole } from '../types';
+import { AuthUser, UserRole, ALL_APP_TABS, AppTabId } from '../types';
 
 export function UserManagementSection() {
   const [users, setUsers] = useState<AuthUser[]>([]);
@@ -25,6 +27,7 @@ export function UserManagementSection() {
   // Modals
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<AuthUser | null>(null);
+  const [deleteConfirmUser, setDeleteConfirmUser] = useState<AuthUser | null>(null);
 
   // Form State for Create
   const [newUsername, setNewUsername] = useState('');
@@ -33,6 +36,7 @@ export function UserManagementSection() {
   const [newEmail, setNewEmail] = useState('');
   const [newEmployeeId, setNewEmployeeId] = useState('');
   const [newRole, setNewRole] = useState<UserRole>('supervisor');
+  const [newAllowedTabs, setNewAllowedTabs] = useState<string[]>(['data_entry_form']);
 
   // Form State for Edit
   const [editName, setEditName] = useState('');
@@ -41,6 +45,7 @@ export function UserManagementSection() {
   const [editRole, setEditRole] = useState<UserRole>('supervisor');
   const [editStatus, setEditStatus] = useState<'active' | 'inactive'>('active');
   const [editPassword, setEditPassword] = useState('');
+  const [editAllowedTabs, setEditAllowedTabs] = useState<string[]>(['data_entry_form']);
 
   const loadUsers = async () => {
     setIsLoading(true);
@@ -66,6 +71,11 @@ export function UserManagementSection() {
       return;
     }
 
+    if (newRole === 'data_entry' && newAllowedTabs.length === 0) {
+      setStatusMessage({ type: 'error', text: 'Please select at least one accessible tab for this Data Entry user.' });
+      return;
+    }
+
     setIsLoading(true);
     setStatusMessage(null);
 
@@ -77,6 +87,7 @@ export function UserManagementSection() {
         email: newEmail.trim() || undefined,
         employeeId: newEmployeeId.trim() || newUsername.trim(),
         role: newRole,
+        allowedTabs: newRole === 'data_entry' ? newAllowedTabs : undefined,
       });
 
       setUsers((prev) => [...prev, created]);
@@ -86,6 +97,7 @@ export function UserManagementSection() {
       setNewName('');
       setNewEmail('');
       setNewEmployeeId('');
+      setNewAllowedTabs(['data_entry_form']);
       setStatusMessage({
         type: 'success',
         text: `Authorized account created for ${created.name} (${created.role === 'supervisor' ? `Supervisor ID: ${created.employeeId || created.username}` : `@${created.username}`}).`,
@@ -105,11 +117,21 @@ export function UserManagementSection() {
     setEditRole(user.role);
     setEditStatus(user.status || 'active');
     setEditPassword('');
+    setEditAllowedTabs(
+      Array.isArray(user.allowedTabs) && user.allowedTabs.length > 0
+        ? [...user.allowedTabs]
+        : ['data_entry_form']
+    );
   };
 
   const handleUpdateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingUser) return;
+
+    if (editRole === 'data_entry' && editAllowedTabs.length === 0) {
+      setStatusMessage({ type: 'error', text: 'Please select at least one accessible tab for this Data Entry user.' });
+      return;
+    }
 
     setIsLoading(true);
     setStatusMessage(null);
@@ -122,6 +144,7 @@ export function UserManagementSection() {
         role: editRole,
         status: editStatus,
         password: editPassword ? editPassword.trim() : undefined,
+        allowedTabs: editRole === 'data_entry' ? editAllowedTabs : undefined,
       });
 
       setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)));
@@ -137,23 +160,46 @@ export function UserManagementSection() {
     }
   };
 
-  const handleDeleteUser = async (user: AuthUser) => {
-    if (!window.confirm(`Are you sure you want to delete account "${user.username}" (${user.name})?`)) {
-      return;
-    }
+  const handleConfirmDelete = async () => {
+    if (!deleteConfirmUser) return;
+    const target = deleteConfirmUser;
 
     setIsLoading(true);
     setStatusMessage(null);
 
     try {
-      await apiService.deleteUser(user.id);
-      setUsers((prev) => prev.filter((u) => u.id !== user.id));
-      setStatusMessage({ type: 'success', text: `Account "${user.username}" was deleted.` });
+      await apiService.deleteUser(target.id);
+      setUsers((prev) => prev.filter((u) => u.id !== target.id));
+      setStatusMessage({ type: 'success', text: `Account "${target.username}" was deleted successfully.` });
+      setDeleteConfirmUser(null);
     } catch (err: any) {
       setStatusMessage({ type: 'error', text: err.message || 'Failed to delete user.' });
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const toggleTabPermission = (tabId: string, isCreate: boolean) => {
+    if (isCreate) {
+      setNewAllowedTabs((prev) =>
+        prev.includes(tabId) ? prev.filter((t) => t !== tabId) : [...prev, tabId]
+      );
+    } else {
+      setEditAllowedTabs((prev) =>
+        prev.includes(tabId) ? prev.filter((t) => t !== tabId) : [...prev, tabId]
+      );
+    }
+  };
+
+  const selectAllTabs = (isCreate: boolean) => {
+    const all = ALL_APP_TABS.map((t) => t.id);
+    if (isCreate) setNewAllowedTabs(all);
+    else setEditAllowedTabs(all);
+  };
+
+  const clearAllTabs = (isCreate: boolean) => {
+    if (isCreate) setNewAllowedTabs([]);
+    else setEditAllowedTabs([]);
   };
 
   const filteredUsers = users.filter((u) => {
@@ -162,33 +208,34 @@ export function UserManagementSection() {
   });
 
   return (
-    <div className="max-w-7xl mx-auto p-4 sm:p-6 space-y-6">
-      {/* Header Banner */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-rose-50 text-rose-700 border border-rose-200">
-              Admin Only
-            </span>
-            <h2 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight flex items-center gap-2">
-              <Users className="w-5 h-5 text-rose-600" />
-              <span>Authorized User &amp; Supervisor Management</span>
-            </h2>
+    <div className="max-w-7xl mx-auto p-4 sm:p-6 space-y-4">
+      {/* Compact Top Action Bar */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <div className="p-2 rounded-xl bg-rose-50 text-rose-600 border border-rose-200">
+            <Users className="w-5 h-5" />
           </div>
-          <p className="text-xs text-slate-600 max-w-2xl">
-            Predefine and manage authorized credentials for <strong className="text-purple-700">Supervisors</strong>,{' '}
-            <strong className="text-sky-700">Data Entry Operators</strong>, and{' '}
-            <strong className="text-rose-700">Administrators</strong>. Supervisors authenticate strictly using their pre-assigned Enrollment ID and password.
-          </p>
+          <div>
+            <h2 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2">
+              <span>User Management</span>
+              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
+                {users.length} Total
+              </span>
+            </h2>
+            <p className="text-xs text-slate-500">
+              Manage accounts and tab permissions for Administrators, Supervisors, and Data Entry users.
+            </p>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={() => {
               setNewRole('supervisor');
+              setNewAllowedTabs(['supervisor_submission']);
               setIsCreateModalOpen(true);
             }}
-            className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-2"
+            className="px-3.5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5"
           >
             <Briefcase className="w-3.5 h-3.5" />
             <span>Add Supervisor</span>
@@ -197,9 +244,10 @@ export function UserManagementSection() {
           <button
             onClick={() => {
               setNewRole('data_entry');
+              setNewAllowedTabs(['data_entry_form']);
               setIsCreateModalOpen(true);
             }}
-            className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-2"
+            className="px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5"
           >
             <UserPlus className="w-3.5 h-3.5" />
             <span>Add User</span>
@@ -208,52 +256,10 @@ export function UserManagementSection() {
           <button
             onClick={loadUsers}
             className="p-2 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 rounded-xl transition-colors"
-            title="Refresh user list"
+            title="Refresh user accounts"
           >
             <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
           </button>
-        </div>
-      </div>
-
-      {/* Role Access Matrix Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* Administrator */}
-        <div className="bg-white border border-slate-200 p-4 rounded-xl flex items-start gap-3 shadow-2xs">
-          <div className="p-2 rounded-lg bg-rose-50 text-rose-600 shrink-0 border border-rose-200">
-            <Shield className="w-5 h-5" />
-          </div>
-          <div className="text-xs">
-            <h4 className="font-bold text-slate-900 mb-0.5">Administrator</h4>
-            <p className="text-slate-600 leading-relaxed text-[11px]">
-              Full control: Master database management, supervisor access management, print queue approval, card printing, and reprint history.
-            </p>
-          </div>
-        </div>
-
-        {/* Supervisor */}
-        <div className="bg-purple-50/50 border border-purple-200 p-4 rounded-xl flex items-start gap-3 shadow-2xs">
-          <div className="p-2 rounded-lg bg-purple-100 text-purple-700 shrink-0 border border-purple-200">
-            <Briefcase className="w-5 h-5" />
-          </div>
-          <div className="text-xs">
-            <h4 className="font-bold text-purple-900 mb-0.5">Authorized Supervisor</h4>
-            <p className="text-purple-800 leading-relaxed text-[11px]">
-              Dedicated Supervisor Portal: Authenticates using pre-assigned Enrollment ID &amp; password. Submits employee photo, signature, and NID. Strictly blocked from card preview and printing.
-            </p>
-          </div>
-        </div>
-
-        {/* Data Entry Operator */}
-        <div className="bg-white border border-slate-200 p-4 rounded-xl flex items-start gap-3 shadow-2xs">
-          <div className="p-2 rounded-lg bg-sky-50 text-sky-600 shrink-0 border border-sky-200">
-            <Lock className="w-5 h-5" />
-          </div>
-          <div className="text-xs">
-            <h4 className="font-bold text-slate-900 mb-0.5">Data Entry Operator</h4>
-            <p className="text-slate-600 leading-relaxed text-[11px]">
-              Operator access: Look up Enrollment IDs, view read-only employee information, and submit NID, Photo, and Signature.
-            </p>
-          </div>
         </div>
       </div>
 
@@ -285,7 +291,7 @@ export function UserManagementSection() {
 
       {/* Users Table */}
       <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
-        <div className="p-4 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 bg-slate-50">
+        <div className="p-3.5 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 bg-slate-50">
           <div className="text-xs font-bold uppercase tracking-wider text-slate-700">
             Authorized Accounts ({filteredUsers.length} of {users.length})
           </div>
@@ -315,23 +321,25 @@ export function UserManagementSection() {
             </button>
             <button
               onClick={() => setRoleFilter('data_entry')}
-              className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors ${
+              className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1 ${
                 roleFilter === 'data_entry'
                   ? 'bg-sky-100 text-sky-800 font-bold'
                   : 'text-slate-600 hover:text-sky-700'
               }`}
             >
-              Data Entry ({users.filter((u) => u.role === 'data_entry').length})
+              <Lock className="w-3 h-3 text-sky-600" />
+              <span>Data Entry ({users.filter((u) => u.role === 'data_entry').length})</span>
             </button>
             <button
               onClick={() => setRoleFilter('admin')}
-              className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors ${
+              className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1 ${
                 roleFilter === 'admin'
                   ? 'bg-rose-100 text-rose-800 font-bold'
                   : 'text-slate-600 hover:text-rose-700'
               }`}
             >
-              Admins ({users.filter((u) => u.role === 'admin').length})
+              <Shield className="w-3 h-3 text-rose-600" />
+              <span>Admins ({users.filter((u) => u.role === 'admin').length})</span>
             </button>
           </div>
         </div>
@@ -341,99 +349,176 @@ export function UserManagementSection() {
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-bold uppercase tracking-wider text-slate-600">
                 <th className="py-3 px-4">User</th>
-                <th className="py-3 px-4">Login Identifier / Enrollment ID</th>
-                <th className="py-3 px-4">Assigned Role</th>
+                <th className="py-3 px-4">Identifier / ID</th>
+                <th className="py-3 px-4">Role</th>
+                <th className="py-3 px-4">Tab Permissions</th>
                 <th className="py-3 px-4">Status</th>
-                <th className="py-3 px-4">Created</th>
                 <th className="py-3 px-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filteredUsers.map((u) => (
-                <tr key={u.id} className="hover:bg-slate-50/80 transition-colors">
-                  <td className="py-3 px-4">
-                    <div className="font-bold text-slate-900">{u.name}</div>
-                    {u.email && <div className="text-[11px] text-slate-500">{u.email}</div>}
-                  </td>
-                  <td className="py-3 px-4">
-                    <div className="font-mono text-slate-800 font-semibold">{u.username}</div>
-                    {u.employeeId && u.employeeId !== u.username && (
-                      <div className="text-[10px] text-purple-700 font-mono flex items-center gap-1 mt-0.5">
-                        <IdCard className="w-3 h-3 text-purple-600" />
-                        <span>Enroll ID: {u.employeeId}</span>
+              {filteredUsers.map((u) => {
+                const userTabs = u.role === 'admin'
+                  ? ALL_APP_TABS.map((t) => t.id)
+                  : u.role === 'supervisor'
+                  ? ['supervisor_submission']
+                  : (u.allowedTabs || ['data_entry_form']);
+
+                return (
+                  <tr key={u.id} className="hover:bg-slate-50/80 transition-colors">
+                    <td className="py-3 px-4">
+                      <div className="font-bold text-slate-900">{u.name}</div>
+                      {u.email && <div className="text-[11px] text-slate-500">{u.email}</div>}
+                    </td>
+                    <td className="py-3 px-4">
+                      <div className="font-mono text-slate-800 font-semibold">{u.username}</div>
+                      {u.employeeId && u.employeeId !== u.username && (
+                        <div className="text-[10px] text-purple-700 font-mono flex items-center gap-1 mt-0.5">
+                          <IdCard className="w-3 h-3 text-purple-600" />
+                          <span>ID: {u.employeeId}</span>
+                        </div>
+                      )}
+                    </td>
+                    <td className="py-3 px-4">
+                      {u.role === 'supervisor' ? (
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200 flex items-center gap-1 w-fit">
+                          <Briefcase className="w-3 h-3 text-purple-600" /> Supervisor
+                        </span>
+                      ) : u.role === 'admin' ? (
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 flex items-center gap-1 w-fit">
+                          <Shield className="w-3 h-3 text-rose-600" /> Admin
+                        </span>
+                      ) : (
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-sky-50 text-sky-700 border border-sky-200 flex items-center gap-1 w-fit">
+                          <Lock className="w-3 h-3 text-sky-600" /> Data Entry
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-3 px-4">
+                      {u.role === 'admin' ? (
+                        <span className="text-[11px] font-semibold text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-md inline-block">
+                          Full Access (All 6 Tabs)
+                        </span>
+                      ) : u.role === 'supervisor' ? (
+                        <span className="text-[11px] font-semibold text-purple-700 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-md inline-block">
+                          Supervisor Entry Only
+                        </span>
+                      ) : (
+                        <div className="flex flex-wrap gap-1 max-w-sm">
+                          {userTabs.length === 6 ? (
+                            <span className="text-[10px] font-bold text-sky-800 bg-sky-50 border border-sky-200 px-2 py-0.5 rounded">
+                              All 6 Tabs Granted
+                            </span>
+                          ) : userTabs.length === 0 ? (
+                            <span className="text-[10px] font-bold text-slate-500 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded">
+                              No Tabs Assigned
+                            </span>
+                          ) : (
+                            userTabs.map((tabId) => {
+                              const tabDef = ALL_APP_TABS.find((t) => t.id === tabId);
+                              const shortName = tabDef?.label.replace(/^\d+\.\s*/, '') || tabId;
+                              return (
+                                <span
+                                  key={tabId}
+                                  className="text-[10px] font-semibold text-sky-700 bg-sky-50 border border-sky-200 px-1.5 py-0.5 rounded"
+                                  title={tabDef?.label}
+                                >
+                                  {shortName}
+                                </span>
+                              );
+                            })
+                          )}
+                        </div>
+                      )}
+                    </td>
+                    <td className="py-3 px-4">
+                      <span
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          u.status === 'inactive'
+                            ? 'bg-slate-100 text-slate-500 border border-slate-200'
+                            : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                        }`}
+                      >
+                        {u.status === 'inactive' ? 'Inactive' : 'Active'}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 text-right">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          onClick={() => handleStartEdit(u)}
+                          className="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors"
+                          title="Edit account & permissions"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => setDeleteConfirmUser(u)}
+                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                          title="Delete account"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                       </div>
-                    )}
-                  </td>
-                  <td className="py-3 px-4">
-                    {u.role === 'supervisor' ? (
-                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200 flex items-center gap-1 w-fit">
-                        <Briefcase className="w-3 h-3 text-purple-600" /> Supervisor
-                      </span>
-                    ) : u.role === 'admin' ? (
-                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 flex items-center gap-1 w-fit">
-                        <Shield className="w-3 h-3 text-rose-600" /> Admin
-                      </span>
-                    ) : (
-                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-sky-50 text-sky-700 border border-sky-200 flex items-center gap-1 w-fit">
-                        <Lock className="w-3 h-3 text-sky-600" /> Data Entry
-                      </span>
-                    )}
-                  </td>
-                  <td className="py-3 px-4">
-                    <span
-                      className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                        u.status === 'inactive'
-                          ? 'bg-slate-100 text-slate-500 border border-slate-200'
-                          : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                      }`}
-                    >
-                      {u.status === 'inactive' ? 'Inactive' : 'Active'}
-                    </span>
-                  </td>
-                  <td className="py-3 px-4 text-slate-500 font-mono text-[11px]">
-                    {u.createdAt ? new Date(u.createdAt).toLocaleDateString() : 'Initial'}
-                  </td>
-                  <td className="py-3 px-4 text-right">
-                    <div className="flex items-center justify-end gap-1.5">
-                      <button
-                        onClick={() => handleStartEdit(u)}
-                        className="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors"
-                        title="Edit account"
-                      >
-                        <Edit2 className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteUser(u)}
-                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                        title="Delete account"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       </div>
 
+      {/* In-App Delete Confirmation Modal */}
+      {deleteConfirmUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white border border-slate-200 w-full max-w-sm rounded-2xl shadow-2xl p-5 space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="p-2.5 rounded-xl bg-rose-50 text-rose-600 border border-rose-200 shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">Delete User Account</h3>
+                <p className="text-xs text-slate-600 mt-1">
+                  Are you sure you want to delete user account <strong className="text-slate-900">{deleteConfirmUser.name}</strong> (@{deleteConfirmUser.username})?
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmUser(null)}
+                className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                disabled={isLoading}
+                className="px-4 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs"
+              >
+                Delete Account
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Create User Modal */}
       {isCreateModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-white border border-slate-200 w-full max-w-md rounded-2xl shadow-2xl overflow-hidden flex flex-col">
-            <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+          <div className="bg-white border border-slate-200 w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between shrink-0">
               <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                 {newRole === 'supervisor' ? (
                   <Briefcase className="w-4 h-4 text-purple-600" />
+                ) : newRole === 'admin' ? (
+                  <Shield className="w-4 h-4 text-rose-600" />
                 ) : (
-                  <UserPlus className="w-4 h-4 text-rose-600" />
+                  <UserPlus className="w-4 h-4 text-sky-600" />
                 )}
-                <span>
-                  {newRole === 'supervisor'
-                    ? 'Predefine Authorized Supervisor'
-                    : 'Create Authorized User Account'}
-                </span>
+                <span>Create User Account</span>
               </h3>
               <button
                 onClick={() => setIsCreateModalOpen(false)}
@@ -443,13 +528,30 @@ export function UserManagementSection() {
               </button>
             </div>
 
-            <form onSubmit={handleCreateUser} className="p-5 space-y-3.5">
-              {/* Role Assignment Selector */}
+            <form onSubmit={handleCreateUser} className="p-5 space-y-3.5 overflow-y-auto">
+              {/* Role Assignment Selector: exactly 3 roles */}
               <div>
                 <label className="block text-xs font-semibold text-slate-800 mb-1">
-                  Account Role *
+                  User Role *
                 </label>
                 <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNewRole('admin');
+                    }}
+                    className={`p-2.5 rounded-xl border text-left transition-all ${
+                      newRole === 'admin'
+                        ? 'bg-rose-50 border-rose-400 text-rose-800 font-bold'
+                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="text-xs font-bold mb-0.5 flex items-center gap-1">
+                      <Shield className="w-3.5 h-3.5 text-rose-600" /> Admin
+                    </div>
+                    <div className="text-[10px] text-slate-500">Full system access</div>
+                  </button>
+
                   <button
                     type="button"
                     onClick={() => {
@@ -459,13 +561,13 @@ export function UserManagementSection() {
                     className={`p-2.5 rounded-xl border text-left transition-all ${
                       newRole === 'supervisor'
                         ? 'bg-purple-50 border-purple-400 text-purple-800 font-bold'
-                        : 'bg-white border-slate-200 text-slate-600'
+                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
                     }`}
                   >
                     <div className="text-xs font-bold mb-0.5 flex items-center gap-1">
-                      <Briefcase className="w-3 h-3 text-purple-600" /> Supervisor
+                      <Briefcase className="w-3.5 h-3.5 text-purple-600" /> Supervisor
                     </div>
-                    <div className="text-[9px] leading-tight text-slate-500">Submission portal</div>
+                    <div className="text-[10px] text-slate-500">Supervisor portal</div>
                   </button>
 
                   <button
@@ -474,31 +576,77 @@ export function UserManagementSection() {
                     className={`p-2.5 rounded-xl border text-left transition-all ${
                       newRole === 'data_entry'
                         ? 'bg-sky-50 border-sky-400 text-sky-800 font-bold'
-                        : 'bg-white border-slate-200 text-slate-600'
+                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
                     }`}
                   >
                     <div className="text-xs font-bold mb-0.5 flex items-center gap-1">
-                      <Lock className="w-3 h-3 text-sky-600" /> Data Entry
+                      <Lock className="w-3.5 h-3.5 text-sky-600" /> Data Entry
                     </div>
-                    <div className="text-[9px] leading-tight text-slate-500">Standard entry form</div>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setNewRole('admin')}
-                    className={`p-2.5 rounded-xl border text-left transition-all ${
-                      newRole === 'admin'
-                        ? 'bg-rose-50 border-rose-400 text-rose-800 font-bold'
-                        : 'bg-white border-slate-200 text-slate-600'
-                    }`}
-                  >
-                    <div className="text-xs font-bold mb-0.5 flex items-center gap-1">
-                      <Shield className="w-3 h-3 text-rose-600" /> Admin
-                    </div>
-                    <div className="text-[9px] leading-tight text-slate-500">Full system access</div>
+                    <div className="text-[10px] text-slate-500">Tab permissions</div>
                   </button>
                 </div>
               </div>
+
+              {/* Data Entry Tab Permission Selector */}
+              {newRole === 'data_entry' && (
+                <div className="bg-sky-50/60 border border-sky-200 rounded-xl p-3.5 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="text-xs font-bold text-sky-950 flex items-center gap-1.5">
+                        <Lock className="w-3.5 h-3.5 text-sky-600" />
+                        <span>Tab Permissions (Select accessible tabs)</span>
+                      </h4>
+                      <p className="text-[10px] text-sky-800">
+                        Unchecked tabs will be hidden and blocked for this user.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => selectAllTabs(true)}
+                        className="text-[10px] font-bold text-sky-700 hover:text-sky-900 underline"
+                      >
+                        Select All
+                      </button>
+                      <span className="text-sky-300">|</span>
+                      <button
+                        type="button"
+                        onClick={() => clearAllTabs(true)}
+                        className="text-[10px] font-bold text-sky-700 hover:text-sky-900 underline"
+                      >
+                        Clear
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                    {ALL_APP_TABS.map((tab) => {
+                      const isChecked = newAllowedTabs.includes(tab.id);
+                      return (
+                        <label
+                          key={tab.id}
+                          className={`flex items-start gap-2 p-2 rounded-lg border text-xs cursor-pointer transition-colors ${
+                            isChecked
+                              ? 'bg-white border-sky-400 text-slate-900 font-medium shadow-2xs'
+                              : 'bg-white/60 border-slate-200 text-slate-600 hover:bg-white'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => toggleTabPermission(tab.id, true)}
+                            className="mt-0.5 rounded border-slate-300 text-sky-600 focus:ring-sky-500"
+                          />
+                          <div className="leading-tight">
+                            <div className="font-semibold text-slate-800 text-[11px]">{tab.label}</div>
+                            <div className="text-[9px] text-slate-500">{tab.description}</div>
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               <div>
                 <label className="block text-xs font-semibold text-slate-800 mb-1">
@@ -516,7 +664,7 @@ export function UserManagementSection() {
 
               <div>
                 <label className="block text-xs font-semibold text-slate-800 mb-1">
-                  {newRole === 'supervisor' ? 'Supervisor Username / Login Handle *' : 'Username *'}
+                  Username *
                 </label>
                 <input
                   type="text"
@@ -528,7 +676,7 @@ export function UserManagementSection() {
                       setNewEmployeeId(e.target.value);
                     }
                   }}
-                  placeholder={newRole === 'supervisor' ? 'e.g. supervisor2' : 'e.g. operator2'}
+                  placeholder="e.g. operator2 or supervisor2"
                   className="w-full bg-slate-50 border border-slate-300 focus:bg-white focus:border-rose-600 rounded-xl px-3 py-2 text-xs text-slate-900 font-mono"
                 />
               </div>
@@ -562,7 +710,7 @@ export function UserManagementSection() {
                   required
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="Set initial password"
+                  placeholder="Set account password"
                   className="w-full bg-slate-50 border border-slate-300 focus:bg-white focus:border-rose-600 rounded-xl px-3 py-2 text-xs text-slate-900"
                 />
               </div>
@@ -575,12 +723,12 @@ export function UserManagementSection() {
                   type="email"
                   value={newEmail}
                   onChange={(e) => setNewEmail(e.target.value)}
-                  placeholder="supervisor@company.com"
+                  placeholder="user@company.com"
                   className="w-full bg-slate-50 border border-slate-300 focus:bg-white focus:border-rose-600 rounded-xl px-3 py-2 text-xs text-slate-900"
                 />
               </div>
 
-              <div className="pt-3 border-t border-slate-200 flex items-center justify-end gap-2">
+              <div className="pt-3 border-t border-slate-200 flex items-center justify-end gap-2 shrink-0">
                 <button
                   type="button"
                   onClick={() => setIsCreateModalOpen(false)}
@@ -594,10 +742,12 @@ export function UserManagementSection() {
                   className={`px-5 py-2 text-white rounded-xl text-xs font-bold shadow-xs ${
                     newRole === 'supervisor'
                       ? 'bg-purple-600 hover:bg-purple-700'
-                      : 'bg-rose-600 hover:bg-rose-700'
+                      : newRole === 'admin'
+                      ? 'bg-rose-600 hover:bg-rose-700'
+                      : 'bg-sky-600 hover:bg-sky-700'
                   }`}
                 >
-                  Save &amp; Authorize Account
+                  Create Account
                 </button>
               </div>
             </form>
@@ -608,10 +758,11 @@ export function UserManagementSection() {
       {/* Edit User Modal */}
       {editingUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-white border border-slate-200 w-full max-w-md rounded-2xl shadow-2xl overflow-hidden flex flex-col">
-            <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+          <div className="bg-white border border-slate-200 w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between shrink-0">
               <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                <Edit2 className="w-4 h-4 text-sky-600" /> Edit Authorized Account ({editingUser.username})
+                <Edit2 className="w-4 h-4 text-sky-600" />
+                <span>Edit Account ({editingUser.username})</span>
               </h3>
               <button
                 onClick={() => setEditingUser(null)}
@@ -621,7 +772,7 @@ export function UserManagementSection() {
               </button>
             </div>
 
-            <form onSubmit={handleUpdateUser} className="p-5 space-y-3.5">
+            <form onSubmit={handleUpdateUser} className="p-5 space-y-3.5 overflow-y-auto">
               <div>
                 <label className="block text-xs font-semibold text-slate-800 mb-1">
                   Full Name
@@ -637,7 +788,7 @@ export function UserManagementSection() {
 
               <div>
                 <label className="block text-xs font-semibold text-slate-800 mb-1">
-                  Supervisor Enrollment ID / Employee ID
+                  Enrollment ID / Employee ID
                 </label>
                 <input
                   type="text"
@@ -660,32 +811,19 @@ export function UserManagementSection() {
                 />
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-800 mb-1">
-                  Reset Password (leave empty to keep current)
-                </label>
-                <input
-                  type="password"
-                  value={editPassword}
-                  onChange={(e) => setEditPassword(e.target.value)}
-                  placeholder="New password"
-                  className="w-full bg-slate-50 border border-slate-300 focus:bg-white focus:border-rose-600 rounded-xl px-3 py-2 text-xs text-slate-900"
-                />
-              </div>
-
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-slate-800 mb-1">
-                    Role
+                    Role *
                   </label>
                   <select
                     value={editRole}
                     onChange={(e) => setEditRole(e.target.value as UserRole)}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-rose-500"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-rose-500 font-medium"
                   >
+                    <option value="admin">Admin</option>
                     <option value="supervisor">Supervisor</option>
-                    <option value="data_entry">Data Entry Operator</option>
-                    <option value="admin">Administrator</option>
+                    <option value="data_entry">Data Entry</option>
                   </select>
                 </div>
 
@@ -696,7 +834,7 @@ export function UserManagementSection() {
                   <select
                     value={editStatus}
                     onChange={(e) => setEditStatus(e.target.value as 'active' | 'inactive')}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-rose-500"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-rose-500 font-medium"
                   >
                     <option value="active">Active</option>
                     <option value="inactive">Inactive</option>
@@ -704,7 +842,81 @@ export function UserManagementSection() {
                 </div>
               </div>
 
-              <div className="pt-3 border-t border-slate-200 flex items-center justify-end gap-2">
+              {/* Data Entry Tab Permission Selector in Edit Mode */}
+              {editRole === 'data_entry' && (
+                <div className="bg-sky-50/60 border border-sky-200 rounded-xl p-3.5 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="text-xs font-bold text-sky-950 flex items-center gap-1.5">
+                        <Lock className="w-3.5 h-3.5 text-sky-600" />
+                        <span>Tab Permissions (Select accessible tabs)</span>
+                      </h4>
+                      <p className="text-[10px] text-sky-800">
+                        Unchecked tabs remain completely hidden and blocked from this user.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => selectAllTabs(false)}
+                        className="text-[10px] font-bold text-sky-700 hover:text-sky-900 underline"
+                      >
+                        Select All
+                      </button>
+                      <span className="text-sky-300">|</span>
+                      <button
+                        type="button"
+                        onClick={() => clearAllTabs(false)}
+                        className="text-[10px] font-bold text-sky-700 hover:text-sky-900 underline"
+                      >
+                        Clear
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                    {ALL_APP_TABS.map((tab) => {
+                      const isChecked = editAllowedTabs.includes(tab.id);
+                      return (
+                        <label
+                          key={tab.id}
+                          className={`flex items-start gap-2 p-2 rounded-lg border text-xs cursor-pointer transition-colors ${
+                            isChecked
+                              ? 'bg-white border-sky-400 text-slate-900 font-medium shadow-2xs'
+                              : 'bg-white/60 border-slate-200 text-slate-600 hover:bg-white'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => toggleTabPermission(tab.id, false)}
+                            className="mt-0.5 rounded border-slate-300 text-sky-600 focus:ring-sky-500"
+                          />
+                          <div className="leading-tight">
+                            <div className="font-semibold text-slate-800 text-[11px]">{tab.label}</div>
+                            <div className="text-[9px] text-slate-500">{tab.description}</div>
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-800 mb-1">
+                  Change Password (leave blank to keep current)
+                </label>
+                <input
+                  type="password"
+                  value={editPassword}
+                  onChange={(e) => setEditPassword(e.target.value)}
+                  placeholder="Enter new password to change"
+                  className="w-full bg-slate-50 border border-slate-300 focus:bg-white focus:border-rose-600 rounded-xl px-3 py-2 text-xs text-slate-900"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-slate-200 flex items-center justify-end gap-2 shrink-0">
                 <button
                   type="button"
                   onClick={() => setEditingUser(null)}

@@ -510,28 +510,23 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900 flex flex-col font-sans">
       {/* Top Application Bar - Clean Header */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-30 px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 shadow-xs">
+      <header className="bg-slate-50/95 backdrop-blur-md border-b border-slate-200/90 sticky top-0 z-30 px-4 sm:px-5 py-2.5 flex flex-wrap items-center justify-between gap-3 shadow-2xs">
         {/* Brand and Title */}
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-rose-600 to-rose-500 flex items-center justify-center text-white shadow-xs">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-rose-600 to-rose-500 flex items-center justify-center text-white shadow-xs shrink-0">
             <Layers className="w-5 h-5" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-sm sm:text-base font-black tracking-tight text-slate-900">
-                Bulk Employee ID Card Generator
-              </h1>
-            </div>
-            <p className="text-[11px] text-slate-500 font-medium">
-              Akij Ceramics &amp; Rosa Sanitary Ware Bangladesh
-            </p>
+            <h1 className="text-base sm:text-lg font-bold tracking-tight text-slate-900 leading-none">
+              ID Card Generator
+            </h1>
           </div>
         </div>
 
         {/* User Account, Settings & Authentication Controls */}
         <div className="flex items-center gap-2.5 flex-wrap">
           {currentUser ? (
-            <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl">
+            <div className="flex items-center gap-2.5 bg-white border border-slate-200/90 px-3 py-1.5 rounded-xl shadow-2xs">
               <div className="flex flex-col text-right">
                 <span className="text-xs font-bold text-slate-900">{currentUser.name}</span>
                 <span className="text-[10px] text-slate-500 font-mono">
@@ -540,16 +535,19 @@ export default function App() {
               </div>
 
               {isAdmin ? (
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 flex items-center gap-1">
-                  <Shield className="w-3 h-3 text-rose-600" /> Admin
+                <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200 flex items-center gap-1.5 shadow-2xs">
+                  <Shield className="w-3.5 h-3.5 text-rose-600" />
+                  <span>Admin</span>
                 </span>
               ) : isSupervisor ? (
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200 flex items-center gap-1">
-                  <Briefcase className="w-3 h-3 text-purple-600" /> Supervisor
+                <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-purple-50 text-purple-700 border border-purple-200 flex items-center gap-1.5 shadow-2xs">
+                  <Briefcase className="w-3.5 h-3.5 text-purple-600" />
+                  <span>Supervisor</span>
                 </span>
               ) : (
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-50 text-sky-700 border border-sky-200 flex items-center gap-1">
-                  <Lock className="w-3 h-3 text-sky-600" /> Data Entry
+                <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-sky-50 text-sky-700 border border-sky-200 flex items-center gap-1.5 shadow-2xs">
+                  <Lock className="w-3.5 h-3.5 text-sky-600" />
+                  <span>Data Entry</span>
                 </span>
               )}
 
@@ -558,8 +556,8 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => setIsAdminSettingsOpen(true)}
-                  className="px-2 py-1 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-[11px] font-semibold rounded-lg transition-colors flex items-center gap-1"
-                  title="Configure Admin Settings, Login Background & Supervisor Confirmation"
+                  className="px-2.5 py-1 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 hover:border-slate-300 shadow-2xs"
+                  title="Configure System Settings, Availability & Notifications"
                 >
                   <Settings className="w-3.5 h-3.5 text-rose-600" />
                   <span className="hidden sm:inline">Settings</span>
@@ -569,7 +567,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={handleLogout}
-                className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors ml-1"
+                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors ml-0.5"
                 title="Sign out"
               >
                 <LogOut className="w-3.5 h-3.5" />

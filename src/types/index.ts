@@ -318,5 +318,11 @@ export interface SubmissionRecord {
 export interface AppSettings {
   supervisorSuccessMessage: string;
   loginBackgroundImage?: string;
+  generalSuccessMessage?: string;
+  loginNoticeEnabled?: boolean;
+  loginNoticeMessage?: string;
+  supervisorEntryEnabled?: boolean;
+  supervisorEntryDisabledMessage?: string;
 }
+
 

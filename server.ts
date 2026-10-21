@@ -26,12 +26,25 @@ const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
 interface AppSettings {
   supervisorSuccessMessage: string;
   loginBackgroundImage?: string;
+  generalSuccessMessage?: string;
+  loginNoticeEnabled?: boolean;
+  loginNoticeMessage?: string;
+  supervisorEntryEnabled?: boolean;
+  supervisorEntryDisabledMessage?: string;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
   supervisorSuccessMessage:
     'Employee ID Card data has been submitted successfully and queued for administrative review and printing. Thank you!',
   loginBackgroundImage: '',
+  generalSuccessMessage:
+    'Operation completed successfully and database records updated.',
+  loginNoticeEnabled: false,
+  loginNoticeMessage:
+    'Welcome to the ID Card Portal. Please contact Administration if you need credential assistance.',
+  supervisorEntryEnabled: true,
+  supervisorEntryDisabledMessage:
+    'Supervisor data entry is temporarily closed by Administration. Please check back later or contact the admin office.',
 };
 
 // Helper for atomic file read/write
@@ -597,6 +610,18 @@ app.get('/api/lookup-employee/:enrollId', authenticateToken, (req: Request, res:
 app.post('/api/submissions', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
   const { enrollId, nationalId, photoUrl, signatureUrl } = req.body;
 
+  // Enforce Admin-controlled Supervisor Entry availability
+  const currentSettings = readJsonFile<AppSettings>(SETTINGS_FILE, DEFAULT_SETTINGS);
+  if (currentSettings.supervisorEntryEnabled === false && req.user?.role === 'supervisor') {
+    res.status(403).json({
+      error:
+        currentSettings.supervisorEntryDisabledMessage ||
+        'Supervisor data entry is currently disabled by Administration.',
+      entryDisabled: true,
+    });
+    return;
+  }
+
   if (!enrollId || !String(enrollId).trim()) {
     res.status(400).json({ error: 'Enrollment ID is required.' });
     return;
@@ -673,7 +698,7 @@ app.post('/api/submissions', authenticateToken, (req: AuthenticatedRequest, res:
   writeJsonFile(SUBMISSIONS_FILE, submissions);
 
   // Retrieve current configured success message from settings
-  const currentSettings = readJsonFile<AppSettings>(SETTINGS_FILE, DEFAULT_SETTINGS);
+  // currentSettings already read at start of handler
 
   res.status(201).json({
     success: true,
@@ -833,27 +858,41 @@ app.post('/api/submissions/:enrollId/reset-print', authenticateToken, requireAdm
 
 // Admin-only: delete submission to allow resubmission if needed
 app.delete('/api/submissions/:enrollId', authenticateToken, requireAdminRole, (req: Request, res: Response) => {
-  const { enrollId } = req.params;
+  const targetId = decodeURIComponent(String(req.params.enrollId)).trim();
   const submissions = readJsonFile<Record<string, any>>(SUBMISSIONS_FILE, {});
 
-  if (!submissions[enrollId]) {
-    res.status(404).json({ error: `Submission for Enrollment ID "${enrollId}" not found.` });
+  // Robust lookup by key or enrollId or id
+  const matchedKey = Object.keys(submissions).find(
+    (k) =>
+      k.toLowerCase() === targetId.toLowerCase() ||
+      submissions[k]?.enrollId?.toLowerCase() === targetId.toLowerCase() ||
+      submissions[k]?.id === targetId
+  );
+
+  if (!matchedKey) {
+    res.status(404).json({ error: `Submission for Enrollment ID "${targetId}" not found.` });
     return;
   }
 
-  delete submissions[enrollId];
+  delete submissions[matchedKey];
   writeJsonFile(SUBMISSIONS_FILE, submissions);
-  res.json({ success: true, message: `Submission for ${enrollId} deleted.` });
+  res.json({ success: true, message: `Submission for ${targetId} deleted successfully.` });
 });
 
 // --- SETTINGS (ADMIN CONFIGURABLE & PUBLIC CONFIRMATION MESSAGE) ---
 
-// Public endpoint (accessible before login): returns confirmation message and login background image
+// Public endpoint (accessible before login): returns confirmation message, login background, and availability
 app.get('/api/settings/public', (_req: Request, res: Response) => {
   const settings = readJsonFile<AppSettings>(SETTINGS_FILE, DEFAULT_SETTINGS);
   res.json({
     supervisorSuccessMessage: settings.supervisorSuccessMessage || DEFAULT_SETTINGS.supervisorSuccessMessage,
     loginBackgroundImage: settings.loginBackgroundImage || '',
+    generalSuccessMessage: settings.generalSuccessMessage || DEFAULT_SETTINGS.generalSuccessMessage,
+    loginNoticeEnabled: Boolean(settings.loginNoticeEnabled),
+    loginNoticeMessage: settings.loginNoticeMessage || DEFAULT_SETTINGS.loginNoticeMessage,
+    supervisorEntryEnabled: settings.supervisorEntryEnabled !== false,
+    supervisorEntryDisabledMessage:
+      settings.supervisorEntryDisabledMessage || DEFAULT_SETTINGS.supervisorEntryDisabledMessage,
   });
 });
 
@@ -868,12 +907,34 @@ app.put('/api/settings', authenticateToken, requireAdminRole, (req: Request, res
   const current = readJsonFile<AppSettings>(SETTINGS_FILE, DEFAULT_SETTINGS);
   const updated: AppSettings = {
     ...current,
-    supervisorSuccessMessage: req.body.supervisorSuccessMessage !== undefined
-      ? String(req.body.supervisorSuccessMessage).trim()
-      : current.supervisorSuccessMessage,
-    loginBackgroundImage: req.body.loginBackgroundImage !== undefined
-      ? String(req.body.loginBackgroundImage)
-      : (current.loginBackgroundImage || ''),
+    supervisorSuccessMessage:
+      req.body.supervisorSuccessMessage !== undefined
+        ? String(req.body.supervisorSuccessMessage).trim()
+        : current.supervisorSuccessMessage,
+    loginBackgroundImage:
+      req.body.loginBackgroundImage !== undefined
+        ? String(req.body.loginBackgroundImage)
+        : (current.loginBackgroundImage || ''),
+    generalSuccessMessage:
+      req.body.generalSuccessMessage !== undefined
+        ? String(req.body.generalSuccessMessage).trim()
+        : current.generalSuccessMessage,
+    loginNoticeEnabled:
+      req.body.loginNoticeEnabled !== undefined
+        ? Boolean(req.body.loginNoticeEnabled)
+        : current.loginNoticeEnabled,
+    loginNoticeMessage:
+      req.body.loginNoticeMessage !== undefined
+        ? String(req.body.loginNoticeMessage).trim()
+        : current.loginNoticeMessage,
+    supervisorEntryEnabled:
+      req.body.supervisorEntryEnabled !== undefined
+        ? Boolean(req.body.supervisorEntryEnabled)
+        : current.supervisorEntryEnabled !== false,
+    supervisorEntryDisabledMessage:
+      req.body.supervisorEntryDisabledMessage !== undefined
+        ? String(req.body.supervisorEntryDisabledMessage).trim()
+        : current.supervisorEntryDisabledMessage,
   };
   writeJsonFile(SETTINGS_FILE, updated);
   res.json(updated);

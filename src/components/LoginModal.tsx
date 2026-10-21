@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Lock, IdCard, Eye, EyeOff, AlertCircle, X, Loader2 } from 'lucide-react';
+import { Lock, IdCard, Eye, EyeOff, AlertCircle, X, Loader2, Info } from 'lucide-react';
 import { apiService } from '../services/apiService';
 import { AuthUser } from '../types';
 
@@ -24,7 +24,7 @@ export function LoginModal({
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Background image state (supports prop or saved setting)
+  // Background image & notice state
   const [bgImage, setBgImage] = useState<string>(() => {
     try {
       const local = localStorage.getItem('id_card_login_bg');
@@ -32,24 +32,29 @@ export function LoginModal({
     } catch {}
     return backgroundImageUrl || '';
   });
+  const [noticeEnabled, setNoticeEnabled] = useState(false);
+  const [noticeMessage, setNoticeMessage] = useState('');
 
   useEffect(() => {
     if (backgroundImageUrl !== undefined) {
       setBgImage(backgroundImageUrl);
-    } else {
-      // Fetch public settings for any background configured by administrator
-      apiService
-        .getPublicSettings()
-        .then((res) => {
-          if (res.loginBackgroundImage) {
-            setBgImage(res.loginBackgroundImage);
-            try {
-              localStorage.setItem('id_card_login_bg', res.loginBackgroundImage);
-            } catch {}
-          }
-        })
-        .catch(() => {});
     }
+    // Fetch public settings for backdrop and optional login notice
+    apiService
+      .getPublicSettings()
+      .then((res) => {
+        if (res.loginBackgroundImage && backgroundImageUrl === undefined) {
+          setBgImage(res.loginBackgroundImage);
+          try {
+            localStorage.setItem('id_card_login_bg', res.loginBackgroundImage);
+          } catch {}
+        }
+        setNoticeEnabled(Boolean(res.loginNoticeEnabled));
+        if (res.loginNoticeMessage) {
+          setNoticeMessage(res.loginNoticeMessage);
+        }
+      })
+      .catch(() => {});
   }, [backgroundImageUrl, isOpen]);
 
   if (!isOpen) return null;
@@ -195,6 +200,14 @@ export function LoginModal({
               </>
             )}
           </button>
+
+          {/* Optional small announcement / notice below the login form */}
+          {noticeEnabled && noticeMessage && (
+            <div className="mt-3.5 p-2.5 bg-slate-50 border border-slate-200/90 rounded-xl text-[11px] text-slate-600 flex items-start gap-2 shadow-2xs animate-in fade-in">
+              <Info className="w-3.5 h-3.5 text-rose-600 shrink-0 mt-0.5" />
+              <span className="leading-snug">{noticeMessage}</span>
+            </div>
+          )}
         </form>
       </div>
     </div>

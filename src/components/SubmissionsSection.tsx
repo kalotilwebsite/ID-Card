@@ -233,15 +233,14 @@ export function SubmissionsSection({
     }
   };
 
-  // Delete submission
-  const handleDeleteSubmission = async (enrollId: string, empName: string) => {
-    if (
-      !window.confirm(
-        `Are you sure you want to delete the submission for ${empName} (Enroll ID: ${enrollId})? This will allow the supervisor/operator to re-submit this record.`
-      )
-    ) {
-      return;
-    }
+  // Delete submission state & handlers
+  const [deletingRecord, setDeletingRecord] = useState<{ enrollId: string; name: string } | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const confirmDeleteSubmission = async () => {
+    if (!deletingRecord) return;
+    setIsDeleting(true);
+    const { enrollId, name } = deletingRecord;
 
     try {
       await apiService.deleteSubmission(enrollId);
@@ -253,10 +252,13 @@ export function SubmissionsSection({
       });
       setStatusMessage({
         type: 'success',
-        text: `Submission for ${empName} (${enrollId}) deleted. It can now be re-entered.`,
+        text: `Submission for ${name} (${enrollId}) deleted successfully. It can now be re-entered.`,
       });
+      setDeletingRecord(null);
     } catch (err: any) {
       setStatusMessage({ type: 'error', text: err.message || 'Failed to delete submission.' });
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -674,7 +676,8 @@ export function SubmissionsSection({
 
                           {/* Delete */}
                           <button
-                            onClick={() => handleDeleteSubmission(sub.enrollId, emp.name)}
+                            type="button"
+                            onClick={() => setDeletingRecord({ enrollId: sub.enrollId, name: emp.name || sub.enrollId })}
                             className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
                             title="Delete submission (allow resubmission)"
                           >
@@ -876,6 +879,51 @@ export function SubmissionsSection({
                 className="px-4 py-2 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded-xl text-xs font-semibold"
               >
                 Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deletingRecord && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white border border-slate-200 w-full max-w-md rounded-2xl shadow-2xl overflow-hidden p-6 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 border border-rose-200 flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Delete Submission</h3>
+                <p className="text-xs text-slate-500 font-mono mt-0.5">
+                  Enroll ID: {deletingRecord.enrollId}
+                </p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Are you sure you want to delete the submission for{' '}
+              <strong className="text-slate-900 font-semibold">{deletingRecord.name}</strong>?
+              This record will be permanently removed from the print queue, allowing the supervisor or operator to re-submit this employee.
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setDeletingRecord(null)}
+                disabled={isDeleting}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteSubmission}
+                disabled={isDeleting}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>{isDeleting ? 'Deleting...' : 'Confirm Delete'}</span>
               </button>
             </div>
           </div>

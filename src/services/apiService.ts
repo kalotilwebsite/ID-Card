@@ -1,4 +1,4 @@
-import { AuthUser, UserRole, MasterEmployee, SubmissionRecord } from '../types';
+import { AuthUser, UserRole, MasterEmployee, SubmissionRecord, AppSettings } from '../types';
 
 const TOKEN_KEY = 'idcard_auth_token';
 const USER_KEY = 'idcard_auth_user';
@@ -282,19 +282,16 @@ export const apiService = {
   },
 
   // Settings
-  async getPublicSettings(): Promise<{ supervisorSuccessMessage: string; loginBackgroundImage?: string }> {
-    return request<{ supervisorSuccessMessage: string; loginBackgroundImage?: string }>('/api/settings/public');
+  async getPublicSettings(): Promise<AppSettings> {
+    return request<AppSettings>('/api/settings/public');
   },
 
-  async getAdminSettings(): Promise<{ supervisorSuccessMessage: string; loginBackgroundImage?: string }> {
-    return request<{ supervisorSuccessMessage: string; loginBackgroundImage?: string }>('/api/settings');
+  async getAdminSettings(): Promise<AppSettings> {
+    return request<AppSettings>('/api/settings');
   },
 
-  async updateAdminSettings(settings: {
-    supervisorSuccessMessage?: string;
-    loginBackgroundImage?: string;
-  }): Promise<{ supervisorSuccessMessage: string; loginBackgroundImage?: string }> {
-    return request<{ supervisorSuccessMessage: string; loginBackgroundImage?: string }>('/api/settings', {
+  async updateAdminSettings(settings: Partial<AppSettings>): Promise<AppSettings> {
+    return request<AppSettings>('/api/settings', {
       method: 'PUT',
       body: JSON.stringify(settings),
     });

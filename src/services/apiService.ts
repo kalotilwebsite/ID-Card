@@ -272,17 +272,29 @@ export const apiService = {
     });
   },
 
+  async resetSubmissionPrintStatus(enrollId: string): Promise<{ success: boolean; message: string; record: SubmissionRecord }> {
+    return request<{ success: boolean; message: string; record: SubmissionRecord }>(
+      `/api/submissions/${encodeURIComponent(enrollId)}/reset-print`,
+      {
+        method: 'POST',
+      }
+    );
+  },
+
   // Settings
-  async getPublicSettings(): Promise<{ supervisorSuccessMessage: string }> {
-    return request<{ supervisorSuccessMessage: string }>('/api/settings/public');
+  async getPublicSettings(): Promise<{ supervisorSuccessMessage: string; loginBackgroundImage?: string }> {
+    return request<{ supervisorSuccessMessage: string; loginBackgroundImage?: string }>('/api/settings/public');
   },
 
-  async getAdminSettings(): Promise<{ supervisorSuccessMessage: string }> {
-    return request<{ supervisorSuccessMessage: string }>('/api/settings');
+  async getAdminSettings(): Promise<{ supervisorSuccessMessage: string; loginBackgroundImage?: string }> {
+    return request<{ supervisorSuccessMessage: string; loginBackgroundImage?: string }>('/api/settings');
   },
 
-  async updateAdminSettings(settings: { supervisorSuccessMessage?: string }): Promise<{ supervisorSuccessMessage: string }> {
-    return request<{ supervisorSuccessMessage: string }>('/api/settings', {
+  async updateAdminSettings(settings: {
+    supervisorSuccessMessage?: string;
+    loginBackgroundImage?: string;
+  }): Promise<{ supervisorSuccessMessage: string; loginBackgroundImage?: string }> {
+    return request<{ supervisorSuccessMessage: string; loginBackgroundImage?: string }>('/api/settings', {
       method: 'PUT',
       body: JSON.stringify(settings),
     });

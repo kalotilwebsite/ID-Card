@@ -1,5 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, X, Check, RotateCcw, MessageSquare, Shield, AlertCircle } from 'lucide-react';
+import {
+  Settings,
+  X,
+  Check,
+  RotateCcw,
+  MessageSquare,
+  Shield,
+  AlertCircle,
+  Image as ImageIcon,
+  Upload,
+  Trash2,
+} from 'lucide-react';
 import { apiService } from '../services/apiService';
 
 interface AdminSettingsModalProps {
@@ -17,6 +28,7 @@ export function AdminSettingsModal({
   onSettingsSaved,
 }: AdminSettingsModalProps) {
   const [supervisorSuccessMessage, setSupervisorSuccessMessage] = useState('');
+  const [loginBackgroundImage, setLoginBackgroundImage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -32,6 +44,7 @@ export function AdminSettingsModal({
       try {
         const res = await apiService.getAdminSettings();
         setSupervisorSuccessMessage(res.supervisorSuccessMessage || DEFAULT_SUPERVISOR_MESSAGE);
+        setLoginBackgroundImage(res.loginBackgroundImage || '');
       } catch (err: any) {
         setSupervisorSuccessMessage(DEFAULT_SUPERVISOR_MESSAGE);
       } finally {
@@ -43,6 +56,31 @@ export function AdminSettingsModal({
   }, [isOpen]);
 
   if (!isOpen) return null;
+
+  const handleUploadBgImage = (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      setStatusMessage({ type: 'error', text: 'Please select a valid image file.' });
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const dataUrl = e.target?.result as string;
+      setLoginBackgroundImage(dataUrl);
+      setStatusMessage({
+        type: 'success',
+        text: 'Background image selected. Click Save Settings to persist.',
+      });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemoveBgImage = () => {
+    setLoginBackgroundImage('');
+    setStatusMessage({
+      type: 'success',
+      text: 'Custom background removed. Click Save Settings to restore the default backdrop.',
+    });
+  };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -57,8 +95,19 @@ export function AdminSettingsModal({
     try {
       await apiService.updateAdminSettings({
         supervisorSuccessMessage: supervisorSuccessMessage.trim(),
+        loginBackgroundImage,
       });
-      setStatusMessage({ type: 'success', text: 'Supervisor confirmation message updated and saved successfully!' });
+
+      // Synchronize with client localStorage for instantaneous boot
+      try {
+        if (loginBackgroundImage) {
+          localStorage.setItem('id_card_login_bg', loginBackgroundImage);
+        } else {
+          localStorage.removeItem('id_card_login_bg');
+        }
+      } catch {}
+
+      setStatusMessage({ type: 'success', text: 'System settings updated and saved successfully!' });
       if (onSettingsSaved) onSettingsSaved();
       setTimeout(() => {
         onClose();
@@ -190,6 +239,79 @@ export function AdminSettingsModal({
               <div className="p-2.5 bg-slate-50 rounded-lg text-xs border border-slate-100 flex items-center justify-between text-slate-600">
                 <span className="font-medium">Employee: MD. RABIUL AWAL</span>
                 <span className="font-mono font-bold text-slate-700">Enroll ID: 586665</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Section 2: Login Screen Background Image */}
+          <div className="space-y-3 pt-4 border-t border-slate-200">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                <ImageIcon className="w-3.5 h-3.5 text-rose-600" />
+                <span>Login Screen Background Image</span>
+              </label>
+              {loginBackgroundImage && (
+                <button
+                  type="button"
+                  onClick={handleRemoveBgImage}
+                  className="text-[11px] text-rose-600 hover:text-rose-700 font-semibold flex items-center gap-1 transition-colors"
+                >
+                  <Trash2 className="w-3 h-3" />
+                  <span>Remove (Use Default)</span>
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-4 bg-slate-50 border border-slate-200 rounded-xl p-3">
+              {/* Thumbnail Preview */}
+              <div
+                className="w-24 h-16 rounded-lg border border-slate-300 bg-slate-200 overflow-hidden flex items-center justify-center shrink-0 relative shadow-2xs"
+                style={{
+                  backgroundImage: loginBackgroundImage ? `url(${loginBackgroundImage})` : undefined,
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center',
+                }}
+              >
+                {!loginBackgroundImage && (
+                  <span className="text-[10px] text-slate-500 font-medium text-center px-1">
+                    Default Theme
+                  </span>
+                )}
+              </div>
+
+              {/* Upload Controls */}
+              <div className="flex-1 space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <label className="px-3 py-1.5 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 text-xs font-semibold rounded-lg cursor-pointer transition-colors flex items-center gap-1.5 shadow-2xs">
+                    <Upload className="w-3.5 h-3.5 text-rose-600" />
+                    <span>{loginBackgroundImage ? 'Replace Image' : 'Upload Image'}</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        if (e.target.files && e.target.files[0]) {
+                          handleUploadBgImage(e.target.files[0]);
+                        }
+                      }}
+                    />
+                  </label>
+
+                  {loginBackgroundImage && (
+                    <button
+                      type="button"
+                      onClick={handleRemoveBgImage}
+                      className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold rounded-lg transition-colors"
+                    >
+                      Use Default
+                    </button>
+                  )}
+                </div>
+                <p className="text-[11px] text-slate-500">
+                  {loginBackgroundImage
+                    ? 'Custom image active. Will display behind the login form for all users.'
+                    : 'No custom image set. Default clean dark backdrop is active.'}
+                </p>
               </div>
             </div>
           </div>

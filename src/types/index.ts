@@ -15,6 +15,10 @@ export interface EmployeeCardData {
   signatureUrl?: string;
   isValid?: boolean;
   validationErrors?: string[];
+  printStatus?: 'pending' | 'printed';
+  printCount?: number;
+  printedAt?: string;
+  reprintHistory?: PrintHistoryItem[];
 }
 
 export type CardFieldKey =
@@ -313,5 +317,6 @@ export interface SubmissionRecord {
 
 export interface AppSettings {
   supervisorSuccessMessage: string;
+  loginBackgroundImage?: string;
 }
 

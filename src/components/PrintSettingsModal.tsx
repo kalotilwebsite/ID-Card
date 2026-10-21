@@ -8,6 +8,7 @@ interface PrintSettingsModalProps {
   settings: PrintSettings;
   onChangeSettings: (settings: PrintSettings) => void;
   totalCardsCount: number;
+  onConfirmPrintOk?: () => void;
 }
 
 export const DEFAULT_PRINT_SETTINGS: PrintSettings = {
@@ -40,7 +41,11 @@ export const PrintSettingsModal: React.FC<PrintSettingsModalProps> = ({
   settings,
   onChangeSettings,
   totalCardsCount,
+  onConfirmPrintOk,
 }) => {
+  const [showPostPrintConfirm, setShowPostPrintConfirm] = useState(false);
+  const [printConfirmed, setPrintConfirmed] = useState(false);
+
   if (!isOpen) return null;
 
   const update = (partial: Partial<PrintSettings>) => {
@@ -621,12 +626,51 @@ export const PrintSettingsModal: React.FC<PrintSettingsModalProps> = ({
           </div>
         </div>
 
+        {/* Post-Print Explicit Confirmation Banner */}
+        {showPostPrintConfirm && (
+          <div className="p-3.5 bg-emerald-50 border-t border-emerald-200 flex flex-wrap items-center justify-between gap-2 animate-in fade-in">
+            <div className="flex items-center gap-2">
+              <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span className="text-xs font-semibold text-emerald-950">
+                Did physical printing finish on your printer?
+              </span>
+            </div>
+
+            {!printConfirmed ? (
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (onConfirmPrintOk) onConfirmPrintOk();
+                    setPrintConfirmed(true);
+                  }}
+                  className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-xs transition-colors"
+                >
+                  Confirm Print OK
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowPostPrintConfirm(false)}
+                  className="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-200 text-slate-600 rounded-lg text-xs font-medium"
+                >
+                  Keep Print Pending
+                </button>
+              </div>
+            ) : (
+              <span className="text-xs font-bold text-emerald-700">
+                ✓ Updated to Print OK!
+              </span>
+            )}
+          </div>
+        )}
+
         {/* Footer */}
         <div className="p-4 border-t border-gray-200 bg-gray-50 flex items-center justify-between flex-shrink-0">
           <button
             type="button"
             onClick={() => {
               window.print();
+              setShowPostPrintConfirm(true);
             }}
             className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold shadow transition-colors flex items-center gap-1.5"
           >

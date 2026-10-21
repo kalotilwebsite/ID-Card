@@ -25,11 +25,13 @@ const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
 
 interface AppSettings {
   supervisorSuccessMessage: string;
+  loginBackgroundImage?: string;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
   supervisorSuccessMessage:
     'Employee ID Card data has been submitted successfully and queued for administrative review and printing. Thank you!',
+  loginBackgroundImage: '',
 };
 
 // Helper for atomic file read/write
@@ -268,13 +270,14 @@ function requireAdminRole(req: AuthenticatedRequest, res: Response, next: NextFu
 // --- AUTHENTICATION ---
 
 app.post('/api/auth/login', (req: Request, res: Response) => {
-  const { username, password } = req.body;
-  if (!username || !password) {
-    res.status(400).json({ error: 'Username and password are required.' });
+  const { username, password, enrollmentId, employeeId } = req.body;
+  const rawId = (enrollmentId || employeeId || username || '').trim();
+  if (!rawId || !password) {
+    res.status(400).json({ error: 'Enrollment ID and password are required.' });
     return;
   }
 
-  const cleanInput = username.trim().toLowerCase();
+  const cleanInput = rawId.toLowerCase();
   const users = readJsonFile<any[]>(USERS_FILE, []);
   const user = users.find(
     (u) =>
@@ -285,7 +288,7 @@ app.post('/api/auth/login', (req: Request, res: Response) => {
   );
 
   if (!user) {
-    res.status(401).json({ error: 'Invalid username or password.' });
+    res.status(401).json({ error: 'Invalid Enrollment ID or password.' });
     return;
   }
 
@@ -806,6 +809,28 @@ app.post('/api/submissions/bulk-mark-printed', authenticateToken, requireAdminRo
   });
 });
 
+// Admin-only: reset print status back to pending
+app.post('/api/submissions/:enrollId/reset-print', authenticateToken, requireAdminRole, (req: AuthenticatedRequest, res: Response) => {
+  const { enrollId } = req.params;
+  const submissions = readJsonFile<Record<string, any>>(SUBMISSIONS_FILE, {});
+  const record = submissions[enrollId];
+
+  if (!record) {
+    res.status(404).json({ error: `Submission for Enrollment ID "${enrollId}" not found.` });
+    return;
+  }
+
+  record.printStatus = 'pending';
+  submissions[enrollId] = record;
+  writeJsonFile(SUBMISSIONS_FILE, submissions);
+
+  res.json({
+    success: true,
+    message: `Print status for ${enrollId} reset to pending.`,
+    record,
+  });
+});
+
 // Admin-only: delete submission to allow resubmission if needed
 app.delete('/api/submissions/:enrollId', authenticateToken, requireAdminRole, (req: Request, res: Response) => {
   const { enrollId } = req.params;
@@ -823,10 +848,13 @@ app.delete('/api/submissions/:enrollId', authenticateToken, requireAdminRole, (r
 
 // --- SETTINGS (ADMIN CONFIGURABLE & PUBLIC CONFIRMATION MESSAGE) ---
 
-// Authenticated users (including supervisors): get public confirmation message
-app.get('/api/settings/public', authenticateToken, (_req: Request, res: Response) => {
+// Public endpoint (accessible before login): returns confirmation message and login background image
+app.get('/api/settings/public', (_req: Request, res: Response) => {
   const settings = readJsonFile<AppSettings>(SETTINGS_FILE, DEFAULT_SETTINGS);
-  res.json({ supervisorSuccessMessage: settings.supervisorSuccessMessage || DEFAULT_SETTINGS.supervisorSuccessMessage });
+  res.json({
+    supervisorSuccessMessage: settings.supervisorSuccessMessage || DEFAULT_SETTINGS.supervisorSuccessMessage,
+    loginBackgroundImage: settings.loginBackgroundImage || '',
+  });
 });
 
 // Admin-only: get full application settings
@@ -843,6 +871,9 @@ app.put('/api/settings', authenticateToken, requireAdminRole, (req: Request, res
     supervisorSuccessMessage: req.body.supervisorSuccessMessage !== undefined
       ? String(req.body.supervisorSuccessMessage).trim()
       : current.supervisorSuccessMessage,
+    loginBackgroundImage: req.body.loginBackgroundImage !== undefined
+      ? String(req.body.loginBackgroundImage)
+      : (current.loginBackgroundImage || ''),
   };
   writeJsonFile(SETTINGS_FILE, updated);
   res.json(updated);

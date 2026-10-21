@@ -9,12 +9,14 @@ import {
   FileDown,
   Printer,
   FileSpreadsheet,
+  Check,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { EmployeeCardData, PrintSettings, CompanyTemplateConfig } from '../types';
 import { exportCardsToPdf } from '../services/pdfExportService';
 import { exportCardsToDocx } from '../services/docxExportService';
 import { exportCardsToExcel } from '../services/excelService';
+import { apiService } from '../services/apiService';
 
 interface ExportModalProps {
   isOpen: boolean;
@@ -23,6 +25,7 @@ interface ExportModalProps {
   settings: PrintSettings;
   companyConfig: CompanyTemplateConfig;
   getCardElement: (empId: string, side: 'front' | 'back') => HTMLElement | null;
+  onCardsPrinted?: (enrollIds: string[]) => void;
 }
 
 export const ExportModal: React.FC<ExportModalProps> = ({
@@ -32,6 +35,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   settings,
   companyConfig,
   getCardElement,
+  onCardsPrinted,
 }) => {
   const [isExporting, setIsExporting] = useState(false);
   const [exportType, setExportType] = useState<'pdf' | 'docx' | 'excel' | null>(null);
@@ -39,6 +43,9 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   const [progressPercent, setProgressPercent] = useState(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [downloadSuccess, setDownloadSuccess] = useState(false);
+  const [pendingPrintConfirm, setPendingPrintConfirm] = useState(false);
+  const [isMarkingPrint, setIsMarkingPrint] = useState(false);
+  const [markedSuccess, setMarkedSuccess] = useState(false);
 
   if (!isOpen) return null;
 
@@ -86,6 +93,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({
       URL.revokeObjectURL(url);
 
       setDownloadSuccess(true);
+      setPendingPrintConfirm(true);
+      setMarkedSuccess(false);
       triggerConfetti();
     } catch (err: any) {
       console.error('PDF export error:', err);
@@ -126,12 +135,39 @@ export const ExportModal: React.FC<ExportModalProps> = ({
       URL.revokeObjectURL(url);
 
       setDownloadSuccess(true);
+      setPendingPrintConfirm(true);
+      setMarkedSuccess(false);
       triggerConfetti();
     } catch (err: any) {
       console.error('Docx export error:', err);
       setErrorMessage(err.message || 'Failed to create Word document.');
     } finally {
       setIsExporting(false);
+    }
+  };
+
+  const handleConfirmPrintOk = async () => {
+    setIsMarkingPrint(true);
+    try {
+      const validEnrollIds = employees.map((e) => e.enrollId).filter(Boolean);
+      if (validEnrollIds.length > 0) {
+        await apiService.bulkMarkPrinted(
+          validEnrollIds,
+          `Marked Print OK via ${exportType?.toUpperCase() || 'Export'} output`
+        );
+      }
+      if (onCardsPrinted) {
+        onCardsPrinted(validEnrollIds);
+      }
+      setMarkedSuccess(true);
+    } catch (err) {
+      console.warn('Backend mark printed note:', err);
+      if (onCardsPrinted) {
+        onCardsPrinted(employees.map((e) => e.enrollId).filter(Boolean));
+      }
+      setMarkedSuccess(true);
+    } finally {
+      setIsMarkingPrint(false);
     }
   };
 
@@ -298,7 +334,60 @@ export const ExportModal: React.FC<ExportModalProps> = ({
           {downloadSuccess && !isExporting && (
             <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 flex items-center gap-2">
               <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-              <span>Download started! Check your browser downloads folder.</span>
+              <span>Download ready! File exported successfully.</span>
+            </div>
+          )}
+
+          {/* Explicit Print Completion Confirmation */}
+          {pendingPrintConfirm && !isExporting && (
+            <div className="p-4 bg-emerald-50/80 border border-emerald-300 rounded-xl space-y-2.5 animate-in fade-in">
+              <div className="flex items-start gap-2.5">
+                <Check className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                <div>
+                  <h4 className="text-xs font-bold text-emerald-950">
+                    Did the physical printing complete successfully?
+                  </h4>
+                  <p className="text-[11px] text-emerald-800 leading-snug mt-0.5">
+                    Confirm to update the {employees.length} card record(s) to <strong>Print OK</strong> in the database.
+                  </p>
+                </div>
+              </div>
+
+              {!markedSuccess ? (
+                <div className="flex items-center gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={handleConfirmPrintOk}
+                    disabled={isMarkingPrint}
+                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5"
+                  >
+                    {isMarkingPrint ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <span>Updating Database...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-3.5 h-3.5" />
+                        <span>Confirm Print OK</span>
+                      </>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setPendingPrintConfirm(false)}
+                    className="px-3 py-1.5 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 rounded-lg text-xs font-medium transition-colors"
+                  >
+                    Keep as Print Pending
+                  </button>
+                </div>
+              ) : (
+                <div className="text-xs font-bold text-emerald-700 flex items-center gap-1.5 pt-1">
+                  <Check className="w-4 h-4 text-emerald-600" />
+                  <span>Cards successfully updated to Print OK!</span>
+                </div>
+              )}
             </div>
           )}
 

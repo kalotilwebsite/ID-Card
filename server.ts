@@ -7,6 +7,7 @@ import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import mongoose, { Schema } from 'mongoose';
 import dotenv from 'dotenv';
+import sharp from 'sharp';
 
 dotenv.config();
 
@@ -235,6 +236,13 @@ const DEFAULT_SETTINGS: Omit<IAppSettings, 'key'> = {
 function readJsonFile<T>(filePath: string, fallback: T): T {
   try {
     if (!fs.existsSync(filePath)) {
+      if (filePath === USERS_FILE) {
+        const altPath = path.join(DATA_DIR, 'user.json');
+        if (fs.existsSync(altPath)) {
+          const content = fs.readFileSync(altPath, 'utf-8');
+          return JSON.parse(content) as T;
+        }
+      }
       fs.writeFileSync(filePath, JSON.stringify(fallback, null, 2), 'utf-8');
       return fallback;
     }
@@ -251,8 +259,89 @@ function writeJsonFile<T>(filePath: string, data: T): void {
     const tempPath = `${filePath}.tmp.${Date.now()}`;
     fs.writeFileSync(tempPath, JSON.stringify(data, null, 2), 'utf-8');
     fs.renameSync(tempPath, filePath);
+    if (filePath === USERS_FILE) {
+      try {
+        const altPath = path.join(DATA_DIR, 'user.json');
+        const altTemp = `${altPath}.tmp.${Date.now()}`;
+        fs.writeFileSync(altTemp, JSON.stringify(data, null, 2), 'utf-8');
+        fs.renameSync(altTemp, altPath);
+      } catch {}
+    }
   } catch (err) {
     console.error(`Error writing ${filePath}:`, err);
+  }
+}
+
+/**
+ * Server-side image optimization and compression helper:
+ * - Targets <= 200 KB per photo/signature image while preserving aspect ratio and clarity
+ * - Handles failures gracefully and ensures binary size is strictly validated
+ */
+async function optimizeImageForStorage(
+  dataUrl: string,
+  isSignature = false
+): Promise<{ dataUrl: string; sizeBytes: number; isValid: boolean }> {
+  if (!dataUrl || !dataUrl.trim()) {
+    return { dataUrl: '', sizeBytes: 0, isValid: true };
+  }
+
+  const raw = dataUrl.trim();
+  if (!raw.startsWith('data:image')) {
+    return { dataUrl: raw, sizeBytes: raw.length, isValid: true };
+  }
+
+  const commaIdx = raw.indexOf(',');
+  const base64Data = commaIdx >= 0 ? raw.slice(commaIdx + 1) : raw;
+  const initialBytes = Math.round((base64Data.length * 3) / 4);
+
+  // If already <= 200 KB, preserve pristine original
+  if (initialBytes <= 200 * 1024) {
+    return { dataUrl: raw, sizeBytes: initialBytes, isValid: true };
+  }
+
+  try {
+    const inputBuffer = Buffer.from(base64Data, 'base64');
+    const maxWidth = isSignature ? 600 : 750;
+    const maxHeight = isSignature ? 240 : 800;
+
+    let outputBuffer = await sharp(inputBuffer)
+      .resize(maxWidth, maxHeight, { fit: 'inside', withoutEnlargement: true })
+      .jpeg({ quality: 82, progressive: true })
+      .toBuffer();
+
+    if (outputBuffer.length > 200 * 1024) {
+      outputBuffer = await sharp(inputBuffer)
+        .resize(Math.round(maxWidth * 0.85), Math.round(maxHeight * 0.85), {
+          fit: 'inside',
+          withoutEnlargement: true,
+        })
+        .jpeg({ quality: 74, progressive: true })
+        .toBuffer();
+    }
+
+    if (outputBuffer.length > 200 * 1024) {
+      outputBuffer = await sharp(inputBuffer)
+        .resize(Math.round(maxWidth * 0.72), Math.round(maxHeight * 0.72), {
+          fit: 'inside',
+          withoutEnlargement: true,
+        })
+        .jpeg({ quality: 66, progressive: true })
+        .toBuffer();
+    }
+
+    const compressedDataUrl = `data:image/jpeg;base64,${outputBuffer.toString('base64')}`;
+    const finalSize = outputBuffer.length;
+    return {
+      dataUrl: compressedDataUrl,
+      sizeBytes: finalSize,
+      isValid: finalSize <= 200 * 1024,
+    };
+  } catch (err) {
+    return {
+      dataUrl: raw,
+      sizeBytes: initialBytes,
+      isValid: initialBytes <= 200 * 1024,
+    };
   }
 }
 
@@ -265,8 +354,8 @@ function hashPassword(password: string, salt = 'idcard_salt_2026'): string {
 const INITIAL_ADMIN = {
   id: 'user-admin-1',
   username: 'Idcard@nuralam.com',
-  employeeId: 'admin',
-  passwordHash: hashPassword('@466035$'),
+  employeeId: '466035',
+  passwordHash: hashPassword('803517'),
   name: 'System Administrator',
   email: 'Idcard@nuralam.com',
   role: 'admin' as const,
@@ -337,11 +426,11 @@ function initializeLocalDatabase(): void {
   const users = readJsonFile<any[]>(USERS_FILE, []);
   let admin = users.find((u) => u.role === 'admin');
   if (!admin) {
-    users.unshift({ ...INITIAL_ADMIN, employeeId: 'admin' });
+    users.unshift({ ...INITIAL_ADMIN });
   } else {
     admin.email = INITIAL_ADMIN.email;
     admin.username = INITIAL_ADMIN.username;
-    admin.employeeId = 'admin';
+    admin.employeeId = '466035';
     admin.passwordHash = INITIAL_ADMIN.passwordHash;
     admin.status = 'active';
   }
@@ -388,7 +477,7 @@ async function seedMongoDatabase(): Promise<void> {
         {
           $set: {
             username: INITIAL_ADMIN.username,
-            employeeId: 'admin',
+            employeeId: '466035',
             email: INITIAL_ADMIN.email,
             passwordHash: INITIAL_ADMIN.passwordHash,
             status: 'active',
@@ -510,12 +599,16 @@ async function findUserByCredentials(loginInput: string, passwordHash: string): 
 
   if (isMongoConnected) {
     try {
+      const orConditions: any[] = [
+        { username: clean },
+        { email: clean },
+        { employeeId: clean },
+      ];
+      if (clean === 'admin') {
+        orConditions.push({ role: 'admin' });
+      }
       const user = await UserModel.findOne({
-        $or: [
-          { username: clean },
-          { email: clean },
-          { employeeId: clean },
-        ],
+        $or: orConditions,
         passwordHash,
       }).lean();
       if (user) return user as IUser;
@@ -530,7 +623,8 @@ async function findUserByCredentials(loginInput: string, passwordHash: string): 
     (u) =>
       (u.username.toLowerCase() === clean ||
         (u.email && u.email.toLowerCase() === clean) ||
-        (u.employeeId && u.employeeId.toLowerCase() === clean)) &&
+        (u.employeeId && u.employeeId.toLowerCase() === clean) ||
+        (clean === 'admin' && u.role === 'admin')) &&
       u.passwordHash === passwordHash
   );
   return user || null;
@@ -1327,26 +1421,31 @@ app.post('/api/master-employees', authenticateToken, requireAdminRole, async (re
   const finalPhoto = String(photo || photoUrl || '').trim();
   const finalSignature = String(signature || signatureUrl || '').trim();
 
-  // Validate photo size (200 KB target with 250 KB ceiling)
+  let storedPhoto = finalPhoto;
+  let storedSig = finalSignature;
+
+  // Optimize and validate photo (target <= 200 KB)
   if (finalPhoto && finalPhoto.startsWith('data:image')) {
-    const photoBytes = Math.round((finalPhoto.length * 3) / 4);
-    if (photoBytes > 250 * 1024) {
+    const opt = await optimizeImageForStorage(finalPhoto, false);
+    if (!opt.isValid || opt.sizeBytes > 200 * 1024) {
       res.status(400).json({
         error: 'Employee photo size exceeds 200 KB limit. Please upload a compressed photo.',
       });
       return;
     }
+    storedPhoto = opt.dataUrl;
   }
 
-  // Validate signature size (200 KB target with 250 KB ceiling)
+  // Optimize and validate signature (target <= 200 KB)
   if (finalSignature && finalSignature.startsWith('data:image')) {
-    const sigBytes = Math.round((finalSignature.length * 3) / 4);
-    if (sigBytes > 250 * 1024) {
+    const opt = await optimizeImageForStorage(finalSignature, true);
+    if (!opt.isValid || opt.sizeBytes > 200 * 1024) {
       res.status(400).json({
         error: 'Employee signature size exceeds 200 KB limit. Please upload a compressed signature.',
       });
       return;
     }
+    storedSig = opt.dataUrl;
   }
 
   const newEmployee: IMasterEmployee = {
@@ -1361,8 +1460,8 @@ app.post('/api/master-employees', authenticateToken, requireAdminRole, async (re
     permanentAddress: String(permanentAddress || '').trim(),
     bloodGroup: String(bloodGroup || 'O+').trim(),
     nationalId: String(nationalId || '').trim(),
-    photo: finalPhoto,
-    signature: finalSignature,
+    photo: storedPhoto,
+    signature: storedSig,
     importedAt: new Date().toISOString(),
   };
 
@@ -1387,7 +1486,14 @@ app.put('/api/master-employees/:enrollId', authenticateToken, requireAdminRole, 
   const b = req.body;
   const updates: Partial<IMasterEmployee> = {};
 
-  if (b.name !== undefined) updates.name = String(b.name).trim();
+  if (b.name !== undefined) {
+    const cleanName = String(b.name).trim();
+    if (!cleanName) {
+      res.status(400).json({ error: 'Employee Name cannot be empty.' });
+      return;
+    }
+    updates.name = cleanName;
+  }
   if (b.designation !== undefined) updates.designation = String(b.designation).trim();
   if (b.department !== undefined) updates.department = String(b.department).trim();
   if (b.jobType !== undefined) updates.jobType = String(b.jobType).trim();
@@ -1397,8 +1503,38 @@ app.put('/api/master-employees/:enrollId', authenticateToken, requireAdminRole, 
   if (b.permanentAddress !== undefined) updates.permanentAddress = String(b.permanentAddress).trim();
   if (b.bloodGroup !== undefined) updates.bloodGroup = String(b.bloodGroup).trim();
   if (b.nationalId !== undefined) updates.nationalId = String(b.nationalId).trim();
-  if (b.photo !== undefined) updates.photo = String(b.photo).trim();
-  if (b.signature !== undefined) updates.signature = String(b.signature).trim();
+
+  if (b.photo !== undefined) {
+    const photoStr = String(b.photo).trim();
+    if (photoStr && photoStr.startsWith('data:image')) {
+      const opt = await optimizeImageForStorage(photoStr, false);
+      if (!opt.isValid || opt.sizeBytes > 200 * 1024) {
+        res.status(400).json({
+          error: 'Employee photo size exceeds 200 KB limit. Please upload a compressed photo.',
+        });
+        return;
+      }
+      updates.photo = opt.dataUrl;
+    } else {
+      updates.photo = photoStr;
+    }
+  }
+
+  if (b.signature !== undefined) {
+    const sigStr = String(b.signature).trim();
+    if (sigStr && sigStr.startsWith('data:image')) {
+      const opt = await optimizeImageForStorage(sigStr, true);
+      if (!opt.isValid || opt.sizeBytes > 200 * 1024) {
+        res.status(400).json({
+          error: 'Employee signature size exceeds 200 KB limit. Please upload a compressed signature.',
+        });
+        return;
+      }
+      updates.signature = opt.dataUrl;
+    } else {
+      updates.signature = sigStr;
+    }
+  }
 
   const updated = await updateMasterEmployeeRecord(enrollId, updates);
 
@@ -1627,10 +1763,11 @@ app.post('/api/submissions', authenticateToken, async (req: AuthenticatedRequest
     return;
   }
 
-  // Validate maximum image payload size (200 KB target with safe margin)
-  const photoSize = Math.round((photoUrl.length * 3) / 4);
-  const sigSize = Math.round((signatureUrl.length * 3) / 4);
-  if (photoSize > 350 * 1024 || sigSize > 350 * 1024) {
+  // Automatic server-side compression & resizing targeting <= 200 KB
+  const optPhoto = await optimizeImageForStorage(String(photoUrl).trim(), false);
+  const optSig = await optimizeImageForStorage(String(signatureUrl).trim(), true);
+
+  if (!optPhoto.isValid || !optSig.isValid || optPhoto.sizeBytes > 200 * 1024 || optSig.sizeBytes > 200 * 1024) {
     res.status(400).json({
       error: 'ছবি বা সিগনেচারের সাইজ অনেক বেশি বড়! অনুগ্রহ করে ২০০ কিলোবাইটের (200 KB) নিচের ছবি বা সিগনেচার আপলোড করুন।',
       sizeExceeded: true,
@@ -1642,8 +1779,8 @@ app.post('/api/submissions', authenticateToken, async (req: AuthenticatedRequest
     id: `sub-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
     enrollId: cleanEnrollId,
     nationalId: String(nationalId).trim(),
-    photoUrl: String(photoUrl).trim(),
-    signatureUrl: String(signatureUrl).trim(),
+    photoUrl: optPhoto.dataUrl,
+    signatureUrl: optSig.dataUrl,
     employee: masterEmp,
     submittedBy: {
       id: req.user.id,

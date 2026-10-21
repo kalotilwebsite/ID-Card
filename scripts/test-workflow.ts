@@ -46,7 +46,7 @@ async function runTestSuite() {
   }
 
   try {
-    // 1. Test Admin Login with Initial Credentials: Idcard@nuralam.com / @466035$
+    // 1. Test Admin Login with Approved Numeric Credentials: 466035 / 803517
     console.log('\n--- 1. Testing Administrator Authentication ---');
     const adminLoginRes = await makeRequest(
       {
@@ -56,14 +56,33 @@ async function runTestSuite() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       },
-      { username: 'Idcard@nuralam.com', password: '@466035$' }
+      { enroll: '466035', password: '803517' }
     );
     assert(
-      adminLoginRes.statusCode === 200 && adminLoginRes.data?.user?.role === 'admin',
-      'Admin logs in successfully with Idcard@nuralam.com and @466035$',
+      adminLoginRes.statusCode === 200 &&
+        adminLoginRes.data?.user?.role === 'admin' &&
+        adminLoginRes.data?.user?.employeeId === '466035',
+      'Admin logs in successfully with numeric Enroll "466035" and numeric password "803517"',
       JSON.stringify(adminLoginRes.data)
     );
     const adminToken = adminLoginRes.data?.token;
+
+    // Test unified login: Admin logs in with legacy alias enroll: 'admin'
+    const adminEnrollLogin = await makeRequest(
+      {
+        hostname: 'localhost',
+        port: 3000,
+        path: '/api/auth/login',
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      },
+      { enroll: 'admin', password: '803517' }
+    );
+    assert(
+      adminEnrollLogin.statusCode === 200 && adminEnrollLogin.data?.user?.role === 'admin',
+      'Unified login: Admin logs in successfully using legacy alias "admin"',
+      JSON.stringify(adminEnrollLogin.data)
+    );
 
     // Test invalid admin password
     const badAdminLogin = await makeRequest(
@@ -78,8 +97,25 @@ async function runTestSuite() {
     );
     assert(badAdminLogin.statusCode === 401, 'Invalid admin password rejected with 401');
 
-    // 2. Test Supervisor Login with pre-assigned Enrollment ID
+    // 2. Test Supervisor Authentication
     console.log('\n--- 2. Testing Supervisor Authentication ---');
+    // Test unified login: Supervisor logs in using Enroll field
+    const supUnifiedLogin = await makeRequest(
+      {
+        hostname: 'localhost',
+        port: 3000,
+        path: '/api/auth/login',
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      },
+      { enroll: 'SUP-2026-01', password: 'supervisor123' }
+    );
+    assert(
+      supUnifiedLogin.statusCode === 200 && supUnifiedLogin.data?.user?.role === 'supervisor',
+      'Unified login: Supervisor logs in successfully using Enroll field "SUP-2026-01"',
+      JSON.stringify(supUnifiedLogin.data)
+    );
+
     const supLoginRes = await makeRequest(
       {
         hostname: 'localhost',
@@ -257,6 +293,192 @@ async function runTestSuite() {
       'Admin can edit employee record fields',
       JSON.stringify(editRes.data)
     );
+
+    // 5b. Test Admin-Only Individual Employee Creation, Duplicate Prevention & Immediate Searchability
+    console.log('\n--- 5b. Testing Admin-Only Individual Employee Creation & Searchability ---');
+    // Clean up test record if present from earlier runs
+    await makeRequest({
+      hostname: 'localhost',
+      port: 3000,
+      path: '/api/master-employees/INDIV-TEST-001',
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+
+    // 1. Missing required field (missing name) -> must return 400
+    const missingNameRes = await makeRequest(
+      {
+        hostname: 'localhost',
+        port: 3000,
+        path: '/api/master-employees',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+      },
+      { enrollId: 'INDIV-TEST-001', name: '' }
+    );
+    assert(missingNameRes.statusCode === 400, 'Employee creation without name rejected with 400 Bad Request');
+
+    // 2. Missing required field (missing enrollId) -> must return 400
+    const missingIdRes = await makeRequest(
+      {
+        hostname: 'localhost',
+        port: 3000,
+        path: '/api/master-employees',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+      },
+      { enrollId: '', name: 'Test Person' }
+    );
+    assert(missingIdRes.statusCode === 400, 'Employee creation without Enrollment ID rejected with 400 Bad Request');
+
+    // 3. Non-admin (supervisor) attempting creation -> must return 403
+    const supCreateRes = await makeRequest(
+      {
+        hostname: 'localhost',
+        port: 3000,
+        path: '/api/master-employees',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${supervisorToken}`,
+        },
+      },
+      { enrollId: 'INDIV-TEST-001', name: 'Unauthorized Person' }
+    );
+    assert(supCreateRes.statusCode === 403, 'Supervisor forbidden from creating master employee records (403)');
+
+    // 4. Successful Admin individual creation
+    const createSuccessRes = await makeRequest(
+      {
+        hostname: 'localhost',
+        port: 3000,
+        path: '/api/master-employees',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+      },
+      {
+        enrollId: 'INDIV-TEST-001',
+        name: 'MOKLESUR RAHMAN',
+        designation: 'Senior QC Auditor',
+        department: 'Quality Assurance',
+        jobType: 'Permanent',
+        bloodGroup: 'B+',
+        joiningDate: '01/01/2026',
+        cardIssue: '19/10/2026',
+        emergencyContact: '01711-223344',
+        permanentAddress: 'Dhanmondi, Dhaka',
+        nationalId: '19902691500001234',
+      }
+    );
+    assert(
+      createSuccessRes.statusCode === 201 && createSuccessRes.data?.employee?.enrollId === 'INDIV-TEST-001',
+      'Admin creates individual employee record successfully with 201 Created',
+      JSON.stringify(createSuccessRes.data)
+    );
+
+    // 5. Duplicate Enrollment ID creation blocked -> must return 409 Conflict
+    const duplicateCreateRes = await makeRequest(
+      {
+        hostname: 'localhost',
+        port: 3000,
+        path: '/api/master-employees',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+      },
+      {
+        enrollId: 'INDIV-TEST-001',
+        name: 'ATTEMPTED DUPLICATE MOKLESUR',
+        designation: 'Impostor',
+      }
+    );
+    assert(
+      duplicateCreateRes.statusCode === 409,
+      'Duplicate Enrollment ID creation strictly rejected with 409 Conflict'
+    );
+
+    // 6. Immediate Searchability: Supervisor search finds newly created employee
+    const supSearchNew = await makeRequest({
+      hostname: 'localhost',
+      port: 3000,
+      path: '/api/master-employees/search?q=MOKLESUR',
+      method: 'GET',
+      headers: { Authorization: `Bearer ${supervisorToken}` },
+    });
+    assert(
+      supSearchNew.statusCode === 200 &&
+        supSearchNew.data?.results?.some((r: any) => r.enrollId === 'INDIV-TEST-001'),
+      'Newly created employee is IMMEDIATELY available for supervisor search',
+      JSON.stringify(supSearchNew.data)
+    );
+
+    // 7. Immediate Lookup: Supervisor lookup returns full record
+    const supLookupNew = await makeRequest({
+      hostname: 'localhost',
+      port: 3000,
+      path: '/api/lookup-employee/INDIV-TEST-001',
+      method: 'GET',
+      headers: { Authorization: `Bearer ${supervisorToken}` },
+    });
+    assert(
+      supLookupNew.statusCode === 200 &&
+        supLookupNew.data?.found === true &&
+        supLookupNew.data?.employee?.name === 'MOKLESUR RAHMAN',
+      'Newly created employee is IMMEDIATELY available for supervisor lookup with complete details',
+      JSON.stringify(supLookupNew.data)
+    );
+
+    // 8. Edit individual employee
+    const editIndivRes = await makeRequest(
+      {
+        hostname: 'localhost',
+        port: 3000,
+        path: '/api/master-employees/INDIV-TEST-001',
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+      },
+      {
+        designation: 'Principal Quality Auditor',
+        bloodGroup: 'O+',
+      }
+    );
+    assert(
+      editIndivRes.statusCode === 200 &&
+        editIndivRes.data?.employee?.designation === 'Principal Quality Auditor' &&
+        editIndivRes.data?.employee?.bloodGroup === 'O+',
+      'Admin updates individual employee fields successfully'
+    );
+
+    // 9. Edit with empty name rejected
+    const editEmptyNameRes = await makeRequest(
+      {
+        hostname: 'localhost',
+        port: 3000,
+        path: '/api/master-employees/INDIV-TEST-001',
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+      },
+      { name: '   ' }
+    );
+    assert(editEmptyNameRes.statusCode === 400, 'Updating employee with empty name rejected with 400 Bad Request');
+
 
     // 6. Test Supervisor Form ON/OFF Control
     console.log('\n--- 6. Testing Supervisor Form ON/OFF Control ---');

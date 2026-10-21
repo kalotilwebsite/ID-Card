@@ -2,10 +2,10 @@
   {
     "id": "user-admin-1",
     "username": "Idcard@nuralam.com",
-    "passwordHash": "62d5d09139b702f810bf037010437b96b56c708942199baaf316ae798a863f37",
+    "passwordHash": "2221f65b9235e087770b763d6f98b6cae40d30b322098f11a98fe3640615d919",
     "name": "System Administrator",
     "email": "Idcard@nuralam.com",
-    "employeeId": "admin",
+    "employeeId": "466035",
     "role": "admin",
     "status": "active",
     "createdAt": "2026-10-20T06:44:11.376Z"

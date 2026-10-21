@@ -104,7 +104,7 @@ async function runTests() {
     const adminLoginRes = await fetch(`${BASE_URL}/api/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: 'Idcard@nuralam.com', password: '@466035$' }),
+      body: JSON.stringify({ enroll: '466035', password: '803517' }),
     });
     const adminData = await adminLoginRes.json();
     const adminToken = adminData.token;

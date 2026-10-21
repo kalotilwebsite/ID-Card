@@ -1,0 +1,67 @@
+[
+  {
+    "id": "user-admin-1",
+    "username": "Idcard@nuralam.com",
+    "passwordHash": "2221f65b9235e087770b763d6f98b6cae40d30b322098f11a98fe3640615d919",
+    "name": "System Administrator",
+    "email": "Idcard@nuralam.com",
+    "employeeId": "466035",
+    "role": "admin",
+    "status": "active",
+    "createdAt": "2026-10-20T06:44:11.376Z"
+  },
+  {
+    "id": "user-dataentry-1",
+    "username": "operator1",
+    "passwordHash": "563975d421ada22ab6792a9d2d53f5587a5c84a2399b35032e297dc7268ea408",
+    "name": "Data Entry Operator",
+    "email": "operator1@company.com",
+    "role": "data_entry",
+    "status": "active",
+    "createdAt": "2026-10-20T06:44:11.439Z"
+  },
+  {
+    "id": "user-supervisor-1",
+    "username": "supervisor1",
+    "employeeId": "SUP-2026-01",
+    "passwordHash": "e0801bd2d3eed80307502666a223f74d8d6b0dd7c39fab4968e066295f126a68",
+    "name": "Production Shift Supervisor",
+    "email": "supervisor@company.com",
+    "role": "supervisor",
+    "status": "active",
+    "createdAt": "2026-10-20T07:41:01.791Z"
+  },
+  {
+    "id": "user-1792482506735-971",
+    "username": "supervisor_qa",
+    "employeeId": "SUP-QA-777",
+    "passwordHash": "7b93a689d992673a3626299fa3398a9f7bff40b4584fa619b8b768c031adb9dc",
+    "name": "Quality Assurance Supervisor",
+    "email": "qa.supervisor@company.com",
+    "role": "supervisor",
+    "status": "active",
+    "createdAt": "2026-10-20T07:48:26.783Z"
+  },
+  {
+    "id": "user-1792482562645-4",
+    "username": "supervisor_line2",
+    "employeeId": "SUP-LINE2-888",
+    "passwordHash": "3a9c0657420c310c204b810e0381b0c8f6ca7b3d6cfd65ff19accad447ea36fc",
+    "name": "Assembly Line 2 Supervisor",
+    "email": "line2.supervisor@company.com",
+    "role": "supervisor",
+    "status": "active",
+    "createdAt": "2026-10-20T07:49:22.696Z"
+  },
+  {
+    "id": "user-1792482635329-437",
+    "username": "sup_1792482635326",
+    "employeeId": "SUP-T-1792482635326",
+    "passwordHash": "3a9c0657420c310c204b810e0381b0c8f6ca7b3d6cfd65ff19accad447ea36fc",
+    "name": "Assembly Line 2 Supervisor",
+    "email": "line2.supervisor@company.com",
+    "role": "supervisor",
+    "status": "active",
+    "createdAt": "2026-10-20T07:50:35.382Z"
+  }
+]

@@ -57,6 +57,11 @@ export function LoginModal({
       return;
     }
 
+    if (!/^\d+$/.test(cleanEnroll) || !/^\d+$/.test(password)) {
+      setError('Enroll and Password must contain numbers only.');
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
 
@@ -105,26 +110,30 @@ export function LoginModal({
           </div>
         )}
 
-        {/* Unified Login Form with ONLY Enroll & Password fields */}
+        {/* Unified Login Form with ONLY numeric Enroll & Password fields */}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <input
               type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
               value={enroll}
-              onChange={(e) => setEnroll(e.target.value)}
-              placeholder="Enroll"
+              onChange={(e) => setEnroll(e.target.value.replace(/\D/g, ''))}
+              placeholder="Enroll (Numeric)"
               autoFocus
-              className="w-full bg-white border border-slate-300 focus:border-slate-900 focus:ring-1 focus:ring-slate-900 rounded-lg px-3.5 py-2.5 text-xs text-slate-900 placeholder-slate-400 outline-hidden transition-colors shadow-2xs"
+              className="w-full bg-white border border-slate-300 focus:border-slate-900 focus:ring-1 focus:ring-slate-900 rounded-lg px-3.5 py-2.5 text-xs text-slate-900 placeholder-slate-400 outline-hidden transition-colors shadow-2xs font-mono"
             />
           </div>
 
           <div className="relative">
             <input
               type={showPassword ? 'text' : 'password'}
+              inputMode="numeric"
+              pattern="[0-9]*"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Password"
-              className="w-full bg-white border border-slate-300 focus:border-slate-900 focus:ring-1 focus:ring-slate-900 rounded-lg px-3.5 py-2.5 pr-10 text-xs text-slate-900 placeholder-slate-400 outline-hidden transition-colors shadow-2xs"
+              onChange={(e) => setPassword(e.target.value.replace(/\D/g, ''))}
+              placeholder="Password (Numeric)"
+              className="w-full bg-white border border-slate-300 focus:border-slate-900 focus:ring-1 focus:ring-slate-900 rounded-lg px-3.5 py-2.5 pr-10 text-xs text-slate-900 placeholder-slate-400 outline-hidden transition-colors shadow-2xs font-mono"
             />
             <button
               type="button"

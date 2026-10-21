@@ -146,5 +146,9 @@
   "5f47abd173d8bb416b705f93c51fc2219f5742df3dd3256da3eaf53e9a8efec4": {
     "userId": "user-supervisor-1",
     "expiresAt": 1795120551562
+  },
+  "8b17ce1e5b4fea27961077511a617a953347625947566fa1ce43973889a31844": {
+    "userId": "user-admin-1",
+    "expiresAt": 1795136482860
   }
 }

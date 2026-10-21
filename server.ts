@@ -265,6 +265,7 @@ function hashPassword(password: string, salt = 'idcard_salt_2026'): string {
 const INITIAL_ADMIN = {
   id: 'user-admin-1',
   username: 'Idcard@nuralam.com',
+  employeeId: 'admin',
   passwordHash: hashPassword('@466035$'),
   name: 'System Administrator',
   email: 'Idcard@nuralam.com',
@@ -336,10 +337,11 @@ function initializeLocalDatabase(): void {
   const users = readJsonFile<any[]>(USERS_FILE, []);
   let admin = users.find((u) => u.role === 'admin');
   if (!admin) {
-    users.unshift({ ...INITIAL_ADMIN });
+    users.unshift({ ...INITIAL_ADMIN, employeeId: 'admin' });
   } else {
     admin.email = INITIAL_ADMIN.email;
     admin.username = INITIAL_ADMIN.username;
+    admin.employeeId = 'admin';
     admin.passwordHash = INITIAL_ADMIN.passwordHash;
     admin.status = 'active';
   }
@@ -386,6 +388,7 @@ async function seedMongoDatabase(): Promise<void> {
         {
           $set: {
             username: INITIAL_ADMIN.username,
+            employeeId: 'admin',
             email: INITIAL_ADMIN.email,
             passwordHash: INITIAL_ADMIN.passwordHash,
             status: 'active',
@@ -660,6 +663,25 @@ async function getMasterEmployeeRecord(enrollId: string): Promise<IMasterEmploye
 
   const master = readJsonFile<Record<string, any>>(MASTER_FILE, {});
   return master[cleanId] || null;
+}
+
+async function insertMasterEmployeeRecord(emp: IMasterEmployee): Promise<IMasterEmployee> {
+  const cleanId = String(emp.enrollId).trim();
+
+  // Local sync
+  const master = readJsonFile<Record<string, any>>(MASTER_FILE, {});
+  master[cleanId] = emp;
+  writeJsonFile(MASTER_FILE, master);
+
+  if (isMongoConnected) {
+    try {
+      await MasterEmployeeModel.create(emp);
+    } catch (e: any) {
+      console.warn('[MongoDB] Master employee insert error:', e.message);
+    }
+  }
+
+  return emp;
 }
 
 async function getAllMasterEmployeesList(): Promise<IMasterEmployee[]> {
@@ -947,17 +969,18 @@ function requireAdminRole(req: AuthenticatedRequest, res: Response, next: NextFu
 // --- AUTHENTICATION ---
 
 app.post('/api/auth/login', async (req: Request, res: Response) => {
-  const { username, password } = req.body;
-  if (!username || !password) {
-    res.status(400).json({ error: 'Username and password are required.' });
+  const loginInput = req.body.enroll || req.body.username || req.body.employeeId;
+  const { password } = req.body;
+  if (!loginInput || !String(loginInput).trim() || !password) {
+    res.status(400).json({ error: 'Please enter Enroll and Password.' });
     return;
   }
 
   const pwHash = hashPassword(password);
-  const user = await findUserByCredentials(username, pwHash);
+  const user = await findUserByCredentials(String(loginInput).trim(), pwHash);
 
   if (!user) {
-    res.status(401).json({ error: 'Invalid username or password.' });
+    res.status(401).json({ error: 'Invalid Enroll or Password.' });
     return;
   }
 
@@ -1265,6 +1288,93 @@ app.post('/api/master-employees/import', authenticateToken, requireAdminRole, as
   });
 });
 
+// Admin-only: add individual employee to master database
+app.post('/api/master-employees', authenticateToken, requireAdminRole, async (req: Request, res: Response) => {
+  const {
+    enrollId,
+    name,
+    designation,
+    department,
+    jobType,
+    joiningDate,
+    cardIssue,
+    emergencyContact,
+    contactNumber,
+    permanentAddress,
+    bloodGroup,
+    nationalId,
+    photo,
+    photoUrl,
+    signature,
+    signatureUrl,
+  } = req.body;
+
+  const cleanEnrollId = enrollId !== undefined && enrollId !== null ? String(enrollId).trim() : '';
+  const cleanName = name !== undefined && name !== null ? String(name).trim() : '';
+
+  if (!cleanEnrollId || !cleanName) {
+    res.status(400).json({ error: 'Enrollment ID and Name are required.' });
+    return;
+  }
+
+  // Prevent duplicate Enrollment ID
+  const existing = await getMasterEmployeeRecord(cleanEnrollId);
+  if (existing) {
+    res.status(409).json({ error: `An employee with Enrollment ID "${cleanEnrollId}" already exists in the master database.` });
+    return;
+  }
+
+  const finalPhoto = String(photo || photoUrl || '').trim();
+  const finalSignature = String(signature || signatureUrl || '').trim();
+
+  // Validate photo size (200 KB target with 250 KB ceiling)
+  if (finalPhoto && finalPhoto.startsWith('data:image')) {
+    const photoBytes = Math.round((finalPhoto.length * 3) / 4);
+    if (photoBytes > 250 * 1024) {
+      res.status(400).json({
+        error: 'Employee photo size exceeds 200 KB limit. Please upload a compressed photo.',
+      });
+      return;
+    }
+  }
+
+  // Validate signature size (200 KB target with 250 KB ceiling)
+  if (finalSignature && finalSignature.startsWith('data:image')) {
+    const sigBytes = Math.round((finalSignature.length * 3) / 4);
+    if (sigBytes > 250 * 1024) {
+      res.status(400).json({
+        error: 'Employee signature size exceeds 200 KB limit. Please upload a compressed signature.',
+      });
+      return;
+    }
+  }
+
+  const newEmployee: IMasterEmployee = {
+    enrollId: cleanEnrollId,
+    name: cleanName,
+    designation: String(designation || '').trim(),
+    department: String(department || '').trim(),
+    jobType: String(jobType || 'Permanent').trim(),
+    joiningDate: String(joiningDate || '01/03/2026').trim(),
+    cardIssue: String(cardIssue || '19/10/2026').trim(),
+    emergencyContact: String(emergencyContact || contactNumber || '').trim(),
+    permanentAddress: String(permanentAddress || '').trim(),
+    bloodGroup: String(bloodGroup || 'O+').trim(),
+    nationalId: String(nationalId || '').trim(),
+    photo: finalPhoto,
+    signature: finalSignature,
+    importedAt: new Date().toISOString(),
+  };
+
+  await insertMasterEmployeeRecord(newEmployee);
+
+  res.status(201).json({
+    success: true,
+    message: `Employee "${cleanEnrollId} - ${cleanName}" added to master database.`,
+    employee: newEmployee,
+  });
+});
+
 app.put('/api/master-employees/:enrollId', authenticateToken, requireAdminRole, async (req: Request, res: Response) => {
   const { enrollId } = req.params;
   const existing = await getMasterEmployeeRecord(enrollId);
@@ -1333,7 +1443,7 @@ app.get('/api/master-employees/search', authenticateToken, async (req: Authentic
     }
   }
 
-  const query = String(req.query.q || '').trim().toLowerCase();
+  const query = String(req.query.q || req.query.query || '').trim().toLowerCase();
   if (!query) {
     res.json({ results: [] });
     return;
@@ -1517,12 +1627,12 @@ app.post('/api/submissions', authenticateToken, async (req: AuthenticatedRequest
     return;
   }
 
-  // Validate maximum image payload size
+  // Validate maximum image payload size (200 KB target with safe margin)
   const photoSize = Math.round((photoUrl.length * 3) / 4);
   const sigSize = Math.round((signatureUrl.length * 3) / 4);
-  if (photoSize > 1.5 * 1024 * 1024 || sigSize > 1.5 * 1024 * 1024) {
+  if (photoSize > 350 * 1024 || sigSize > 350 * 1024) {
     res.status(400).json({
-      error: 'ছবি বা সিগনেচারের সাইজ অনেক বেশি বড়! অনুগ্রহ করে ১ মেগাবাইটের (1 MB) নিচের ছবি বা সিগনেচার আপলোড করুন।',
+      error: 'ছবি বা সিগনেচারের সাইজ অনেক বেশি বড়! অনুগ্রহ করে ২০০ কিলোবাইটের (200 KB) নিচের ছবি বা সিগনেচার আপলোড করুন।',
       sizeExceeded: true,
     });
     return;

@@ -14,6 +14,7 @@ import {
   Camera,
   Image as ImageIcon,
   Check,
+  UserPlus,
 } from 'lucide-react';
 import { apiService, getStoredToken } from '../services/apiService';
 import { MasterEmployee, ColumnMapping } from '../types';
@@ -57,18 +58,91 @@ export function EmployeeDatabaseSection({ onRefreshData }: EmployeeDatabaseSecti
     sampleDuplicates?: string[];
   } | null>(null);
 
+  // Add Employee Modal State
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [addFormData, setAddFormData] = useState<Partial<MasterEmployee>>({
+    enrollId: '',
+    name: '',
+    designation: '',
+    department: '',
+    jobType: 'Permanent',
+    joiningDate: '01/03/2026',
+    cardIssue: '19/10/2026',
+    emergencyContact: '',
+    permanentAddress: '',
+    bloodGroup: 'O+',
+    nationalId: '',
+    photo: '',
+    signature: '',
+  });
+  const [addFormError, setAddFormError] = useState<string | null>(null);
+  const [isSavingAdd, setIsSavingAdd] = useState(false);
+  const addPhotoInputRef = useRef<HTMLInputElement>(null);
+  const addSigInputRef = useRef<HTMLInputElement>(null);
+
+  // Active target context for camera and signature modals ('add' | 'edit')
+  const [photoSigContext, setPhotoSigContext] = useState<'add' | 'edit'>('edit');
+
   // Edit Employee Modal State
   const [editingEmployee, setEditingEmployee] = useState<MasterEmployee | null>(null);
   const [editFormData, setEditFormData] = useState<Partial<MasterEmployee>>({});
   const [isSavingEdit, setIsSavingEdit] = useState(false);
 
-  // Modals for editing photo & signature
+  // Modals for editing/adding photo & signature
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [cameraTarget, setCameraTarget] = useState<'photo' | 'signature'>('photo');
   const [isSignaturePadOpen, setIsSignaturePadOpen] = useState(false);
   const [isSizeAlertOpen, setIsSizeAlertOpen] = useState(false);
   const editPhotoInputRef = useRef<HTMLInputElement>(null);
   const editSigInputRef = useRef<HTMLInputElement>(null);
+
+  const handleAddEmployeeSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAddFormError(null);
+
+    const cleanEnrollId = (addFormData.enrollId || '').trim();
+    const cleanName = (addFormData.name || '').trim();
+
+    if (!cleanEnrollId) {
+      setAddFormError('Enrollment ID is required.');
+      return;
+    }
+
+    if (!cleanName) {
+      setAddFormError('Employee Name is required.');
+      return;
+    }
+
+    // Duplicate Enrollment ID validation: never create duplicates or silently overwrite
+    const isDuplicate = employees.some(
+      (emp) => emp.enrollId.toLowerCase() === cleanEnrollId.toLowerCase()
+    );
+    if (isDuplicate) {
+      setAddFormError(`An employee with Enrollment ID "${cleanEnrollId}" already exists in the master database.`);
+      return;
+    }
+
+    setIsSavingAdd(true);
+    try {
+      const res = await apiService.createMasterEmployee({
+        ...addFormData,
+        enrollId: cleanEnrollId,
+        name: cleanName,
+      });
+
+      setEmployees((prev) => [res.employee, ...prev]);
+      setStatusMessage({
+        type: 'success',
+        text: `Employee "${res.employee.enrollId} - ${res.employee.name}" added successfully to the master database.`,
+      });
+      setIsAddModalOpen(false);
+      if (onRefreshData) onRefreshData();
+    } catch (err: any) {
+      setAddFormError(err.message || 'Failed to add employee to master database.');
+    } finally {
+      setIsSavingAdd(false);
+    }
+  };
 
   const loadMasterEmployees = async () => {
     const token = getStoredToken();
@@ -190,6 +264,7 @@ export function EmployeeDatabaseSection({ onRefreshData }: EmployeeDatabaseSecti
   const handleOpenEdit = (emp: MasterEmployee) => {
     setEditingEmployee(emp);
     setEditFormData({ ...emp });
+    setPhotoSigContext('edit');
   };
 
   const handleSaveEdit = async (e: React.FormEvent) => {
@@ -318,6 +393,33 @@ export function EmployeeDatabaseSection({ onRefreshData }: EmployeeDatabaseSecti
             accept=".xlsx, .xls, .csv"
             className="hidden"
           />
+
+          <button
+            type="button"
+            onClick={() => {
+              setAddFormData({
+                enrollId: '',
+                name: '',
+                designation: '',
+                department: '',
+                jobType: 'Permanent',
+                joiningDate: '01/03/2026',
+                cardIssue: '19/10/2026',
+                emergencyContact: '',
+                permanentAddress: '',
+                bloodGroup: 'O+',
+                nationalId: '',
+                photo: '',
+                signature: '',
+              });
+              setAddFormError(null);
+              setIsAddModalOpen(true);
+            }}
+            className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer"
+          >
+            <UserPlus className="w-3.5 h-3.5" />
+            <span>Add New Employee</span>
+          </button>
 
           <button
             onClick={() => fileInputRef.current?.click()}
@@ -799,7 +901,368 @@ export function EmployeeDatabaseSection({ onRefreshData }: EmployeeDatabaseSecti
         </div>
       )}
 
-      {/* Camera Capture Modal for editing */}
+      {/* Add New Employee Modal */}
+      {isAddModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white border border-slate-200 w-full max-w-xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+            <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/70">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">
+                  <UserPlus className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">Add New Employee to Master Database</h3>
+                  <p className="text-[11px] text-slate-500">Record will be immediately available for supervisor search &amp; ID card issuance.</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAddModalOpen(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                aria-label="Close"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {addFormError && (
+              <div className="mx-5 mt-4 p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 text-xs flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span className="font-medium">{addFormError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleAddEmployeeSubmit} className="p-5 overflow-y-auto space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    Enrollment ID <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={addFormData.enrollId || ''}
+                    onChange={(e) => setAddFormData({ ...addFormData, enrollId: e.target.value })}
+                    placeholder="e.g. 1024 or EMP-1024"
+                    className="w-full bg-white border border-slate-300 focus:border-slate-900 focus:ring-1 focus:ring-slate-900 rounded-lg px-3 py-2 text-xs font-mono font-bold text-slate-900 placeholder-slate-400 outline-hidden shadow-2xs"
+                    required
+                    autoFocus
+                  />
+                  <span className="text-[10px] text-slate-400 mt-0.5 block">Unique identifier. Cannot be duplicated.</span>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    Employee Name <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={addFormData.name || ''}
+                    onChange={(e) => setAddFormData({ ...addFormData, name: e.target.value })}
+                    placeholder="e.g. Md. Rafiqul Islam"
+                    className="w-full bg-white border border-slate-300 focus:border-slate-900 focus:ring-1 focus:ring-slate-900 rounded-lg px-3 py-2 text-xs font-semibold text-slate-900 placeholder-slate-400 outline-hidden shadow-2xs"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">Designation</label>
+                  <input
+                    type="text"
+                    value={addFormData.designation || ''}
+                    onChange={(e) => setAddFormData({ ...addFormData, designation: e.target.value })}
+                    placeholder="e.g. Senior Machine Operator"
+                    className="w-full bg-white border border-slate-300 focus:border-slate-900 focus:ring-1 focus:ring-slate-900 rounded-lg px-3 py-2 text-xs text-slate-900 placeholder-slate-400 outline-hidden shadow-2xs"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">Department</label>
+                  <input
+                    type="text"
+                    value={addFormData.department || ''}
+                    onChange={(e) => setAddFormData({ ...addFormData, department: e.target.value })}
+                    placeholder="e.g. Sewing / Cutting / Quality"
+                    className="w-full bg-white border border-slate-300 focus:border-slate-900 focus:ring-1 focus:ring-slate-900 rounded-lg px-3 py-2 text-xs text-slate-900 placeholder-slate-400 outline-hidden shadow-2xs"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">Job Type</label>
+                  <select
+                    value={addFormData.jobType || 'Permanent'}
+                    onChange={(e) => setAddFormData({ ...addFormData, jobType: e.target.value })}
+                    className="w-full bg-white border border-slate-300 focus:border-slate-900 focus:ring-1 focus:ring-slate-900 rounded-lg px-3 py-2 text-xs text-slate-900 outline-hidden shadow-2xs"
+                  >
+                    <option value="Permanent">Permanent</option>
+                    <option value="Contractual">Contractual</option>
+                    <option value="Probationary">Probationary</option>
+                    <option value="Temporary">Temporary</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">Blood Group</label>
+                  <select
+                    value={addFormData.bloodGroup || 'O+'}
+                    onChange={(e) => setAddFormData({ ...addFormData, bloodGroup: e.target.value })}
+                    className="w-full bg-white border border-slate-300 focus:border-slate-900 focus:ring-1 focus:ring-slate-900 rounded-lg px-3 py-2 text-xs font-bold text-slate-900 outline-hidden shadow-2xs"
+                  >
+                    <option value="A+">A+</option>
+                    <option value="A-">A-</option>
+                    <option value="B+">B+</option>
+                    <option value="B-">B-</option>
+                    <option value="O+">O+</option>
+                    <option value="O-">O-</option>
+                    <option value="AB+">AB+</option>
+                    <option value="AB-">AB-</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">Joining Date</label>
+                  <input
+                    type="text"
+                    value={addFormData.joiningDate || ''}
+                    onChange={(e) => setAddFormData({ ...addFormData, joiningDate: e.target.value })}
+                    placeholder="DD/MM/YYYY e.g. 01/03/2026"
+                    className="w-full bg-white border border-slate-300 focus:border-slate-900 focus:ring-1 focus:ring-slate-900 rounded-lg px-3 py-2 text-xs font-mono text-slate-900 placeholder-slate-400 outline-hidden shadow-2xs"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">Card Issue Date</label>
+                  <input
+                    type="text"
+                    value={addFormData.cardIssue || ''}
+                    onChange={(e) => setAddFormData({ ...addFormData, cardIssue: e.target.value })}
+                    placeholder="DD/MM/YYYY e.g. 19/10/2026"
+                    className="w-full bg-white border border-slate-300 focus:border-slate-900 focus:ring-1 focus:ring-slate-900 rounded-lg px-3 py-2 text-xs font-mono text-slate-900 placeholder-slate-400 outline-hidden shadow-2xs"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                    Contact / Emergency Number
+                  </label>
+                  <input
+                    type="text"
+                    value={addFormData.emergencyContact || ''}
+                    onChange={(e) => setAddFormData({ ...addFormData, emergencyContact: e.target.value })}
+                    placeholder="e.g. 01712-345678"
+                    className="w-full bg-white border border-slate-300 focus:border-slate-900 focus:ring-1 focus:ring-slate-900 rounded-lg px-3 py-2 text-xs font-mono text-slate-900 placeholder-slate-400 outline-hidden shadow-2xs"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">National ID (NID)</label>
+                  <input
+                    type="text"
+                    value={addFormData.nationalId || ''}
+                    onChange={(e) => setAddFormData({ ...addFormData, nationalId: e.target.value })}
+                    placeholder="e.g. 19952691500001234"
+                    className="w-full bg-white border border-slate-300 focus:border-slate-900 focus:ring-1 focus:ring-slate-900 rounded-lg px-3 py-2 text-xs font-mono text-slate-900 placeholder-slate-400 outline-hidden shadow-2xs"
+                  />
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">Permanent Address</label>
+                  <input
+                    type="text"
+                    value={addFormData.permanentAddress || ''}
+                    onChange={(e) => setAddFormData({ ...addFormData, permanentAddress: e.target.value })}
+                    placeholder="e.g. Mukkhopur, Trishal, Mymensingh"
+                    className="w-full bg-white border border-slate-300 focus:border-slate-900 focus:ring-1 focus:ring-slate-900 rounded-lg px-3 py-2 text-xs text-slate-900 placeholder-slate-400 outline-hidden shadow-2xs"
+                  />
+                </div>
+              </div>
+
+              {/* Photo & Signature Section with Automatic Optimization <= 200 KB */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3 border-t border-slate-200">
+                {/* Photo */}
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-900">Employee Photo</label>
+                    <span className="text-[10px] text-slate-500 font-semibold">Max 200 KB (Auto-compressed)</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    {addFormData.photo ? (
+                      <div className="relative group">
+                        <img
+                          src={addFormData.photo}
+                          alt="Employee Photo Preview"
+                          className="w-14 h-16 object-cover rounded-lg border border-slate-300 shadow-2xs"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setAddFormData((prev) => ({ ...prev, photo: '' }))}
+                          className="absolute -top-1.5 -right-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-full p-0.5 shadow cursor-pointer"
+                          title="Remove photo"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="w-14 h-16 bg-white rounded-lg border-2 border-dashed border-slate-300 flex flex-col items-center justify-center text-slate-400">
+                        <ImageIcon className="w-5 h-5 text-slate-300" />
+                        <span className="text-[9px] text-slate-400 mt-0.5">Portrait</span>
+                      </div>
+                    )}
+
+                    <div className="flex flex-col gap-1.5 flex-1">
+                      <input
+                        type="file"
+                        ref={addPhotoInputRef}
+                        accept="image/*"
+                        className="hidden"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            try {
+                              const result = await compressImageFile(file, { maxWidth: 800, maxHeight: 800, quality: 0.84 });
+                              if (!result.isValidSize || result.sizeBytes > MAX_FILE_SIZE_BYTES) {
+                                setIsSizeAlertOpen(true);
+                                if (addPhotoInputRef.current) addPhotoInputRef.current.value = '';
+                                return;
+                              }
+                              setAddFormData((prev) => ({ ...prev, photo: result.dataUrl }));
+                            } catch (err) {
+                              console.error('Error compressing photo:', err);
+                            } finally {
+                              e.target.value = '';
+                            }
+                          }
+                        }}
+                      />
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => addPhotoInputRef.current?.click()}
+                          className="flex-1 py-1.5 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                        >
+                          <Upload className="w-3 h-3 text-slate-500" />
+                          <span>Upload</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCameraTarget('photo');
+                            setPhotoSigContext('add');
+                            setIsCameraOpen(true);
+                          }}
+                          className="flex-1 py-1.5 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                        >
+                          <Camera className="w-3 h-3 text-slate-500" />
+                          <span>Camera</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Signature */}
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-900">Employee Signature</label>
+                    <span className="text-[10px] text-slate-500 font-semibold">Max 200 KB (Auto-compressed)</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    {addFormData.signature ? (
+                      <div className="relative group">
+                        <img
+                          src={addFormData.signature}
+                          alt="Employee Signature Preview"
+                          className="w-20 h-14 object-contain rounded-lg border border-slate-300 bg-white shadow-2xs p-1"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setAddFormData((prev) => ({ ...prev, signature: '' }))}
+                          className="absolute -top-1.5 -right-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-full p-0.5 shadow cursor-pointer"
+                          title="Remove signature"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="w-20 h-14 bg-white rounded-lg border-2 border-dashed border-slate-300 flex flex-col items-center justify-center text-slate-400">
+                        <ImageIcon className="w-5 h-5 text-slate-300" />
+                        <span className="text-[9px] text-slate-400 mt-0.5">Horizontal</span>
+                      </div>
+                    )}
+
+                    <div className="flex flex-col gap-1.5 flex-1">
+                      <input
+                        type="file"
+                        ref={addSigInputRef}
+                        accept="image/*"
+                        className="hidden"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            try {
+                              const result = await compressImageFile(file, { maxWidth: 800, maxHeight: 800, quality: 0.88, isSignature: true });
+                              if (!result.isValidSize || result.sizeBytes > MAX_FILE_SIZE_BYTES) {
+                                setIsSizeAlertOpen(true);
+                                if (addSigInputRef.current) addSigInputRef.current.value = '';
+                                return;
+                              }
+                              setAddFormData((prev) => ({ ...prev, signature: result.dataUrl }));
+                            } catch (err) {
+                              console.error('Error compressing signature:', err);
+                            } finally {
+                              e.target.value = '';
+                            }
+                          }
+                        }}
+                      />
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => addSigInputRef.current?.click()}
+                          className="flex-1 py-1.5 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                        >
+                          <Upload className="w-3 h-3 text-slate-500" />
+                          <span>Upload</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPhotoSigContext('add');
+                            setIsSignaturePadOpen(true);
+                          }}
+                          className="flex-1 py-1.5 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                        >
+                          <Pencil className="w-3 h-3 text-slate-500" />
+                          <span>Draw</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-slate-200 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setIsAddModalOpen(false)}
+                  className="px-4 py-2 border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingAdd}
+                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer flex items-center gap-1.5"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>{isSavingAdd ? 'Saving to Database...' : 'Save Employee'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Camera Capture Modal */}
       <CameraCaptureModal
         isOpen={isCameraOpen}
         onClose={() => setIsCameraOpen(false)}
@@ -810,17 +1273,25 @@ export function EmployeeDatabaseSection({ onRefreshData }: EmployeeDatabaseSecti
             const res = await compressDataUrl(dataUrl, {
               maxWidth: 800,
               maxHeight: 800,
-              quality: 0.8,
+              quality: 0.84,
               isSignature: cameraTarget === 'signature',
             });
             if (!res.isValidSize || res.sizeBytes > MAX_FILE_SIZE_BYTES) {
               setIsSizeAlertOpen(true);
               return;
             }
-            if (cameraTarget === 'photo') {
-              setEditFormData((prev) => ({ ...prev, photo: res.dataUrl }));
+            if (photoSigContext === 'add') {
+              if (cameraTarget === 'photo') {
+                setAddFormData((prev) => ({ ...prev, photo: res.dataUrl }));
+              } else {
+                setAddFormData((prev) => ({ ...prev, signature: res.dataUrl }));
+              }
             } else {
-              setEditFormData((prev) => ({ ...prev, signature: res.dataUrl }));
+              if (cameraTarget === 'photo') {
+                setEditFormData((prev) => ({ ...prev, photo: res.dataUrl }));
+              } else {
+                setEditFormData((prev) => ({ ...prev, signature: res.dataUrl }));
+              }
             }
           } catch (err) {
             console.error(err);
@@ -830,7 +1301,7 @@ export function EmployeeDatabaseSection({ onRefreshData }: EmployeeDatabaseSecti
         }}
       />
 
-      {/* Signature Pad Modal for editing */}
+      {/* Signature Pad Modal */}
       <SignaturePadModal
         isOpen={isSignaturePadOpen}
         onClose={() => setIsSignaturePadOpen(false)}
@@ -839,14 +1310,18 @@ export function EmployeeDatabaseSection({ onRefreshData }: EmployeeDatabaseSecti
             const res = await compressDataUrl(dataUrl, {
               maxWidth: 800,
               maxHeight: 800,
-              quality: 0.8,
+              quality: 0.88,
               isSignature: true,
             });
             if (!res.isValidSize || res.sizeBytes > MAX_FILE_SIZE_BYTES) {
               setIsSizeAlertOpen(true);
               return;
             }
-            setEditFormData((prev) => ({ ...prev, signature: res.dataUrl }));
+            if (photoSigContext === 'add') {
+              setAddFormData((prev) => ({ ...prev, signature: res.dataUrl }));
+            } else {
+              setEditFormData((prev) => ({ ...prev, signature: res.dataUrl }));
+            }
           } catch (err) {
             console.error(err);
           } finally {
@@ -873,6 +1348,8 @@ export function EmployeeDatabaseSection({ onRefreshData }: EmployeeDatabaseSecti
           setIsSizeAlertOpen(false);
           if (editPhotoInputRef.current) editPhotoInputRef.current.value = '';
           if (editSigInputRef.current) editSigInputRef.current.value = '';
+          if (addPhotoInputRef.current) addPhotoInputRef.current.value = '';
+          if (addSigInputRef.current) addSigInputRef.current.value = '';
         }}
       />
     </div>

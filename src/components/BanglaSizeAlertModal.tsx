@@ -40,7 +40,7 @@ export function BanglaSizeAlertModal({
             {title}
           </h3>
           <span className="inline-block mt-1 px-2.5 py-0.5 bg-rose-50 text-rose-700 text-[11px] font-bold rounded-full border border-rose-200">
-            সর্বোচ্চ সাইজ সীমা: ১ MB
+            সর্বোচ্চ সাইজ সীমা: ২০০ KB
           </span>
         </div>
 

@@ -121,7 +121,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `Employee_ID_Cards_Akij_Rosa_${new Date().toISOString().slice(0, 10)}.docx`;
+      a.download = `Employee_ID_Cards_${new Date().toISOString().slice(0, 10)}.docx`;
       a.click();
       URL.revokeObjectURL(url);
 

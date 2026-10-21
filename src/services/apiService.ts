@@ -126,10 +126,11 @@ async function request<T>(endpoint: string, options: RequestInit = {}, retryOn40
 
 export const apiService = {
   // Auth
-  async login(username: string, password: string): Promise<{ user: AuthUser; token: string }> {
+  async login(enroll: string, password: string): Promise<{ user: AuthUser; token: string }> {
+    const clean = enroll.trim();
     const res = await request<{ user: AuthUser; token: string }>('/api/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify({ enroll: clean, username: clean, employeeId: clean, password }),
     }, false);
     setStoredToken(res.token);
     setStoredUser(res.user);
@@ -217,6 +218,18 @@ export const apiService = {
   // Master Employees (Admin)
   async getMasterEmployees(): Promise<MasterEmployee[]> {
     return request<MasterEmployee[]>('/api/master-employees');
+  },
+
+  async createMasterEmployee(
+    employee: Partial<MasterEmployee>
+  ): Promise<{ success: boolean; message: string; employee: MasterEmployee }> {
+    return request<{ success: boolean; message: string; employee: MasterEmployee }>(
+      '/api/master-employees',
+      {
+        method: 'POST',
+        body: JSON.stringify(employee),
+      }
+    );
   },
 
   async importMasterEmployees(

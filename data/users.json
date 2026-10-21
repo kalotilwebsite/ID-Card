@@ -5,6 +5,7 @@
     "passwordHash": "62d5d09139b702f810bf037010437b96b56c708942199baaf316ae798a863f37",
     "name": "System Administrator",
     "email": "Idcard@nuralam.com",
+    "employeeId": "admin",
     "role": "admin",
     "status": "active",
     "createdAt": "2026-10-20T06:44:11.376Z"

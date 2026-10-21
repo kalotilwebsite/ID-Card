@@ -1,12 +1,14 @@
 /**
  * Utility for client-side image compression and validation using HTML Canvas.
- * Resizes images to maximum dimensions (e.g., 800px) and compresses with JPEG quality (0.75 - 0.80)
- * to maintain crisp, print-ready quality while strictly keeping the file size under 1 MB.
+ * Automatically resizes and compresses captured or uploaded employee photos and signatures
+ * to keep each file size strictly at or below 200 KB while preserving crisp ID card print clarity.
  */
 
-export const MAX_FILE_SIZE_BYTES = 1024 * 1024; // 1 MB (1,048,576 bytes)
+// Target limit: 200 KB (204,800 bytes)
+export const MAX_FILE_SIZE_BYTES = 200 * 1024;
+
 export const BANGLA_SIZE_ALERT_MESSAGE =
-  'ছবি বা সিগনেচারের সাইজ অনেক বেশি বড়! অনুগ্রহ করে ১ মেগাবাইটের (1 MB) নিচের ছবি বা সিগনেচার আপলোড করুন।';
+  'ছবি বা সিগনেচারের সাইজ অনেক বেশি বড়! অনুগ্রহ করে ২০০ কিলোবাইটের (200 KB) নিচের ছবি বা সিগনেচার আপলোড করুন।';
 
 export interface CompressOptions {
   maxWidth?: number;
@@ -39,6 +41,10 @@ export function getDataUrlSizeBytes(dataUrl: string): number {
  */
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
+    if (!src || !src.trim()) {
+      reject(new Error('Empty image source provided'));
+      return;
+    }
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.onload = () => resolve(img);
@@ -48,22 +54,28 @@ function loadImage(src: string): Promise<HTMLImageElement> {
 }
 
 /**
- * Resizes and compresses an image Data URL using HTML Canvas.
+ * Resizes and compresses an image Data URL using HTML Canvas to strictly meet the <= 200 KB target.
+ * Preserves passport-style portrait framing for photos, and narrow horizontal framing for signatures.
  */
 export async function compressDataUrl(
   dataUrl: string,
   options: CompressOptions = {}
 ): Promise<CompressResult> {
-  const {
-    maxWidth = 800,
-    maxHeight = 800,
-    quality = 0.8,
-    isSignature = false,
-  } = options;
+  const isSignature = Boolean(options.isSignature);
+
+  // Default dimensions tailored for ID cards:
+  // - Photos: Max 600x750 (4:5 or 3:4 passport portrait)
+  // - Signatures: Max 600x240 (wide horizontal format)
+  const defaultMaxW = isSignature ? 600 : 600;
+  const defaultMaxH = isSignature ? 240 : 750;
+
+  const maxWidth = options.maxWidth || defaultMaxW;
+  const maxHeight = options.maxHeight || defaultMaxH;
+  const initialQuality = options.quality !== undefined ? options.quality : isSignature ? 0.88 : 0.84;
 
   const img = await loadImage(dataUrl);
 
-  // Calculate proportional dimensions
+  // Compute proportional dimensions strictly preserving original aspect ratio
   let { width, height } = img;
   if (width > maxWidth || height > maxHeight) {
     const ratio = Math.min(maxWidth / width, maxHeight / height);
@@ -71,7 +83,6 @@ export async function compressDataUrl(
     height = Math.round(height * ratio);
   }
 
-  // Ensure minimum dimensions
   width = Math.max(1, width);
   height = Math.max(1, height);
 
@@ -84,43 +95,54 @@ export async function compressDataUrl(
     throw new Error('Canvas 2D context is not available');
   }
 
-  // High quality image smoothing
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
 
-  // Fill white background (ensures clean edges and optimal JPEG compression)
+  // White background ensures clean edges and optimal JPEG compression
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, width, height);
   ctx.drawImage(img, 0, 0, width, height);
 
-  // Generate compressed output
   const mimeType = 'image/jpeg';
+  let quality = initialQuality;
   let compressedDataUrl = canvas.toDataURL(mimeType, quality);
   let sizeBytes = getDataUrlSizeBytes(compressedDataUrl);
 
-  // If still larger than 1 MB, try lower quality (0.7)
-  if (sizeBytes > MAX_FILE_SIZE_BYTES) {
-    compressedDataUrl = canvas.toDataURL(mimeType, 0.7);
+  // Progressive step 1: Decrease quality if above 200 KB
+  const qualitySteps = [0.80, 0.74, 0.68, 0.60];
+  let stepIdx = 0;
+  while (sizeBytes > MAX_FILE_SIZE_BYTES && stepIdx < qualitySteps.length) {
+    quality = qualitySteps[stepIdx];
+    compressedDataUrl = canvas.toDataURL(mimeType, quality);
     sizeBytes = getDataUrlSizeBytes(compressedDataUrl);
+    stepIdx++;
   }
 
-  // If still exceeds 1 MB, do a second-stage dimension reduction
-  if (sizeBytes > MAX_FILE_SIZE_BYTES && (width > 500 || height > 500)) {
+  // Progressive step 2: If still > 200 KB, scale dimensions down progressively
+  let currentCanvas = canvas;
+  let curW = width;
+  let curH = height;
+  while (sizeBytes > MAX_FILE_SIZE_BYTES && (curW > 300 || curH > 300)) {
+    curW = Math.round(curW * 0.82);
+    curH = Math.round(curH * 0.82);
+
     const stepCanvas = document.createElement('canvas');
-    stepCanvas.width = Math.round(width * 0.75);
-    stepCanvas.height = Math.round(height * 0.75);
+    stepCanvas.width = curW;
+    stepCanvas.height = curH;
     const stepCtx = stepCanvas.getContext('2d');
-    if (stepCtx) {
-      stepCtx.imageSmoothingEnabled = true;
-      stepCtx.imageSmoothingQuality = 'high';
-      stepCtx.fillStyle = '#ffffff';
-      stepCtx.fillRect(0, 0, stepCanvas.width, stepCanvas.height);
-      stepCtx.drawImage(canvas, 0, 0, stepCanvas.width, stepCanvas.height);
-      compressedDataUrl = stepCanvas.toDataURL(mimeType, 0.7);
-      sizeBytes = getDataUrlSizeBytes(compressedDataUrl);
-      width = stepCanvas.width;
-      height = stepCanvas.height;
-    }
+    if (!stepCtx) break;
+
+    stepCtx.imageSmoothingEnabled = true;
+    stepCtx.imageSmoothingQuality = 'high';
+    stepCtx.fillStyle = '#ffffff';
+    stepCtx.fillRect(0, 0, curW, curH);
+    stepCtx.drawImage(currentCanvas, 0, 0, curW, curH);
+
+    currentCanvas = stepCanvas;
+    compressedDataUrl = stepCanvas.toDataURL(mimeType, 0.72);
+    sizeBytes = getDataUrlSizeBytes(compressedDataUrl);
+    width = curW;
+    height = curH;
   }
 
   const isValidSize = sizeBytes <= MAX_FILE_SIZE_BYTES;
@@ -135,13 +157,17 @@ export async function compressDataUrl(
 }
 
 /**
- * Reads a File object, compresses it via Canvas, and validates that the final size is <= 1 MB.
+ * Reads a File object, compresses it via Canvas, and validates that the final size is <= 200 KB.
  */
 export async function compressImageFile(
   file: File,
   options: CompressOptions = {}
 ): Promise<CompressResult> {
   return new Promise((resolve, reject) => {
+    if (!file) {
+      reject(new Error('No file provided'));
+      return;
+    }
     const reader = new FileReader();
     reader.onerror = () => reject(new Error('Failed to read file from disk'));
     reader.onload = async (e) => {

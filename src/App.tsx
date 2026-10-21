@@ -82,7 +82,6 @@ export default function App() {
   });
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
-  const [loginInitialMode, setLoginInitialMode] = useState<'supervisor' | 'system'>('supervisor');
   const [isAdminSettingsOpen, setIsAdminSettingsOpen] = useState(false);
 
   // Active Main Navigation Tab

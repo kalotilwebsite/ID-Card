@@ -176,6 +176,9 @@ export interface IAppSettings {
   supervisorFormEnabled: boolean;
   supervisorFormDisabledMessage: string;
   pdfPrintLayout: 'side_by_side' | 'top_bottom';
+  loginBackgroundImage: string;
+  paperSize: string;
+  cardsPerPage: number;
 }
 
 const AppSettingsSchema = new Schema<IAppSettings>(
@@ -190,9 +193,12 @@ const AppSettingsSchema = new Schema<IAppSettings>(
     supervisorFormDisabledMessage: {
       type: String,
       default:
-        'Employee ID Card submission is temporarily closed by the administrator. Please check back later.',
+        'সাময়িক রক্ষণাবেক্ষণের জন্য আইডি কার্ড আবেদন কার্যক্রম বন্ধ রয়েছে। অনুগ্রহ করে কিছুক্ষণ পর আবার চেষ্টা করুন।',
     },
     pdfPrintLayout: { type: String, enum: ['side_by_side', 'top_bottom'], default: 'side_by_side' },
+    loginBackgroundImage: { type: String, default: '/assets/default_login_bg.jpg' },
+    paperSize: { type: String, default: 'a4' },
+    cardsPerPage: { type: Number, default: 9 },
   },
   { timestamps: false, collection: 'settings' }
 );
@@ -214,13 +220,16 @@ let isMongoConnected = false;
 // LOCAL FALLBACK HELPER FUNCTIONS
 // =========================================================================
 
-const DEFAULT_SETTINGS = {
+const DEFAULT_SETTINGS: Omit<IAppSettings, 'key'> = {
   supervisorSuccessMessage:
     'Employee ID Card data has been submitted successfully and queued for administrative review and printing. Thank you!',
   supervisorFormEnabled: true,
   supervisorFormDisabledMessage:
-    'Employee ID Card submission is temporarily closed by the administrator. Please check back later.',
+    'সাময়িক রক্ষণাবেক্ষণের জন্য আইডি কার্ড আবেদন কার্যক্রম বন্ধ রয়েছে। অনুগ্রহ করে কিছুক্ষণ পর আবার চেষ্টা করুন।',
   pdfPrintLayout: 'side_by_side' as const,
+  loginBackgroundImage: '/assets/default_login_bg.jpg',
+  paperSize: 'a4',
+  cardsPerPage: 9,
 };
 
 function readJsonFile<T>(filePath: string, fallback: T): T {
@@ -825,6 +834,9 @@ async function getApplicationSettings(): Promise<IAppSettings> {
           supervisorFormEnabled: settings.supervisorFormEnabled !== false,
           supervisorFormDisabledMessage: settings.supervisorFormDisabledMessage || DEFAULT_SETTINGS.supervisorFormDisabledMessage,
           pdfPrintLayout: settings.pdfPrintLayout || DEFAULT_SETTINGS.pdfPrintLayout,
+          loginBackgroundImage: settings.loginBackgroundImage || DEFAULT_SETTINGS.loginBackgroundImage,
+          paperSize: settings.paperSize || DEFAULT_SETTINGS.paperSize,
+          cardsPerPage: Number(settings.cardsPerPage) || DEFAULT_SETTINGS.cardsPerPage,
         };
       }
     } catch (e) {
@@ -839,6 +851,9 @@ async function getApplicationSettings(): Promise<IAppSettings> {
     supervisorFormEnabled: local.supervisorFormEnabled !== false,
     supervisorFormDisabledMessage: local.supervisorFormDisabledMessage || DEFAULT_SETTINGS.supervisorFormDisabledMessage,
     pdfPrintLayout: local.pdfPrintLayout || DEFAULT_SETTINGS.pdfPrintLayout,
+    loginBackgroundImage: local.loginBackgroundImage || DEFAULT_SETTINGS.loginBackgroundImage,
+    paperSize: local.paperSize || DEFAULT_SETTINGS.paperSize,
+    cardsPerPage: Number(local.cardsPerPage) || DEFAULT_SETTINGS.cardsPerPage,
   };
 }
 
@@ -857,6 +872,13 @@ async function updateApplicationSettings(updates: Partial<IAppSettings>): Promis
         ? String(updates.supervisorFormDisabledMessage).trim()
         : current.supervisorFormDisabledMessage,
     pdfPrintLayout: updates.pdfPrintLayout === 'top_bottom' ? 'top_bottom' : 'side_by_side',
+    loginBackgroundImage:
+      updates.loginBackgroundImage !== undefined
+        ? String(updates.loginBackgroundImage).trim()
+        : current.loginBackgroundImage,
+    paperSize: updates.paperSize !== undefined ? String(updates.paperSize).trim() : current.paperSize,
+    cardsPerPage:
+      updates.cardsPerPage !== undefined ? Number(updates.cardsPerPage) || 9 : current.cardsPerPage,
   };
 
   writeJsonFile(SETTINGS_FILE, merged);
@@ -1295,8 +1317,111 @@ app.delete('/api/master-employees', authenticateToken, requireAdminRole, async (
   res.json({ success: true, message: 'All master employee records have been cleared.' });
 });
 
+// --- SEARCH MASTER EMPLOYEES (AUTHENTICATED SUPERVISOR, DATA ENTRY & ADMIN) ---
+app.get('/api/master-employees/search', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  // Reject employee searches from supervisor if form is in maintenance mode
+  if (req.user?.role === 'supervisor') {
+    const settings = await getApplicationSettings();
+    if (settings.supervisorFormEnabled === false) {
+      res.status(403).json({
+        error:
+          settings.supervisorFormDisabledMessage ||
+          'সাময়িক রক্ষণাবেক্ষণের জন্য আইডি কার্ড আবেদন কার্যক্রম বন্ধ রয়েছে। অনুগ্রহ করে কিছুক্ষণ পর আবার চেষ্টা করুন।',
+        formDisabled: true,
+      });
+      return;
+    }
+  }
+
+  const query = String(req.query.q || '').trim().toLowerCase();
+  if (!query) {
+    res.json({ results: [] });
+    return;
+  }
+
+  const allEmployees = await getAllMasterEmployeesList();
+  const allSubmissions = await getAllSubmissionsList();
+  const submissionSet = new Set(allSubmissions.map((s) => String(s.enrollId).trim()));
+
+  const matches = allEmployees.filter((emp) => {
+    const id = String(emp.enrollId || '').toLowerCase();
+    const name = String(emp.name || '').toLowerCase();
+    const nid = String(emp.nationalId || '').toLowerCase();
+    return id.includes(query) || name.includes(query) || (nid && nid.includes(query));
+  });
+
+  const limited = matches.slice(0, 10).map((emp) => ({
+    enrollId: emp.enrollId,
+    name: emp.name,
+    designation: emp.designation,
+    department: emp.department,
+    bloodGroup: emp.bloodGroup,
+    alreadySubmitted: submissionSet.has(String(emp.enrollId).trim()),
+  }));
+
+  res.json({ results: limited });
+});
+
+// Alias for search
+app.get('/api/employees/search', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  if (req.user?.role === 'supervisor') {
+    const settings = await getApplicationSettings();
+    if (settings.supervisorFormEnabled === false) {
+      res.status(403).json({
+        error:
+          settings.supervisorFormDisabledMessage ||
+          'সাময়িক রক্ষণাবেক্ষণের জন্য আইডি কার্ড আবেদন কার্যক্রম বন্ধ রয়েছে। অনুগ্রহ করে কিছুক্ষণ পর আবার চেষ্টা করুন।',
+        formDisabled: true,
+      });
+      return;
+    }
+  }
+
+  const query = String(req.query.q || '').trim().toLowerCase();
+  if (!query) {
+    res.json({ results: [] });
+    return;
+  }
+
+  const allEmployees = await getAllMasterEmployeesList();
+  const allSubmissions = await getAllSubmissionsList();
+  const submissionSet = new Set(allSubmissions.map((s) => String(s.enrollId).trim()));
+
+  const matches = allEmployees.filter((emp) => {
+    const id = String(emp.enrollId || '').toLowerCase();
+    const name = String(emp.name || '').toLowerCase();
+    const nid = String(emp.nationalId || '').toLowerCase();
+    return id.includes(query) || name.includes(query) || (nid && nid.includes(query));
+  });
+
+  const limited = matches.slice(0, 10).map((emp) => ({
+    enrollId: emp.enrollId,
+    name: emp.name,
+    designation: emp.designation,
+    department: emp.department,
+    bloodGroup: emp.bloodGroup,
+    alreadySubmitted: submissionSet.has(String(emp.enrollId).trim()),
+  }));
+
+  res.json({ results: limited });
+});
+
 // --- LOOKUP EMPLOYEE (AUTHENTICATED SUPERVISOR, DATA ENTRY & ADMIN) ---
-app.get('/api/lookup-employee/:enrollId', authenticateToken, async (req: Request, res: Response) => {
+app.get('/api/lookup-employee/:enrollId', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  // Reject lookup from supervisor if form is in maintenance mode
+  if (req.user?.role === 'supervisor') {
+    const settings = await getApplicationSettings();
+    if (settings.supervisorFormEnabled === false) {
+      res.status(403).json({
+        error:
+          settings.supervisorFormDisabledMessage ||
+          'সাময়িক রক্ষণাবেক্ষণের জন্য আইডি কার্ড আবেদন কার্যক্রম বন্ধ রয়েছে। অনুগ্রহ করে কিছুক্ষণ পর আবার চেষ্টা করুন।',
+        formDisabled: true,
+      });
+      return;
+    }
+  }
+
   const enrollId = req.params.enrollId.trim();
   const employee = await getMasterEmployeeRecord(enrollId);
   const submission = await getSubmissionRecord(enrollId);
@@ -1590,6 +1715,9 @@ app.get('/api/settings/public', async (_req: Request, res: Response) => {
     supervisorFormEnabled: settings.supervisorFormEnabled !== false,
     supervisorFormDisabledMessage: settings.supervisorFormDisabledMessage,
     pdfPrintLayout: settings.pdfPrintLayout,
+    loginBackgroundImage: settings.loginBackgroundImage || '/assets/default_login_bg.jpg',
+    paperSize: settings.paperSize || 'a4',
+    cardsPerPage: settings.cardsPerPage || 9,
   });
 });
 
@@ -1606,6 +1734,9 @@ app.put('/api/settings', authenticateToken, requireAdminRole, async (req: Reques
     supervisorFormEnabled: req.body.supervisorFormEnabled,
     supervisorFormDisabledMessage: req.body.supervisorFormDisabledMessage,
     pdfPrintLayout: req.body.pdfPrintLayout,
+    loginBackgroundImage: req.body.loginBackgroundImage,
+    paperSize: req.body.paperSize,
+    cardsPerPage: req.body.cardsPerPage,
   });
   res.json(updated);
 });
@@ -1617,6 +1748,18 @@ app.get('/api/system/db-status', authenticateToken, requireAdminRole, (_req: Req
     isMongoConnected,
     hasMongoUriConfigured: Boolean(process.env.MONGODB_URI),
   });
+});
+
+// Database offline error middleware for graceful resilience
+app.use((err: any, req: Request, res: Response, next: NextFunction) => {
+  if (err && (err.name === 'MongooseError' || err.name === 'MongoNetworkError' || (typeof err.message === 'string' && err.message.includes('buffering timed out')))) {
+    console.warn('[AI Studio] Database offline or buffering error — returning graceful response');
+    if (req.method === 'GET') {
+      return res.json(req.path.endsWith('s') || req.path.endsWith('s/') ? [] : {});
+    }
+    return res.status(503).json({ error: 'Service temporarily unavailable (database offline)' });
+  }
+  next(err);
 });
 
 // =========================================================================

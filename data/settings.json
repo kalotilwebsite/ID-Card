@@ -2,6 +2,9 @@
   "key": "global",
   "supervisorSuccessMessage": "Employee ID Card data has been submitted successfully and queued for administrative review and printing. Thank you!",
   "supervisorFormEnabled": true,
-  "supervisorFormDisabledMessage": "Maintenance Mode: ID Card submissions are currently disabled.",
-  "pdfPrintLayout": "side_by_side"
+  "supervisorFormDisabledMessage": "সাময়িক রক্ষণাবেক্ষণের জন্য আইডি কার্ড আবেদন কার্যক্রম বন্ধ রয়েছে। অনুগ্রহ করে কিছুক্ষণ পর আবার চেষ্টা করুন।",
+  "pdfPrintLayout": "side_by_side",
+  "loginBackgroundImage": "/assets/default_login_bg.jpg",
+  "paperSize": "a4",
+  "cardsPerPage": 9
 }

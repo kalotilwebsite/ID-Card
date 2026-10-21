@@ -214,8 +214,10 @@ export interface PaperSizeConfig {
   heightMm: number;
 }
 
+export type SupportedPaperSize = 'a4' | 'a5' | 'a3' | 'letter' | 'legal' | 'custom';
+
 export interface PrintSettings {
-  paperSize: 'a4' | 'letter' | 'custom';
+  paperSize: SupportedPaperSize;
   customWidthMm?: number;
   customHeightMm?: number;
   orientation: 'portrait' | 'landscape';
@@ -322,6 +324,9 @@ export interface AppSettings {
   supervisorFormEnabled: boolean;
   supervisorFormDisabledMessage: string;
   pdfPrintLayout: PdfPrintLayout;
+  loginBackgroundImage?: string;
+  paperSize?: SupportedPaperSize;
+  cardsPerPage?: number;
 }
 
 export interface ImportResultSummary {

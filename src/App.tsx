@@ -188,12 +188,38 @@ export default function App() {
       // Sync saved print layout settings
       try {
         const settings = await apiService.getPublicSettings();
-        if (isMounted) {
-          if (settings?.pdfPrintLayout === 'top_bottom') {
-            setPrintSettings((prev) => ({ ...prev, layoutMode: 'top-and-bottom' }));
-          } else {
-            setPrintSettings((prev) => ({ ...prev, layoutMode: 'side-by-side' }));
-          }
+        if (isMounted && settings) {
+          setPrintSettings((prev) => {
+            const updated = { ...prev };
+            if (settings.pdfPrintLayout === 'top_bottom') {
+              updated.layoutMode = 'top-and-bottom';
+            } else if (settings.pdfPrintLayout === 'side_by_side') {
+              updated.layoutMode = 'side-by-side';
+            }
+            if (settings.paperSize) {
+              updated.paperSize = settings.paperSize as any;
+            }
+            if (settings.cardsPerPage) {
+              const cpp = Number(settings.cardsPerPage);
+              if (cpp === 4) {
+                updated.columnsPerPage = 2;
+                updated.rowsPerPage = 2;
+              } else if (cpp === 6) {
+                updated.columnsPerPage = 3;
+                updated.rowsPerPage = 2;
+              } else if (cpp === 8) {
+                updated.columnsPerPage = 4;
+                updated.rowsPerPage = 2;
+              } else if (cpp === 10) {
+                updated.columnsPerPage = 5;
+                updated.rowsPerPage = 2;
+              } else {
+                updated.columnsPerPage = 3;
+                updated.rowsPerPage = 3;
+              }
+            }
+            return updated;
+          });
         }
       } catch (e) {}
 
@@ -1166,11 +1192,37 @@ export default function App() {
         isOpen={isAdminSettingsOpen}
         onClose={() => setIsAdminSettingsOpen(false)}
         onSettingsSaved={(newSettings) => {
-          if (newSettings.pdfPrintLayout === 'top_bottom') {
-            setPrintSettings((prev) => ({ ...prev, layoutMode: 'top-and-bottom' }));
-          } else {
-            setPrintSettings((prev) => ({ ...prev, layoutMode: 'side-by-side' }));
-          }
+          setPrintSettings((prev) => {
+            const updated = { ...prev };
+            if (newSettings.pdfPrintLayout === 'top_bottom') {
+              updated.layoutMode = 'top-and-bottom';
+            } else {
+              updated.layoutMode = 'side-by-side';
+            }
+            if (newSettings.paperSize) {
+              updated.paperSize = newSettings.paperSize as any;
+            }
+            if (newSettings.cardsPerPage) {
+              const cpp = Number(newSettings.cardsPerPage);
+              if (cpp === 4) {
+                updated.columnsPerPage = 2;
+                updated.rowsPerPage = 2;
+              } else if (cpp === 6) {
+                updated.columnsPerPage = 3;
+                updated.rowsPerPage = 2;
+              } else if (cpp === 8) {
+                updated.columnsPerPage = 4;
+                updated.rowsPerPage = 2;
+              } else if (cpp === 10) {
+                updated.columnsPerPage = 5;
+                updated.rowsPerPage = 2;
+              } else {
+                updated.columnsPerPage = 3;
+                updated.rowsPerPage = 3;
+              }
+            }
+            return updated;
+          });
         }}
       />
     </div>

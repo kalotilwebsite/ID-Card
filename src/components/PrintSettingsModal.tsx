@@ -113,7 +113,7 @@ export const PrintSettingsModal: React.FC<PrintSettingsModalProps> = ({
                 <label className="block text-xs font-bold text-gray-800 mb-1">
                   Paper Format:
                 </label>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
                   <button
                     type="button"
                     onClick={() => update({ paperSize: 'a4' })}
@@ -123,7 +123,18 @@ export const PrintSettingsModal: React.FC<PrintSettingsModalProps> = ({
                         : 'border-gray-200 hover:border-gray-300 text-gray-700 bg-white'
                     }`}
                   >
-                    A4 (210 × 297 mm)
+                    A4 (210×297)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => update({ paperSize: 'a5' })}
+                    className={`py-2 px-2.5 rounded-xl text-xs font-bold border text-center transition-all ${
+                      settings.paperSize === 'a5'
+                        ? 'border-rose-600 bg-rose-50 text-rose-700 ring-1 ring-rose-500 shadow-sm'
+                        : 'border-gray-200 hover:border-gray-300 text-gray-700 bg-white'
+                    }`}
+                  >
+                    A5 (148×210)
                   </button>
                   <button
                     type="button"
@@ -134,7 +145,7 @@ export const PrintSettingsModal: React.FC<PrintSettingsModalProps> = ({
                         : 'border-gray-200 hover:border-gray-300 text-gray-700 bg-white'
                     }`}
                   >
-                    US Letter (8.5 × 11 in)
+                    Letter
                   </button>
                   <button
                     type="button"

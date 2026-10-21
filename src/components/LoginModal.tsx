@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { AlertCircle, X } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { AlertCircle, X, Shield, Users } from 'lucide-react';
 import { apiService } from '../services/apiService';
 import { AuthUser } from '../types';
 
@@ -10,6 +10,8 @@ interface LoginModalProps {
   forced?: boolean;
   initialMode?: 'supervisor' | 'system';
 }
+
+const DEFAULT_LOGIN_BG = '/assets/default_login_bg.jpg';
 
 export function LoginModal({
   isOpen,
@@ -27,6 +29,29 @@ export function LoginModal({
   const [supervisorPassword, setSupervisorPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [backgroundImage, setBackgroundImage] = useState<string>(DEFAULT_LOGIN_BG);
+
+  // Fetch background image from public settings
+  useEffect(() => {
+    if (!isOpen) return;
+
+    let isMounted = true;
+    const fetchSettings = async () => {
+      try {
+        const settings = await apiService.getPublicSettings();
+        if (isMounted && settings?.loginBackgroundImage) {
+          setBackgroundImage(settings.loginBackgroundImage);
+        }
+      } catch {
+        // Fallback to default
+      }
+    };
+
+    fetchSettings();
+    return () => {
+      isMounted = false;
+    };
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -73,42 +98,58 @@ export function LoginModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-white/95 backdrop-blur-sm">
-      <div className="bg-white border border-slate-200 w-full max-w-sm rounded-xl shadow-lg overflow-hidden flex flex-col">
-        {/* Header with Role Tabs */}
-        <div className="flex border-b border-slate-200">
-          <button
-            type="button"
-            onClick={() => {
-              setLoginMode('admin');
-              setError(null);
-            }}
-            className={`flex-1 py-3 text-xs font-semibold text-center transition-colors border-b-2 ${
-              loginMode === 'admin'
-                ? 'border-slate-900 text-slate-900 font-bold bg-white'
-                : 'border-transparent text-slate-500 hover:text-slate-800 bg-slate-50'
-            }`}
-          >
-            Admin
-          </button>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-hidden">
+      {/* Background Image with Subtle Workplace Ambience Overlay */}
+      <div className="absolute inset-0 -z-10 overflow-hidden bg-slate-900">
+        <img
+          src={backgroundImage}
+          alt="Workplace Background"
+          className="w-full h-full object-cover transition-opacity duration-500 scale-102"
+          onError={() => setBackgroundImage(DEFAULT_LOGIN_BG)}
+        />
+        {/* Elegant darkening & contrast overlay to ensure card readability */}
+        <div className="absolute inset-0 bg-slate-950/45 backdrop-blur-[2px]" />
+      </div>
+
+      {/* Main Login Card - Clean, High Contrast, Minimal */}
+      <div className="relative bg-white/95 backdrop-blur-md border border-white/60 w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200">
+        {/* Role Selection Tabs */}
+        <div className="flex border-b border-slate-200 bg-slate-50/80">
           <button
             type="button"
             onClick={() => {
               setLoginMode('supervisor');
               setError(null);
             }}
-            className={`flex-1 py-3 text-xs font-semibold text-center transition-colors border-b-2 ${
+            className={`flex-1 py-3 text-xs font-semibold text-center transition-colors border-b-2 flex items-center justify-center gap-1.5 ${
               loginMode === 'supervisor'
-                ? 'border-slate-900 text-slate-900 font-bold bg-white'
-                : 'border-transparent text-slate-500 hover:text-slate-800 bg-slate-50'
+                ? 'border-slate-900 text-slate-900 font-bold bg-white shadow-2xs'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
-            Supervisor
+            <Users className="w-3.5 h-3.5" />
+            <span>Supervisor</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setLoginMode('admin');
+              setError(null);
+            }}
+            className={`flex-1 py-3 text-xs font-semibold text-center transition-colors border-b-2 flex items-center justify-center gap-1.5 ${
+              loginMode === 'admin'
+                ? 'border-slate-900 text-slate-900 font-bold bg-white shadow-2xs'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <Shield className="w-3.5 h-3.5" />
+            <span>Admin</span>
           </button>
           {!forced && onClose && (
             <button
               onClick={onClose}
               className="px-3 text-slate-400 hover:text-slate-700 transition-colors"
+              aria-label="Close"
             >
               <X className="w-4 h-4" />
             </button>
@@ -133,7 +174,7 @@ export function LoginModal({
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="Email"
                   autoFocus
-                  className="w-full bg-white border border-slate-300 focus:border-slate-900 focus:ring-1 focus:ring-slate-900 rounded-lg px-3 py-2 text-xs text-slate-900 placeholder-slate-400 outline-hidden"
+                  className="w-full bg-white border border-slate-300 focus:border-slate-900 focus:ring-1 focus:ring-slate-900 rounded-lg px-3 py-2.5 text-xs text-slate-900 placeholder-slate-400 outline-hidden transition-colors"
                 />
               </div>
 
@@ -143,16 +184,16 @@ export function LoginModal({
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Password"
-                  className="w-full bg-white border border-slate-300 focus:border-slate-900 focus:ring-1 focus:ring-slate-900 rounded-lg px-3 py-2 text-xs text-slate-900 placeholder-slate-400 outline-hidden"
+                  className="w-full bg-white border border-slate-300 focus:border-slate-900 focus:ring-1 focus:ring-slate-900 rounded-lg px-3 py-2.5 text-xs text-slate-900 placeholder-slate-400 outline-hidden transition-colors"
                 />
               </div>
 
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full py-2 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white font-semibold text-xs rounded-lg transition-colors mt-1"
+                className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white font-semibold text-xs rounded-lg transition-colors shadow-xs mt-1"
               >
-                {isLoading ? 'Signing in...' : 'Login'}
+                {isLoading ? 'Signing in...' : 'Sign In as Admin'}
               </button>
             </form>
           ) : (
@@ -164,7 +205,7 @@ export function LoginModal({
                   onChange={(e) => setSupervisorId(e.target.value)}
                   placeholder="Enrollment ID"
                   autoFocus
-                  className="w-full bg-white border border-slate-300 focus:border-slate-900 focus:ring-1 focus:ring-slate-900 rounded-lg px-3 py-2 text-xs text-slate-900 placeholder-slate-400 outline-hidden"
+                  className="w-full bg-white border border-slate-300 focus:border-slate-900 focus:ring-1 focus:ring-slate-900 rounded-lg px-3 py-2.5 text-xs text-slate-900 placeholder-slate-400 outline-hidden transition-colors"
                 />
               </div>
 
@@ -174,16 +215,16 @@ export function LoginModal({
                   value={supervisorPassword}
                   onChange={(e) => setSupervisorPassword(e.target.value)}
                   placeholder="Password"
-                  className="w-full bg-white border border-slate-300 focus:border-slate-900 focus:ring-1 focus:ring-slate-900 rounded-lg px-3 py-2 text-xs text-slate-900 placeholder-slate-400 outline-hidden"
+                  className="w-full bg-white border border-slate-300 focus:border-slate-900 focus:ring-1 focus:ring-slate-900 rounded-lg px-3 py-2.5 text-xs text-slate-900 placeholder-slate-400 outline-hidden transition-colors"
                 />
               </div>
 
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full py-2 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white font-semibold text-xs rounded-lg transition-colors mt-1"
+                className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white font-semibold text-xs rounded-lg transition-colors shadow-xs mt-1"
               >
-                {isLoading ? 'Signing in...' : 'Login'}
+                {isLoading ? 'Signing in...' : 'Sign In as Supervisor'}
               </button>
             </form>
           )}

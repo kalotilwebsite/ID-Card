@@ -1,4 +1,4 @@
-import { AuthUser, UserRole, MasterEmployee, SubmissionRecord } from '../types';
+import { AuthUser, UserRole, MasterEmployee, SubmissionRecord, AppSettings } from '../types';
 
 const TOKEN_KEY = 'idcard_auth_token';
 const USER_KEY = 'idcard_auth_user';
@@ -280,6 +280,20 @@ export const apiService = {
     });
   },
 
+  // Employee Search & Auto-Suggest
+  async searchEmployees(query: string): Promise<{
+    results: Array<{
+      enrollId: string;
+      name: string;
+      designation: string;
+      department: string;
+      bloodGroup: string;
+      alreadySubmitted: boolean;
+    }>;
+  }> {
+    return request(`/api/master-employees/search?q=${encodeURIComponent(query.trim())}`);
+  },
+
   // Employee Lookup (Data Entry & Admin)
   async lookupEmployee(enrollId: string): Promise<{
     found: boolean;
@@ -347,51 +361,16 @@ export const apiService = {
   },
 
   // Settings
-  async getPublicSettings(): Promise<{
-    supervisorSuccessMessage: string;
-    supervisorFormEnabled: boolean;
-    supervisorFormDisabledMessage: string;
-    pdfPrintLayout: 'side_by_side' | 'top_bottom';
-  }> {
-    return request<{
-      supervisorSuccessMessage: string;
-      supervisorFormEnabled: boolean;
-      supervisorFormDisabledMessage: string;
-      pdfPrintLayout: 'side_by_side' | 'top_bottom';
-    }>('/api/settings/public');
+  async getPublicSettings(): Promise<AppSettings> {
+    return request<AppSettings>('/api/settings/public');
   },
 
-  async getAdminSettings(): Promise<{
-    supervisorSuccessMessage: string;
-    supervisorFormEnabled: boolean;
-    supervisorFormDisabledMessage: string;
-    pdfPrintLayout: 'side_by_side' | 'top_bottom';
-  }> {
-    return request<{
-      supervisorSuccessMessage: string;
-      supervisorFormEnabled: boolean;
-      supervisorFormDisabledMessage: string;
-      pdfPrintLayout: 'side_by_side' | 'top_bottom';
-    }>('/api/settings');
+  async getAdminSettings(): Promise<AppSettings> {
+    return request<AppSettings>('/api/settings');
   },
 
-  async updateAdminSettings(settings: {
-    supervisorSuccessMessage?: string;
-    supervisorFormEnabled?: boolean;
-    supervisorFormDisabledMessage?: string;
-    pdfPrintLayout?: 'side_by_side' | 'top_bottom';
-  }): Promise<{
-    supervisorSuccessMessage: string;
-    supervisorFormEnabled: boolean;
-    supervisorFormDisabledMessage: string;
-    pdfPrintLayout: 'side_by_side' | 'top_bottom';
-  }> {
-    return request<{
-      supervisorSuccessMessage: string;
-      supervisorFormEnabled: boolean;
-      supervisorFormDisabledMessage: string;
-      pdfPrintLayout: 'side_by_side' | 'top_bottom';
-    }>('/api/settings', {
+  async updateAdminSettings(settings: Partial<AppSettings>): Promise<AppSettings> {
+    return request<AppSettings>('/api/settings', {
       method: 'PUT',
       body: JSON.stringify(settings),
     });

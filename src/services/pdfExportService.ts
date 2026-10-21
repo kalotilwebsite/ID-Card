@@ -8,16 +8,37 @@ export interface ExportProgressCallback {
 
 export const PAPER_DIMENSIONS_MM: Record<string, { width: number; height: number }> = {
   a4: { width: 210, height: 297 },
+  a5: { width: 148, height: 210 },
+  a3: { width: 297, height: 420 },
   letter: { width: 215.9, height: 279.4 },
+  legal: { width: 215.9, height: 355.6 },
 };
 
-export const exportCardsToPdf = async (
-  employees: EmployeeCardData[],
-  settings: PrintSettings,
-  companyConfig: CompanyTemplateConfig,
-  renderElementGetter: (empId: string, side: 'front' | 'back') => HTMLElement | null,
-  onProgress?: ExportProgressCallback
-): Promise<Blob> => {
+export interface CalculatedPrintGeometry {
+  pageWidthMm: number;
+  pageHeightMm: number;
+  cardWidthMm: number;
+  cardHeightMm: number;
+  gapX: number;
+  gapY: number;
+  startX: number;
+  startY: number;
+  scaleFactor: number;
+  cols: number;
+  rows: number;
+  cardsPerPage: number;
+  pairsPerPage: number;
+  colsOfPairs: number;
+  rowsOfPairs: number;
+}
+
+/**
+ * Calculates print geometry strictly guaranteeing that every card, crop mark,
+ * and text element stays completely inside the page boundaries.
+ * If requested configuration exceeds page printable area, proportionally scales cards
+ * while strictly preserving the aspect ratio.
+ */
+export function calculatePrintGeometry(settings: PrintSettings): CalculatedPrintGeometry {
   const isLandscape = settings.orientation === 'landscape';
   const paper =
     settings.paperSize === 'custom'
@@ -27,25 +48,142 @@ export const exportCardsToPdf = async (
         }
       : PAPER_DIMENSIONS_MM[settings.paperSize] || { width: 210, height: 297 };
 
-  const pageWidthMm = isLandscape ? paper.height : paper.width;
-  const pageHeightMm = isLandscape ? paper.width : paper.height;
+  // Page dimensions in mm
+  const pageWidthMm = isLandscape ? Math.max(paper.width, paper.height) : Math.min(paper.width, paper.height);
+  const pageHeightMm = isLandscape ? Math.min(paper.width, paper.height) : Math.max(paper.width, paper.height);
+
+  // Preserve badge aspect ratio (default 54 x 85.6 mm -> 85.6 / 54 = ~1.585185)
+  const nominalW = Math.max(10, Number(settings.cardWidthMm) || 54);
+  const nominalH = Math.max(10, Number(settings.cardHeightMm) || 85.6);
+  const badgeAspectRatio = nominalH / nominalW;
+
+  const cols = Math.max(1, Number(settings.columnsPerPage) || 1);
+  const rows = Math.max(1, Number(settings.rowsPerPage) || 1);
+
+  // Margin safety minimum to avoid cutting off edge or crop marks
+  const minSafeMargin = settings.showCutMarks ? 4.5 : 2.5;
+  const userMarginL = Math.max(minSafeMargin, Number(settings.marginsMm?.left) || 10);
+  const userMarginR = Math.max(minSafeMargin, Number(settings.marginsMm?.right) || 10);
+  const userMarginT = Math.max(minSafeMargin, Number(settings.marginsMm?.top) || 10);
+  const userMarginB = Math.max(minSafeMargin, Number(settings.marginsMm?.bottom) || 10);
+
+  // Available printable area
+  let availW = pageWidthMm - userMarginL - userMarginR;
+  let availH = pageHeightMm - userMarginT - userMarginB;
+  if (availW < 20 || availH < 20) {
+    // If user margins are too large for this sheet, reduce margins to minimum safe margin
+    availW = Math.max(15, pageWidthMm - minSafeMargin * 2);
+    availH = Math.max(15, pageHeightMm - minSafeMargin * 2);
+  }
+
+  const baseGapX = Math.max(0.5, Number(settings.spacingMm?.horizontal) ?? 5);
+  const baseGapY = Math.max(0.5, Number(settings.spacingMm?.vertical) ?? 5);
+
+  let colsOfPairs = 1;
+  let rowsOfPairs = 1;
+  let unitsAcross = cols;
+  let unitsDown = rows;
+  let cardsPerPage = cols * rows;
+  let pairsPerPage = cardsPerPage;
+
+  if (settings.layoutMode === 'side-by-side') {
+    colsOfPairs = Math.max(1, Math.floor(cols / 2));
+    unitsAcross = colsOfPairs * 2;
+    unitsDown = rows;
+    pairsPerPage = colsOfPairs * rows;
+    cardsPerPage = pairsPerPage;
+  } else if (settings.layoutMode === 'top-and-bottom') {
+    rowsOfPairs = Math.max(1, Math.floor(rows / 2));
+    unitsAcross = cols;
+    unitsDown = rowsOfPairs * 2;
+    pairsPerPage = cols * rowsOfPairs;
+    cardsPerPage = pairsPerPage;
+  }
+
+  // Calculate maximum card width that fits horizontally & vertically
+  const maxWByWidth = (availW - (unitsAcross - 1) * baseGapX) / unitsAcross;
+  const maxWByHeight = (availH - (unitsDown - 1) * baseGapY) / (unitsDown * badgeAspectRatio);
+
+  let targetCardW = Math.min(nominalW, maxWByWidth, maxWByHeight);
+  let scaleFactor = targetCardW / nominalW;
+
+  let gapX = baseGapX;
+  let gapY = baseGapY;
+
+  // If cards need to scale down to fit the page, scale gaps proportionally as well
+  if (scaleFactor < 1.0) {
+    scaleFactor = Math.max(0.15, scaleFactor);
+    gapX = Math.max(0.5, baseGapX * scaleFactor);
+    gapY = Math.max(0.5, baseGapY * scaleFactor);
+
+    // Recompute target width with scaled gaps
+    const refinedMaxWByWidth = (availW - (unitsAcross - 1) * gapX) / unitsAcross;
+    const refinedMaxWByHeight = (availH - (unitsDown - 1) * gapY) / (unitsDown * badgeAspectRatio);
+    targetCardW = Math.max(10, Math.min(nominalW, refinedMaxWByWidth, refinedMaxWByHeight));
+    scaleFactor = targetCardW / nominalW;
+  }
+
+  const targetCardH = targetCardW * badgeAspectRatio;
+
+  // Calculate total grid extent
+  const gridW = unitsAcross * targetCardW + (unitsAcross - 1) * gapX;
+  const gridH = unitsDown * targetCardH + (unitsDown - 1) * gapY;
+
+  // Center grid on page within safe bounds
+  const startX = Math.max(minSafeMargin, (pageWidthMm - gridW) / 2);
+  const startY = Math.max(minSafeMargin, (pageHeightMm - gridH) / 2);
+
+  return {
+    pageWidthMm,
+    pageHeightMm,
+    cardWidthMm: targetCardW,
+    cardHeightMm: targetCardH,
+    gapX,
+    gapY,
+    startX,
+    startY,
+    scaleFactor,
+    cols,
+    rows,
+    cardsPerPage,
+    pairsPerPage,
+    colsOfPairs,
+    rowsOfPairs,
+  };
+}
+
+export const exportCardsToPdf = async (
+  employees: EmployeeCardData[],
+  settings: PrintSettings,
+  companyConfig: CompanyTemplateConfig,
+  renderElementGetter: (empId: string, side: 'front' | 'back') => HTMLElement | null,
+  onProgress?: ExportProgressCallback
+): Promise<Blob> => {
+  const geom = calculatePrintGeometry(settings);
+  const {
+    pageWidthMm,
+    pageHeightMm,
+    cardWidthMm: cardW,
+    cardHeightMm: cardH,
+    gapX,
+    gapY,
+    startX,
+    startY,
+    scaleFactor,
+    cols,
+    rows,
+    cardsPerPage,
+    pairsPerPage,
+    colsOfPairs,
+    rowsOfPairs,
+  } = geom;
 
   const pdf = new jsPDF({
     orientation: settings.orientation,
     unit: 'mm',
     format: [pageWidthMm, pageHeightMm],
+    compress: true,
   });
-
-  const cardW = settings.cardWidthMm; // e.g. 54mm
-  const cardH = settings.cardHeightMm; // e.g. 85.6mm
-  const cols = settings.columnsPerPage;
-  const rows = settings.rowsPerPage;
-  const cardsPerPage = cols * rows;
-
-  const marginLeft = settings.marginsMm.left;
-  const marginTop = settings.marginsMm.top;
-  const gapX = settings.spacingMm.horizontal;
-  const gapY = settings.spacingMm.vertical;
 
   // Pre-render card images using html2canvas
   const totalCards = employees.length;
@@ -84,29 +222,38 @@ export const exportCardsToPdf = async (
     }
   }
 
-  // Draw crop marks function
+  // Draw crop marks function strictly clamped within page boundary
   const drawCropMarks = (x: number, y: number, w: number, h: number) => {
     if (!settings.showCutMarks) return;
-    const len = 3; // mm
-    const offset = 1.5; // mm
+    const len = Math.min(3, Math.max(1.2, 3 * scaleFactor));
+    const offset = Math.min(1.5, Math.max(0.6, 1.5 * scaleFactor));
     pdf.setDrawColor(180, 180, 180);
-    pdf.setLineWidth(0.15);
+    pdf.setLineWidth(0.12);
 
     // Top-left
-    pdf.line(x - offset - len, y, x - offset, y);
-    pdf.line(x, y - offset - len, x, y - offset);
+    const x1 = Math.max(0.5, x - offset - len);
+    const x2 = Math.max(0.5, x - offset);
+    if (x2 > x1) pdf.line(x1, y, x2, y);
+
+    const y1 = Math.max(0.5, y - offset - len);
+    const y2 = Math.max(0.5, y - offset);
+    if (y2 > y1) pdf.line(x, y1, x, y2);
 
     // Top-right
-    pdf.line(x + w + offset, y, x + w + offset + len, y);
-    pdf.line(x + w, y - offset - len, x + w, y - offset);
+    const x3 = Math.min(pageWidthMm - 0.5, x + w + offset);
+    const x4 = Math.min(pageWidthMm - 0.5, x + w + offset + len);
+    if (x4 > x3) pdf.line(x3, y, x4, y);
+    if (y2 > y1) pdf.line(x + w, y1, x + w, y2);
 
     // Bottom-left
-    pdf.line(x - offset - len, y + h, x - offset, y + h);
-    pdf.line(x, y + h + offset, x, y + h + offset + len);
+    if (x2 > x1) pdf.line(x1, y + h, x2, y + h);
+    const y3 = Math.min(pageHeightMm - 0.5, y + h + offset);
+    const y4 = Math.min(pageHeightMm - 0.5, y + h + offset + len);
+    if (y4 > y3) pdf.line(x, y3, x, y4);
 
     // Bottom-right
-    pdf.line(x + w + offset, y + h, x + w + offset + len, y + h);
-    pdf.line(x + w, y + h + offset, x + w, y + h + offset + len);
+    if (x4 > x3) pdf.line(x3, y + h, x4, y + h);
+    if (y4 > y3) pdf.line(x + w, y3, x + w, y4);
   };
 
   // Generate PDF Pages based on layoutMode
@@ -123,8 +270,8 @@ export const exportCardsToPdf = async (
       batchEmployees.forEach((emp, slotIdx) => {
         const col = slotIdx % cols;
         const row = Math.floor(slotIdx / cols);
-        const x = marginLeft + col * (cardW + gapX);
-        const y = marginTop + row * (cardH + gapY);
+        const x = startX + col * (cardW + gapX);
+        const y = startY + row * (cardH + gapY);
 
         const imgData = renderedImages[emp.id]?.front;
         if (imgData) {
@@ -141,8 +288,8 @@ export const exportCardsToPdf = async (
         const row = Math.floor(slotIdx / cols);
         // Mirrored column position
         const mirroredCol = cols - 1 - originalCol;
-        const x = marginLeft + mirroredCol * (cardW + gapX);
-        const y = marginTop + row * (cardH + gapY);
+        const x = startX + mirroredCol * (cardW + gapX);
+        const y = startY + row * (cardH + gapY);
 
         const imgData = renderedImages[emp.id]?.back;
         if (imgData) {
@@ -153,8 +300,6 @@ export const exportCardsToPdf = async (
     }
   } else if (settings.layoutMode === 'side-by-side') {
     // Side by side: Front on left, Back on right for each card
-    const colsOfPairs = Math.max(1, Math.floor(cols / 2));
-    const pairsPerPage = colsOfPairs * rows;
     const totalBatches = Math.ceil(employees.length / pairsPerPage);
 
     for (let batchIdx = 0; batchIdx < totalBatches; batchIdx++) {
@@ -167,8 +312,8 @@ export const exportCardsToPdf = async (
         const row = Math.floor(pairIdx / colsOfPairs);
 
         // Front (Left)
-        const xF = marginLeft + colPair * (cardW * 2 + gapX * 2);
-        const yF = marginTop + row * (cardH + gapY);
+        const xF = startX + colPair * (cardW * 2 + gapX * 2);
+        const yF = startY + row * (cardH + gapY);
 
         // Back (Right)
         const xB = xF + cardW + gapX;
@@ -189,8 +334,6 @@ export const exportCardsToPdf = async (
     }
   } else if (settings.layoutMode === 'top-and-bottom') {
     // Top and Bottom: Front at top, Back at bottom for each card
-    const rowsOfPairs = Math.max(1, Math.floor(rows / 2));
-    const pairsPerPage = cols * rowsOfPairs;
     const totalBatches = Math.ceil(employees.length / pairsPerPage);
 
     for (let batchIdx = 0; batchIdx < totalBatches; batchIdx++) {
@@ -203,8 +346,8 @@ export const exportCardsToPdf = async (
         const rowPair = Math.floor(pairIdx / cols);
 
         // Front (Top)
-        const xF = marginLeft + col * (cardW + gapX);
-        const yF = marginTop + rowPair * (cardH * 2 + gapY * 2);
+        const xF = startX + col * (cardW + gapX);
+        const yF = startY + rowPair * (cardH * 2 + gapY * 2);
 
         // Back (Bottom)
         const xB = xF;
@@ -236,8 +379,8 @@ export const exportCardsToPdf = async (
       batch.forEach((emp, slotIdx) => {
         const col = slotIdx % cols;
         const row = Math.floor(slotIdx / cols);
-        const x = marginLeft + col * (cardW + gapX);
-        const y = marginTop + row * (cardH + gapY);
+        const x = startX + col * (cardW + gapX);
+        const y = startY + row * (cardH + gapY);
 
         const imgData = renderedImages[emp.id]?.[side];
         if (imgData) {

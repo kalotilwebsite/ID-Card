@@ -30,8 +30,11 @@ import {
   Check,
   Loader2,
   Clock,
+  FileDown,
+  AlertCircle,
 } from 'lucide-react';
 import { copyCardSideBySideToClipboard } from './services/cardImageCopyService';
+import { generateBulkCardsPdf, downloadBlob } from './services/bulkPdfDownloadService';
 import {
   EmployeeCardData,
   ColumnMapping,
@@ -154,6 +157,20 @@ export default function App() {
   const [copyFeedback, setCopyFeedback] = useState<{
     id: string;
     status: 'copied' | 'downloaded';
+    message: string;
+  } | null>(null);
+
+  // Bulk PDF download state (up to 18 cards, 6 cards per landscape page, max 3 pages)
+  const [selectedCardIds, setSelectedCardIds] = useState<Set<string>>(() => {
+    return new Set(SAMPLE_EMPLOYEES.map((e) => e.id));
+  });
+  const [isBulkPdfGenerating, setIsBulkPdfGenerating] = useState(false);
+  const [bulkPdfProgress, setBulkPdfProgress] = useState<{ current: number; total: number }>({
+    current: 0,
+    total: 0,
+  });
+  const [bulkPdfFeedback, setBulkPdfFeedback] = useState<{
+    type: 'success' | 'warning' | 'error';
     message: string;
   } | null>(null);
 
@@ -430,6 +447,92 @@ export default function App() {
       });
     } finally {
       setCopyingCardId(null);
+    }
+  };
+
+  const handleToggleSelectCard = (id: string) => {
+    setSelectedCardIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+    setBulkPdfFeedback(null);
+  };
+
+  const handleSelectAllCards = (ids: string[]) => {
+    setSelectedCardIds(new Set(ids));
+    setBulkPdfFeedback(null);
+  };
+
+  const handleClearSelectedCards = () => {
+    setSelectedCardIds(new Set());
+    setBulkPdfFeedback(null);
+  };
+
+  const handleTriggerBulkPdfDownload = async () => {
+    if (isBulkPdfGenerating) return;
+
+    if (selectedCardIds.size === 0) {
+      setBulkPdfFeedback({
+        type: 'warning',
+        message: 'Please select cards from the table (up to 18) to download as a print-ready bulk PDF.',
+      });
+      return;
+    }
+
+    if (selectedCardIds.size > 18) {
+      setBulkPdfFeedback({
+        type: 'warning',
+        message: `Maximum 18 cards per PDF download. Please select no more than 18 cards (currently selected: ${selectedCardIds.size}).`,
+      });
+      return;
+    }
+
+    const selectedList = employees.filter((e) => selectedCardIds.has(e.id));
+    if (selectedList.length === 0) {
+      setBulkPdfFeedback({
+        type: 'warning',
+        message: 'No matching cards found for the selected items.',
+      });
+      return;
+    }
+
+    setIsBulkPdfGenerating(true);
+    setBulkPdfProgress({ current: 0, total: selectedList.length });
+    setBulkPdfFeedback(null);
+
+    try {
+      const result = await generateBulkCardsPdf(
+        selectedList,
+        getCardElement,
+        (current, total, msg) => {
+          setBulkPdfProgress({ current, total });
+        }
+      );
+
+      downloadBlob(result.blob, result.filename);
+
+      setBulkPdfFeedback({
+        type: 'success',
+        message: `Bulk PDF downloaded successfully: ${result.cardCount} cards across ${result.pageCount} landscape page${result.pageCount > 1 ? 's' : ''}!`,
+      });
+
+      // Auto dismiss success feedback after 6 seconds
+      setTimeout(() => {
+        setBulkPdfFeedback((prev) => (prev?.type === 'success' ? null : prev));
+      }, 6000);
+    } catch (err: any) {
+      console.error('Bulk PDF download failed:', err);
+      setBulkPdfFeedback({
+        type: 'error',
+        message: err.message || 'Failed to generate bulk PDF download.',
+      });
+    } finally {
+      setIsBulkPdfGenerating(false);
     }
   };
 
@@ -909,6 +1012,12 @@ export default function App() {
                       employees={employees}
                       onUpdateEmployees={setEmployees}
                       selectedEmployeeId={currentEmployee.id}
+                      selectedCardIds={selectedCardIds}
+                      onToggleSelectCard={handleToggleSelectCard}
+                      onSelectAllCards={handleSelectAllCards}
+                      onClearSelectedCards={handleClearSelectedCards}
+                      onBulkPdfDownload={handleTriggerBulkPdfDownload}
+                      isBulkPdfGenerating={isBulkPdfGenerating}
                       onSelectEmployeeForPreview={(id) => {
                         const idx = employees.findIndex((e) => e.id === id);
                         if (idx !== -1) setSelectedEmpIndex(idx);
@@ -1045,6 +1154,36 @@ export default function App() {
                             : 'Copy'}
                         </span>
                       </button>
+
+                      {/* Bulk PDF Download Button (Clearly labeled near Copy option) */}
+                      <button
+                        type="button"
+                        onClick={handleTriggerBulkPdfDownload}
+                        disabled={isBulkPdfGenerating}
+                        title={
+                          selectedCardIds.size > 18
+                            ? 'Maximum 18 cards per PDF. Please select no more than 18 cards.'
+                            : selectedCardIds.size === 0
+                            ? 'Select cards from the table to download Bulk PDF'
+                            : 'Download selected cards (up to 18) as a print-ready landscape PDF'
+                        }
+                        className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all flex items-center gap-1.5 shadow-2xs active:scale-95 disabled:opacity-50 ${
+                          selectedCardIds.size > 18
+                            ? 'bg-amber-600 hover:bg-amber-700 text-white animate-pulse'
+                            : 'bg-rose-600 hover:bg-rose-700 text-white'
+                        }`}
+                      >
+                        {isBulkPdfGenerating ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
+                        ) : (
+                          <FileDown className="w-3.5 h-3.5 text-white" />
+                        )}
+                        <span>
+                          {isBulkPdfGenerating
+                            ? `Generating (${bulkPdfProgress.current}/${bulkPdfProgress.total})...`
+                            : `Bulk PDF Download${selectedCardIds.size > 0 ? ` (${selectedCardIds.size})` : ''}`}
+                        </span>
+                      </button>
                     </div>
 
                     <div className="flex items-center gap-1">
@@ -1078,6 +1217,35 @@ export default function App() {
                     >
                       <CheckCircle className="w-4 h-4 shrink-0 text-emerald-600" />
                       <span className="flex-1 font-semibold">{copyFeedback.message}</span>
+                    </div>
+                  )}
+
+                  {/* Bulk PDF Feedback Notification */}
+                  {bulkPdfFeedback && (
+                    <div
+                      className={`p-2.5 rounded-xl text-[11px] font-medium flex items-center gap-2 transition-all shadow-xs ${
+                        bulkPdfFeedback.type === 'success'
+                          ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                          : bulkPdfFeedback.type === 'warning'
+                          ? 'bg-amber-50 text-amber-800 border border-amber-300'
+                          : 'bg-rose-50 text-rose-800 border border-rose-200'
+                      }`}
+                    >
+                      {bulkPdfFeedback.type === 'success' ? (
+                        <CheckCircle className="w-4 h-4 shrink-0 text-emerald-600" />
+                      ) : bulkPdfFeedback.type === 'warning' ? (
+                        <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600" />
+                      ) : (
+                        <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                      )}
+                      <span className="flex-1 font-semibold">{bulkPdfFeedback.message}</span>
+                      <button
+                        type="button"
+                        onClick={() => setBulkPdfFeedback(null)}
+                        className="text-slate-400 hover:text-slate-700 font-bold px-1"
+                      >
+                        ✕
+                      </button>
                     </div>
                   )}
 

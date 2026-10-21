@@ -12,6 +12,10 @@ import {
   Check,
   X,
   Clock,
+  Download,
+  Loader2,
+  AlertCircle,
+  FileDown,
 } from 'lucide-react';
 
 interface EmployeeTableEditorProps {
@@ -19,6 +23,12 @@ interface EmployeeTableEditorProps {
   onUpdateEmployees: (employees: EmployeeCardData[]) => void;
   onSelectEmployeeForPreview: (employeeId: string) => void;
   selectedEmployeeId?: string;
+  selectedCardIds?: Set<string>;
+  onToggleSelectCard?: (employeeId: string) => void;
+  onSelectAllCards?: (ids: string[]) => void;
+  onClearSelectedCards?: () => void;
+  onBulkPdfDownload?: () => void;
+  isBulkPdfGenerating?: boolean;
 }
 
 export const EmployeeTableEditor: React.FC<EmployeeTableEditorProps> = ({
@@ -26,6 +36,12 @@ export const EmployeeTableEditor: React.FC<EmployeeTableEditorProps> = ({
   onUpdateEmployees,
   onSelectEmployeeForPreview,
   selectedEmployeeId,
+  selectedCardIds = new Set(),
+  onToggleSelectCard,
+  onSelectAllCards,
+  onClearSelectedCards,
+  onBulkPdfDownload,
+  isBulkPdfGenerating = false,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'valid' | 'invalid'>('all');
@@ -280,11 +296,117 @@ export const EmployeeTableEditor: React.FC<EmployeeTableEditorProps> = ({
         </div>
       </div>
 
+      {/* Bulk Selection Bar */}
+      <div className="px-4 py-2 bg-slate-50 border-t border-b border-gray-200 flex flex-wrap items-center justify-between gap-2 text-xs">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="font-semibold text-gray-700">
+            <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 font-bold mr-1">
+              {selectedCardIds.size}
+            </span>
+            card{selectedCardIds.size === 1 ? '' : 's'} selected
+          </span>
+
+          {selectedCardIds.size > 18 ? (
+            <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-rose-100 text-rose-700 border border-rose-300 flex items-center gap-1.5 animate-pulse">
+              <AlertCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+              Maximum 18 cards per PDF download. Please select no more than 18 cards.
+            </span>
+          ) : selectedCardIds.size > 0 ? (
+            <span className="text-[11px] text-gray-500 font-medium">
+              (Will generate {Math.ceil(selectedCardIds.size / 6)} landscape page{Math.ceil(selectedCardIds.size / 6) === 1 ? '' : 's'}, 6 cards/page)
+            </span>
+          ) : (
+            <span className="text-[11px] text-gray-500">
+              (Select up to 18 cards for bulk landscape PDF download)
+            </span>
+          )}
+        </div>
+
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {employees.length > 18 && (
+            <button
+              type="button"
+              onClick={() => {
+                const first18 = filteredEmployees.slice(0, 18).map((e) => e.id);
+                onSelectAllCards?.(first18);
+              }}
+              className="px-2.5 py-1 bg-white hover:bg-gray-100 border border-gray-200 rounded-lg text-[11px] font-semibold text-gray-700 transition-colors"
+            >
+              Select First 18
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={() => {
+              const allFiltered = filteredEmployees.map((e) => e.id);
+              onSelectAllCards?.(allFiltered);
+            }}
+            className="px-2.5 py-1 bg-white hover:bg-gray-100 border border-gray-200 rounded-lg text-[11px] font-semibold text-gray-700 transition-colors"
+          >
+            Select All
+          </button>
+
+          {selectedCardIds.size > 0 && (
+            <button
+              type="button"
+              onClick={() => onClearSelectedCards?.()}
+              className="px-2.5 py-1 bg-white hover:bg-gray-100 border border-gray-200 rounded-lg text-[11px] font-semibold text-gray-500 hover:text-gray-800 transition-colors"
+            >
+              Clear
+            </button>
+          )}
+
+          {onBulkPdfDownload && (
+            <button
+              type="button"
+              onClick={onBulkPdfDownload}
+              disabled={isBulkPdfGenerating || selectedCardIds.size === 0 || selectedCardIds.size > 18}
+              className="px-3 py-1 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white rounded-lg text-xs font-bold transition-all shadow-2xs flex items-center gap-1.5"
+              title={
+                selectedCardIds.size > 18
+                  ? 'Maximum 18 cards allowed per PDF download'
+                  : selectedCardIds.size === 0
+                  ? 'Select cards to download'
+                  : 'Download selected cards as print-ready landscape PDF'
+              }
+            >
+              {isBulkPdfGenerating ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <FileDown className="w-3.5 h-3.5" />
+              )}
+              <span>Bulk PDF Download{selectedCardIds.size > 0 ? ` (${selectedCardIds.size})` : ''}</span>
+            </button>
+          )}
+        </div>
+      </div>
+
       {/* Table Content */}
       <div className="overflow-x-auto flex-1 min-h-[300px]">
         <table className="w-full text-left border-collapse text-xs">
           <thead>
             <tr className="bg-gray-100/70 text-gray-600 uppercase text-[10px] font-bold tracking-wider border-b border-gray-200 sticky top-0 z-10 backdrop-blur-sm">
+              <th className="py-2.5 px-3 w-10 text-center">
+                <input
+                  type="checkbox"
+                  aria-label="Select all visible cards"
+                  title="Select all visible cards"
+                  checked={
+                    filteredEmployees.length > 0 &&
+                    filteredEmployees.every((e) => selectedCardIds.has(e.id))
+                  }
+                  onChange={() => {
+                    const allSelected = filteredEmployees.every((e) => selectedCardIds.has(e.id));
+                    if (allSelected) {
+                      onClearSelectedCards?.();
+                    } else {
+                      onSelectAllCards?.(filteredEmployees.map((e) => e.id));
+                    }
+                  }}
+                  className="rounded border-gray-300 text-rose-600 focus:ring-rose-500 cursor-pointer w-4 h-4"
+                />
+              </th>
               <th className="py-2.5 px-3">Status</th>
               <th className="py-2.5 px-3">Photo</th>
               <th className="py-2.5 px-3">Sign</th>
@@ -304,6 +426,7 @@ export const EmployeeTableEditor: React.FC<EmployeeTableEditorProps> = ({
             {filteredEmployees.map((emp) => {
               const validation = validateEmployee(emp);
               const isSelected = emp.id === selectedEmployeeId;
+              const isChecked = selectedCardIds.has(emp.id);
               const isEditing = emp.id === editingId;
 
               return (
@@ -311,13 +434,26 @@ export const EmployeeTableEditor: React.FC<EmployeeTableEditorProps> = ({
                   key={emp.id}
                   onClick={() => onSelectEmployeeForPreview(emp.id)}
                   className={`cursor-pointer transition-colors ${
-                    isSelected
-                      ? 'bg-rose-50/70 font-medium'
+                    isChecked
+                      ? 'bg-rose-50/50 hover:bg-rose-50/80 font-medium'
+                      : isSelected
+                      ? 'bg-rose-50/30 font-medium'
                       : !validation.isValid
                       ? 'bg-red-50/30 hover:bg-red-50/50'
                       : 'hover:bg-gray-50'
                   }`}
                 >
+                  {/* Card Checkbox */}
+                  <td className="py-2 px-3 text-center" onClick={(e) => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      aria-label={`Select card for ${emp.name}`}
+                      checked={isChecked}
+                      onChange={() => onToggleSelectCard?.(emp.id)}
+                      className="rounded border-gray-300 text-rose-600 focus:ring-rose-500 cursor-pointer w-4 h-4"
+                    />
+                  </td>
+
                   {/* Status Indicator */}
                   <td className="py-2 px-3">
                     {emp.printStatus === 'printed' ? (

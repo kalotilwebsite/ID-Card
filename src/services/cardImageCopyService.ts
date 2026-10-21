@@ -1,5 +1,5 @@
 import html2canvas from 'html2canvas-pro';
-import { EmployeeCardData, CARD_WIDTH, CARD_HEIGHT } from '../types';
+import { EmployeeCardData } from '../types';
 
 export interface CopyCardResult {
   success: boolean;
@@ -50,7 +50,16 @@ export async function copyCardSideBySideToClipboard(
     );
   }
 
-  // 2. Capture each side with html2canvas preserving exact appearance
+  // 2. Ensure fonts are fully loaded before capturing
+  if (typeof document !== 'undefined' && document.fonts?.ready) {
+    try {
+      await document.fonts.ready;
+    } catch (e) {
+      // Continue even if font ready promise rejects
+    }
+  }
+
+  // 3. Capture each side with html2canvas preserving exact appearance
   const canvasFront = await html2canvas(frontEl, {
     scale,
     useCORS: true,

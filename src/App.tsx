@@ -26,7 +26,11 @@ import {
   Shield,
   ShieldAlert,
   Briefcase,
+  Copy,
+  Check,
+  Loader2,
 } from 'lucide-react';
+import { copyCardSideBySideToClipboard } from './services/cardImageCopyService';
 import {
   EmployeeCardData,
   ColumnMapping,
@@ -137,6 +141,14 @@ export default function App() {
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [isCalibrationModalOpen, setIsCalibrationModalOpen] = useState(false);
+
+  // Single card copy state (combines front and back side-by-side for Word)
+  const [copyingCardId, setCopyingCardId] = useState<string | null>(null);
+  const [copyFeedback, setCopyFeedback] = useState<{
+    id: string;
+    status: 'copied' | 'downloaded';
+    message: string;
+  } | null>(null);
 
   // Ref to hidden export container
   const exportRenderRef = useRef<HTMLDivElement>(null);
@@ -355,6 +367,40 @@ export default function App() {
 
   const getCardElement = (empId: string, side: 'front' | 'back'): HTMLElement | null => {
     return document.getElementById(`export-${side}-${empId}`);
+  };
+
+  const handleCopyCard = async (emp: EmployeeCardData) => {
+    if (copyingCardId) return;
+    setCopyingCardId(emp.id);
+    setCopyFeedback(null);
+
+    try {
+      const res = await copyCardSideBySideToClipboard(emp, getCardElement, {
+        scale: 3,
+        gap: 32,
+        padding: 16,
+      });
+
+      setCopyFeedback({
+        id: emp.id,
+        status: res.method === 'clipboard' ? 'copied' : 'downloaded',
+        message: res.message,
+      });
+
+      // Auto-dismiss after 4 seconds
+      setTimeout(() => {
+        setCopyFeedback((prev) => (prev?.id === emp.id ? null : prev));
+      }, 4000);
+    } catch (err: any) {
+      console.error('Failed to copy card image:', err);
+      setCopyFeedback({
+        id: emp.id,
+        status: 'downloaded',
+        message: err.message || 'Failed to capture card image.',
+      });
+    } finally {
+      setCopyingCardId(null);
+    }
   };
 
   // Called when Admin selects submitted cards to generate/print
@@ -852,6 +898,30 @@ export default function App() {
                       <span className="text-xs font-bold uppercase tracking-wider text-slate-700">
                         Inspecting Card {selectedEmpIndex + 1} of {employees.length}
                       </span>
+
+                      {/* Minimal Copy Icon Button */}
+                      <button
+                        type="button"
+                        onClick={() => handleCopyCard(currentEmployee)}
+                        disabled={copyingCardId === currentEmployee.id}
+                        title="Copy Front & Back combined side-by-side to Clipboard (paste into Word with Ctrl+V)"
+                        className="px-2 py-1 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg text-slate-600 hover:text-slate-900 transition-all flex items-center gap-1.5 shadow-2xs active:scale-95 disabled:opacity-50"
+                      >
+                        {copyingCardId === currentEmployee.id ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin text-rose-600" />
+                        ) : copyFeedback?.id === currentEmployee.id ? (
+                          <Check className="w-3.5 h-3.5 text-emerald-600" />
+                        ) : (
+                          <Copy className="w-3.5 h-3.5 text-slate-500 hover:text-slate-900" />
+                        )}
+                        <span className="text-[10px] font-semibold">
+                          {copyingCardId === currentEmployee.id
+                            ? 'Combining...'
+                            : copyFeedback?.id === currentEmployee.id
+                            ? (copyFeedback.status === 'copied' ? 'Copied!' : 'Downloaded!')
+                            : 'Copy'}
+                        </span>
+                      </button>
                     </div>
 
                     <div className="flex items-center gap-1">
@@ -873,6 +943,20 @@ export default function App() {
                       </button>
                     </div>
                   </div>
+
+                  {/* Copy Feedback Notification */}
+                  {copyFeedback && copyFeedback.id === currentEmployee.id && (
+                    <div
+                      className={`p-2.5 rounded-xl text-[11px] font-medium flex items-center gap-2 transition-all shadow-xs ${
+                        copyFeedback.status === 'copied'
+                          ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                          : 'bg-sky-50 text-sky-800 border border-sky-200'
+                      }`}
+                    >
+                      <CheckCircle className="w-4 h-4 shrink-0 text-emerald-600" />
+                      <span className="flex-1 font-semibold">{copyFeedback.message}</span>
+                    </div>
+                  )}
 
                   {/* Preview Side Switcher & Zoom */}
                   <div className="flex items-center justify-between bg-white p-1.5 rounded-xl border border-slate-200 shadow-2xs">
@@ -934,17 +1018,29 @@ export default function App() {
                   <div className="flex flex-col items-center justify-center gap-6 py-4 min-h-[460px] bg-slate-100/70 border border-slate-200/80 rounded-2xl p-4">
                     {(previewSide === 'both' || previewSide === 'front') && (
                       <div className="flex flex-col items-center">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-600 mb-1.5">
-                          Front Side (Official)
-                        </span>
+                        <div className="flex items-center justify-between w-full max-w-[280px] mb-1.5 px-0.5">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-600">
+                            Front Side (Official)
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyCard(currentEmployee)}
+                            disabled={copyingCardId === currentEmployee.id}
+                            title="Copy Front & Back combined side-by-side to Clipboard (for Word Ctrl+V)"
+                            className="p-1 rounded text-slate-400 hover:text-slate-800 hover:bg-slate-200/60 active:scale-95 transition-all flex items-center gap-1"
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                         <div
                           style={{
                             width: CARD_WIDTH * previewZoom,
                             height: CARD_HEIGHT * previewZoom,
                           }}
-                          className="relative transition-all shadow-md rounded-2xl overflow-hidden"
+                          className="relative transition-all shadow-md rounded-2xl overflow-hidden group"
                         >
                           <CardFront
+                            id={`inspect-front-${currentEmployee.id}`}
                             employee={currentEmployee}
                             templateUrl={frontTemplateUrl}
                             calibration={calibration.front}
@@ -956,17 +1052,29 @@ export default function App() {
 
                     {(previewSide === 'both' || previewSide === 'back') && (
                       <div className="flex flex-col items-center">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-600 mb-1.5">
-                          Back Side (Emergency &amp; Blood Group)
-                        </span>
+                        <div className="flex items-center justify-between w-full max-w-[280px] mb-1.5 px-0.5">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-600">
+                            Back Side (Emergency &amp; Blood Group)
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyCard(currentEmployee)}
+                            disabled={copyingCardId === currentEmployee.id}
+                            title="Copy Front & Back combined side-by-side to Clipboard (for Word Ctrl+V)"
+                            className="p-1 rounded text-slate-400 hover:text-slate-800 hover:bg-slate-200/60 active:scale-95 transition-all flex items-center gap-1"
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                         <div
                           style={{
                             width: CARD_WIDTH * previewZoom,
                             height: CARD_HEIGHT * previewZoom,
                           }}
-                          className="relative transition-all shadow-md rounded-2xl overflow-hidden"
+                          className="relative transition-all shadow-md rounded-2xl overflow-hidden group"
                         >
                           <CardBack
+                            id={`inspect-back-${currentEmployee.id}`}
                             employee={currentEmployee}
                             templateUrl={backTemplateUrl}
                             calibration={calibration.back}

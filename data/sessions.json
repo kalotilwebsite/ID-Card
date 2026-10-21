@@ -38,5 +38,13 @@
   "6e18196d5fcfc7526c4260cd3cbf3d0d1c905b44b2ecd66a614640652aceb17c": {
     "userId": "user-admin-1",
     "expiresAt": 1795077306491
+  },
+  "e20bee1b142a48277e1d654a7581d19cbe58afc2f3ce23edf8207e181216d5c6": {
+    "userId": "user-supervisor-1",
+    "expiresAt": 1795179092318
+  },
+  "dc245029719fd02c9fd88c42d866a21c7b6680afa2371d85d1305e30ea6ffb04": {
+    "userId": "user-admin-1",
+    "expiresAt": 1795179092456
   }
 }

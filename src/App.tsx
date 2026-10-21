@@ -140,6 +140,7 @@ export default function App() {
   const [activeWorkspaceTab, setActiveWorkspaceTab] = useState<'table' | 'gallery'>('table');
   const [previewSide, setPreviewSide] = useState<'both' | 'front' | 'back'>('both');
   const [previewZoom, setPreviewZoom] = useState(0.85);
+  const [previewDisplayMode, setPreviewDisplayMode] = useState<'all' | 'single'>('all');
 
   // Modals
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -184,12 +185,15 @@ export default function App() {
         }
       }
 
-      // Sync saved print layout settings
+      // Sync saved print layout settings (preserving mandatory 47x78mm card dimensions)
       try {
         const settings = await apiService.getPublicSettings();
         if (isMounted && settings) {
           setPrintSettings((prev) => {
             const updated = { ...prev };
+            // Enforce mandatory card dimensions and defaults
+            updated.cardWidthMm = 47;
+            updated.cardHeightMm = 78;
             if (settings.pdfPrintLayout === 'top_bottom') {
               updated.layoutMode = 'top-and-bottom';
             } else if (settings.pdfPrintLayout === 'side_by_side') {
@@ -212,9 +216,6 @@ export default function App() {
               } else if (cpp === 10) {
                 updated.columnsPerPage = 5;
                 updated.rowsPerPage = 2;
-              } else {
-                updated.columnsPerPage = 3;
-                updated.rowsPerPage = 3;
               }
             }
             return updated;
@@ -400,7 +401,10 @@ export default function App() {
   };
 
   const getCardElement = (empId: string, side: 'front' | 'back'): HTMLElement | null => {
-    return document.getElementById(`export-${side}-${empId}`);
+    return (
+      document.getElementById(`export-${side}-${empId}`) ||
+      document.getElementById(`preview-card-${side}-${empId}`)
+    );
   };
 
   // Called when Admin selects submitted cards to generate/print
@@ -882,32 +886,65 @@ export default function App() {
               {/* Right Section: Real-Time Precision Card Inspector & Preview */}
               <div className="w-full lg:w-[480px] xl:w-[540px] bg-slate-50 border-l border-slate-200 p-4 flex flex-col justify-between overflow-y-auto">
                 <div className="space-y-4">
-                  {/* Card Navigation & Selection */}
-                  <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold uppercase tracking-wider text-slate-700">
-                        Inspecting Card {selectedEmpIndex + 1} of {employees.length}
-                      </span>
+                  {/* Mode Selector: All Selected Cards vs Single Card Inspector */}
+                  <div className="flex items-center justify-between border-b border-slate-200 pb-2.5">
+                    <div className="flex bg-slate-200/80 p-0.5 rounded-lg">
+                      <button
+                        type="button"
+                        onClick={() => setPreviewDisplayMode('all')}
+                        className={`px-2.5 py-1 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                          previewDisplayMode === 'all'
+                            ? 'bg-white text-rose-600 shadow-2xs'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        All Cards ({employees.length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPreviewDisplayMode('single')}
+                        className={`px-2.5 py-1 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                          previewDisplayMode === 'single'
+                            ? 'bg-white text-rose-600 shadow-2xs'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        Single Inspector
+                      </button>
                     </div>
 
-                    <div className="flex items-center gap-1">
+                    {previewDisplayMode === 'single' ? (
+                      <div className="flex items-center gap-1">
+                        <span className="text-[11px] font-bold text-slate-500 mr-1">
+                          {selectedEmpIndex + 1}/{employees.length}
+                        </span>
+                        <button
+                          onClick={() => setSelectedEmpIndex((prev) => Math.max(0, prev - 1))}
+                          disabled={selectedEmpIndex === 0}
+                          className="p-1 bg-white hover:bg-slate-100 border border-slate-200 disabled:opacity-40 rounded-lg text-slate-700 transition-colors"
+                        >
+                          <ChevronLeft className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() =>
+                            setSelectedEmpIndex((prev) => Math.min(employees.length - 1, prev + 1))
+                          }
+                          disabled={selectedEmpIndex === employees.length - 1}
+                          className="p-1 bg-white hover:bg-slate-100 border border-slate-200 disabled:opacity-40 rounded-lg text-slate-700 transition-colors"
+                        >
+                          <ChevronRight className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ) : (
                       <button
-                        onClick={() => setSelectedEmpIndex((prev) => Math.max(0, prev - 1))}
-                        disabled={selectedEmpIndex === 0}
-                        className="p-1.5 bg-white hover:bg-slate-100 border border-slate-200 disabled:opacity-40 rounded-lg text-slate-700 transition-colors"
+                        type="button"
+                        onClick={() => setIsPrintModalOpen(true)}
+                        className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold transition-colors flex items-center gap-1 cursor-pointer"
                       >
-                        <ChevronLeft className="w-4 h-4" />
+                        <Printer className="w-3 h-3" />
+                        <span>Print Setup</span>
                       </button>
-                      <button
-                        onClick={() =>
-                          setSelectedEmpIndex((prev) => Math.min(employees.length - 1, prev + 1))
-                        }
-                        disabled={selectedEmpIndex === employees.length - 1}
-                        className="p-1.5 bg-white hover:bg-slate-100 border border-slate-200 disabled:opacity-40 rounded-lg text-slate-700 transition-colors"
-                      >
-                        <ChevronRight className="w-4 h-4" />
-                      </button>
-                    </div>
+                    )}
                   </div>
 
                   {/* Preview Side Switcher & Zoom */}
@@ -915,7 +952,7 @@ export default function App() {
                     <div className="flex gap-1">
                       <button
                         onClick={() => setPreviewSide('both')}
-                        className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${
+                        className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors ${
                           previewSide === 'both'
                             ? 'bg-rose-600 text-white'
                             : 'text-slate-600 hover:text-slate-900'
@@ -925,7 +962,7 @@ export default function App() {
                       </button>
                       <button
                         onClick={() => setPreviewSide('front')}
-                        className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${
+                        className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors ${
                           previewSide === 'front'
                             ? 'bg-rose-600 text-white'
                             : 'text-slate-600 hover:text-slate-900'
@@ -935,7 +972,7 @@ export default function App() {
                       </button>
                       <button
                         onClick={() => setPreviewSide('back')}
-                        className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${
+                        className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors ${
                           previewSide === 'back'
                             ? 'bg-rose-600 text-white'
                             : 'text-slate-600 hover:text-slate-900'
@@ -947,7 +984,7 @@ export default function App() {
 
                     <div className="flex items-center gap-1.5 pr-1">
                       <button
-                        onClick={() => setPreviewZoom((z) => Math.max(0.5, z - 0.1))}
+                        onClick={() => setPreviewZoom((z) => Math.max(0.4, z - 0.1))}
                         className="p-1 text-slate-500 hover:text-slate-900"
                         title="Zoom out"
                       >
@@ -957,7 +994,7 @@ export default function App() {
                         {Math.round(previewZoom * 100)}%
                       </span>
                       <button
-                        onClick={() => setPreviewZoom((z) => Math.min(1.4, z + 0.1))}
+                        onClick={() => setPreviewZoom((z) => Math.min(1.2, z + 0.1))}
                         className="p-1 text-slate-500 hover:text-slate-900"
                         title="Zoom in"
                       >
@@ -966,74 +1003,134 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Rendered Live Cards on clean backdrop */}
-                  <div className="flex flex-col items-center justify-center gap-6 py-4 min-h-[460px] bg-slate-100/70 border border-slate-200/80 rounded-2xl p-4">
-                    {(previewSide === 'both' || previewSide === 'front') && (
-                      <div className="flex flex-col items-center">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-600 mb-1.5">
-                          Front Side (Official)
-                        </span>
+                  {/* RENDERED CARDS: ALL SELECTED CARDS OR SINGLE INSPECTION */}
+                  {previewDisplayMode === 'all' ? (
+                    <div className="space-y-6 max-h-[58vh] overflow-y-auto pr-1">
+                      {employees.map((emp, empIdx) => (
                         <div
-                          style={{
-                            width: CARD_WIDTH * previewZoom,
-                            height: CARD_HEIGHT * previewZoom,
-                          }}
-                          className="relative transition-all shadow-md rounded-2xl overflow-hidden"
+                          key={emp.id}
+                          className="bg-white border border-slate-200/90 rounded-2xl p-3 shadow-xs hover:border-slate-300 transition-all"
                         >
-                          <CardFront
-                            employee={currentEmployee}
-                            templateUrl={frontTemplateUrl}
-                            calibration={calibration.front}
-                            scale={previewZoom}
-                          />
-                        </div>
-                      </div>
-                    )}
+                          <div className="flex items-center justify-between mb-2 pb-1.5 border-b border-slate-100 text-xs">
+                            <div className="flex items-center gap-2">
+                              <span className="w-5 h-5 rounded-full bg-slate-900 text-white flex items-center justify-center text-[10px] font-bold">
+                                {empIdx + 1}
+                              </span>
+                              <span className="font-bold text-slate-900">{emp.name}</span>
+                            </div>
+                            <span className="font-mono text-[11px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">
+                              {emp.enrollId}
+                            </span>
+                          </div>
 
-                    {(previewSide === 'both' || previewSide === 'back') && (
-                      <div className="flex flex-col items-center">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-600 mb-1.5">
-                          Back Side (Emergency &amp; Blood Group)
-                        </span>
-                        <div
-                          style={{
-                            width: CARD_WIDTH * previewZoom,
-                            height: CARD_HEIGHT * previewZoom,
-                          }}
-                          className="relative transition-all shadow-md rounded-2xl overflow-hidden"
-                        >
-                          <CardBack
-                            employee={currentEmployee}
-                            templateUrl={backTemplateUrl}
-                            calibration={calibration.back}
-                            scale={previewZoom}
-                          />
+                          <div className="flex items-center justify-center gap-4 flex-wrap py-2">
+                            {(previewSide === 'both' || previewSide === 'front') && (
+                              <div
+                                style={{
+                                  width: CARD_WIDTH * previewZoom,
+                                  height: CARD_HEIGHT * previewZoom,
+                                }}
+                                className="relative rounded-2xl overflow-hidden shadow-sm border border-slate-200"
+                              >
+                                <CardFront
+                                  id={`preview-card-front-${emp.id}`}
+                                  employee={emp}
+                                  templateUrl={frontTemplateUrl}
+                                  calibration={calibration.front}
+                                  scale={previewZoom}
+                                />
+                              </div>
+                            )}
+
+                            {(previewSide === 'both' || previewSide === 'back') && (
+                              <div
+                                style={{
+                                  width: CARD_WIDTH * previewZoom,
+                                  height: CARD_HEIGHT * previewZoom,
+                                }}
+                                className="relative rounded-2xl overflow-hidden shadow-sm border border-slate-200"
+                              >
+                                <CardBack
+                                  id={`preview-card-back-${emp.id}`}
+                                  employee={emp}
+                                  templateUrl={backTemplateUrl}
+                                  calibration={calibration.back}
+                                  scale={previewZoom}
+                                />
+                              </div>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    )}
-                  </div>
+                      ))}
+                    </div>
+                  ) : (
+                    /* Single Card Inspection */
+                    <div className="flex flex-col items-center justify-center gap-6 py-4 min-h-[440px] bg-slate-100/70 border border-slate-200/80 rounded-2xl p-4">
+                      {(previewSide === 'both' || previewSide === 'front') && (
+                        <div className="flex flex-col items-center">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-600 mb-1.5">
+                            Front Side (Official)
+                          </span>
+                          <div
+                            style={{
+                              width: CARD_WIDTH * previewZoom,
+                              height: CARD_HEIGHT * previewZoom,
+                            }}
+                            className="relative transition-all shadow-md rounded-2xl overflow-hidden"
+                          >
+                            <CardFront
+                              id={`preview-card-front-${currentEmployee.id}`}
+                              employee={currentEmployee}
+                              templateUrl={frontTemplateUrl}
+                              calibration={calibration.front}
+                              scale={previewZoom}
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {(previewSide === 'both' || previewSide === 'back') && (
+                        <div className="flex flex-col items-center">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-600 mb-1.5">
+                            Back Side (Emergency &amp; Blood Group)
+                          </span>
+                          <div
+                            style={{
+                              width: CARD_WIDTH * previewZoom,
+                              height: CARD_HEIGHT * previewZoom,
+                            }}
+                            className="relative transition-all shadow-md rounded-2xl overflow-hidden"
+                          >
+                            <CardBack
+                              id={`preview-card-back-${currentEmployee.id}`}
+                              employee={currentEmployee}
+                              templateUrl={backTemplateUrl}
+                              calibration={calibration.back}
+                              scale={previewZoom}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
-                {/* Bottom Card Status & Export Action */}
+                {/* Bottom Card Actions: Open Print Layout Studio & Export */}
                 <div className="pt-3 border-t border-slate-200 flex items-center justify-between gap-2">
-                  <div className="text-[11px] text-slate-600">
-                    {currentEmployee.isValid ? (
-                      <span className="text-emerald-700 font-semibold flex items-center gap-1">
-                        <CheckCircle className="w-3.5 h-3.5 text-emerald-600" /> Valid &amp; Ready
-                      </span>
-                    ) : (
-                      <span className="text-rose-700 font-semibold flex items-center gap-1">
-                        <AlertTriangle className="w-3.5 h-3.5 text-rose-600" /> Missing required fields
-                      </span>
-                    )}
-                  </div>
+                  <button
+                    onClick={() => setIsPrintModalOpen(true)}
+                    className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    <span>Print &amp; Page Setup ({employees.length})</span>
+                  </button>
 
                   <button
                     onClick={() => setIsExportModalOpen(true)}
-                    className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5"
+                    className="px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
                   >
                     <Download className="w-3.5 h-3.5" />
-                    <span>Export All ({employees.length})</span>
+                    <span>Export (PDF/Word)</span>
                   </button>
                 </div>
               </div>
@@ -1044,16 +1141,18 @@ export default function App() {
         )}
       </main>
 
-      {/* Offscreen Container for Export Rendering */}
+      {/* Offscreen Container for Export Rendering (Positive z-index prevents browser occlusion) */}
       <div
         ref={exportRenderRef}
+        id="pdf-export-container-stage"
         style={{
           position: 'fixed',
-          left: 0,
+          left: '-99999px',
           top: 0,
-          zIndex: -9999,
+          zIndex: 100,
           pointerEvents: 'none',
           opacity: 1,
+          visibility: 'visible',
         }}
         aria-hidden="true"
       >
@@ -1169,13 +1268,21 @@ export default function App() {
         }}
       />
 
-      <PrintSettingsModal
-        isOpen={isPrintModalOpen}
-        onClose={() => setIsPrintModalOpen(false)}
-        settings={printSettings}
-        onChangeSettings={setPrintSettings}
-        totalCardsCount={employees.length}
-      />
+      {isPrintModalOpen && (
+        <PrintSettingsModal
+          isOpen={isPrintModalOpen}
+          onClose={() => setIsPrintModalOpen(false)}
+          settings={printSettings}
+          onChangeSettings={setPrintSettings}
+          employees={employees}
+          totalCardsCount={employees.length}
+          companyConfig={companyConfig}
+          frontTemplateUrl={frontTemplateUrl}
+          backTemplateUrl={backTemplateUrl}
+          calibration={calibration}
+          getCardElement={getCardElement}
+        />
+      )}
 
       <ExportModal
         isOpen={isExportModalOpen}

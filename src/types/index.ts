@@ -182,7 +182,7 @@ export const DEFAULT_CALIBRATION: CardCalibrationSettings = {
       fontWeight: '900',
       color: '#000000',
       textAlign: 'left',
-      whiteoutWidth: 182,
+      whiteoutWidth: 188,
       whiteoutHeight: 20,
     },
     nationalId: {
@@ -192,7 +192,7 @@ export const DEFAULT_CALIBRATION: CardCalibrationSettings = {
       fontWeight: '900',
       color: '#000000',
       textAlign: 'left',
-      whiteoutWidth: 98,
+      whiteoutWidth: 118,
       whiteoutHeight: 20,
     },
     bloodGroup: {
@@ -239,6 +239,30 @@ export interface PrintSettings {
   showCutMarks: boolean;
   cardBorderRadiusMm: number;
 }
+
+export const DEFAULT_PRINT_SETTINGS: PrintSettings = {
+  paperSize: 'a4',
+  customWidthMm: 297,
+  customHeightMm: 210,
+  orientation: 'landscape',
+  cardWidthMm: 47, // Mandatory fixed width
+  cardHeightMm: 78, // Mandatory fixed height
+  marginsMm: {
+    top: 8,
+    bottom: 8,
+    left: 8,
+    right: 8,
+  },
+  spacingMm: {
+    horizontal: 4,
+    vertical: 4,
+  },
+  columnsPerPage: 4, // Exactly 4 columns per row
+  rowsPerPage: 2, // 4 cols x 2 rows
+  layoutMode: 'side-by-side', // Default Side-by-Side
+  showCutMarks: true,
+  cardBorderRadiusMm: 3,
+};
 
 export interface GoogleDriveFile {
   id: string;

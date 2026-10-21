@@ -70,6 +70,7 @@ export function SupervisorSubmissionForm({
 
   // Form input fields
   const [nationalId, setNationalId] = useState('');
+  const [nidWarning, setNidWarning] = useState<string | null>(null);
   const [photoUrl, setPhotoUrl] = useState('');
   const [signatureUrl, setSignatureUrl] = useState('');
 
@@ -157,8 +158,14 @@ export function SupervisorSubmissionForm({
         setSubmissionInfo(res.submissionInfo || null);
         if (res.employee.nationalId) {
           setNationalId(res.employee.nationalId);
+          if (res.employee.nationalId.length > 15) {
+            setNidWarning('আইডি কার্ডের সংখ্যা অনেক বড় হলে প্রথম চারটি সংখ্যা বাদ দিয়ে লিখুন।');
+          } else {
+            setNidWarning(null);
+          }
         } else {
           setNationalId('');
+          setNidWarning(null);
         }
         setPhotoUrl('');
         setSignatureUrl('');
@@ -183,6 +190,24 @@ export function SupervisorSubmissionForm({
     if (e.key === 'Enter') {
       e.preventDefault();
       handleLookup();
+    }
+  };
+
+  const handleNationalIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    if (val.length > 15) {
+      setNidWarning('আইডি কার্ডের সংখ্যা অনেক বড় হলে প্রথম চারটি সংখ্যা বাদ দিয়ে লিখুন।');
+      setNationalId(val.slice(0, 15));
+    } else {
+      setNidWarning(null);
+      setNationalId(val);
+    }
+  };
+
+  const handleNationalIdPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    const pasted = e.clipboardData.getData('text');
+    if (pasted && pasted.trim().length > 15) {
+      setNidWarning('আইডি কার্ডের সংখ্যা অনেক বড় হলে প্রথম চারটি সংখ্যা বাদ দিয়ে লিখুন।');
     }
   };
 
@@ -229,6 +254,7 @@ export function SupervisorSubmissionForm({
     setAlreadySubmitted(false);
     setSubmissionInfo(null);
     setNationalId('');
+    setNidWarning(null);
     setPhotoUrl('');
     setSignatureUrl('');
     setLookupError(null);
@@ -258,6 +284,12 @@ export function SupervisorSubmissionForm({
 
     if (!nationalId.trim()) {
       setSubmitError('কর্মচারীর এনআইডি নম্বর আবশ্যক।');
+      return;
+    }
+
+    if (nationalId.trim().length > 15) {
+      setSubmitError('আইডি কার্ডের সংখ্যা অনেক বড় হলে প্রথম চারটি সংখ্যা বাদ দিয়ে লিখুন।');
+      setNidWarning('আইডি কার্ডের সংখ্যা অনেক বড় হলে প্রথম চারটি সংখ্যা বাদ দিয়ে লিখুন।');
       return;
     }
 
@@ -610,20 +642,36 @@ export function SupervisorSubmissionForm({
         <div className="p-5 space-y-4">
           {/* Subfield 1: কর্মচারীর এনআইডি নম্বর */}
           <div className="space-y-1.5">
-            <label className="block text-xs font-semibold text-slate-700">
-              কর্মচারীর এনআইডি নম্বর <span className="text-rose-500">*</span>
-            </label>
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-semibold text-slate-700">
+                কর্মচারীর এনআইডি নম্বর <span className="text-rose-500">*</span>
+              </label>
+              <span className="text-[10px] text-slate-400 font-mono">
+                {nationalId.length}/15 ডিজিট
+              </span>
+            </div>
             <div className="relative">
               <IdCard className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
                 disabled={isEntryDisabled || alreadySubmitted}
                 value={nationalId}
-                onChange={(e) => setNationalId(e.target.value)}
-                placeholder="১০ বা ১৩ বা ১৭ ডিজিটের নম্বর"
-                className="w-full bg-white border border-slate-200 focus:border-[#114b3e] focus:ring-1 focus:ring-[#114b3e] rounded-lg pl-10 pr-3.5 py-2.5 text-xs text-slate-800 placeholder-slate-400 font-medium transition-colors disabled:opacity-50 disabled:bg-slate-50"
+                onChange={handleNationalIdChange}
+                onPaste={handleNationalIdPaste}
+                placeholder="সর্বোচ্চ ১৫ ডিজিটের নম্বর"
+                className={`w-full bg-white border rounded-lg pl-10 pr-3.5 py-2.5 text-xs text-slate-800 placeholder-slate-400 font-medium transition-colors disabled:opacity-50 disabled:bg-slate-50 ${
+                  nidWarning
+                    ? 'border-rose-400 focus:border-rose-500 focus:ring-1 focus:ring-rose-500 bg-rose-50/20'
+                    : 'border-slate-200 focus:border-[#114b3e] focus:ring-1 focus:ring-[#114b3e]'
+                }`}
               />
             </div>
+            {nidWarning && (
+              <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-800 flex items-center gap-2 animate-in fade-in">
+                <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span className="font-semibold">আইডি কার্ডের সংখ্যা অনেক বড় হলে প্রথম চারটি সংখ্যা বাদ দিয়ে লিখুন।</span>
+              </div>
+            )}
           </div>
 
           {/* Subfield 2: কর্মচারীর ছবি (পাসপোর্ট সাইজ) */}

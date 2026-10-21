@@ -806,6 +806,30 @@ app.post('/api/submissions', authenticateToken, (req: AuthenticatedRequest, res:
 
   const cleanEnrollId = String(enrollId).trim();
 
+  // Validate the 3 required fields
+  if (!nationalId || !String(nationalId).trim()) {
+    res.status(400).json({ error: 'National ID Number is required.' });
+    return;
+  }
+
+  // Enforce maximum 15 digits for National ID
+  if (String(nationalId).trim().length > 15) {
+    res.status(400).json({
+      error: 'আইডি কার্ডের সংখ্যা অনেক বড় হলে প্রথম চারটি সংখ্যা বাদ দিয়ে লিখুন।',
+    });
+    return;
+  }
+
+  if (!photoUrl || !String(photoUrl).trim().startsWith('data:image')) {
+    res.status(400).json({ error: 'A valid Employee Photo is required.' });
+    return;
+  }
+
+  if (!signatureUrl || !String(signatureUrl).trim().startsWith('data:image')) {
+    res.status(400).json({ error: 'A valid Employee Signature Photo is required.' });
+    return;
+  }
+
   // Validate in Master Database
   const master = readJsonFile<Record<string, any>>(MASTER_FILE, {});
   const masterEmp = master[cleanEnrollId];
@@ -831,17 +855,6 @@ app.post('/api/submissions', authenticateToken, (req: AuthenticatedRequest, res:
         submittedBy: existing.submittedBy?.name,
       },
     });
-    return;
-  }
-
-  // Validate the 3 required fields
-  if (!nationalId || !String(nationalId).trim()) {
-    res.status(400).json({ error: 'National ID Number is required.' });
-    return;
-  }
-
-  if (!photoUrl || !String(photoUrl).trim().startsWith('data:image')) {
-    res.status(400).json({ error: 'A valid Employee Photo is required.' });
     return;
   }
 

@@ -38,8 +38,9 @@ export const CardFront: React.FC<CardFrontProps> = ({
         height: CARD_HEIGHT,
         transform: scale !== 1 ? `scale(${scale})` : undefined,
         transformOrigin: 'top left',
+        boxSizing: 'border-box',
       }}
-      className={`relative rounded-[14px] overflow-hidden select-none shadow-md border border-gray-200/70 print:shadow-none print:border-none bg-white flex flex-col justify-between ${className}`}
+      className={`relative rounded-[14px] overflow-hidden select-none shadow-sm border border-slate-300 bg-white flex flex-col justify-between ${className}`}
     >
       {/* =========================================================================
           SECTION 1: CROPPED TOP SECTION

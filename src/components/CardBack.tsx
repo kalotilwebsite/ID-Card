@@ -30,8 +30,9 @@ export const CardBack: React.FC<CardBackProps> = ({
         height: CARD_HEIGHT,
         transform: scale !== 1 ? `scale(${scale})` : undefined,
         transformOrigin: 'top left',
+        boxSizing: 'border-box',
       }}
-      className={`relative rounded-[14px] overflow-hidden select-none shadow-md border border-gray-200/60 print:shadow-none print:border-none bg-white ${className}`}
+      className={`relative rounded-[14px] overflow-hidden select-none shadow-sm border border-slate-300 bg-white ${className}`}
     >
       {/* 1. Original Photoshop Export Background Template */}
       {/* Contains:
@@ -89,39 +90,72 @@ export const CardBack: React.FC<CardBackProps> = ({
         </span>
       </div>
 
-      {/* Field 2: National ID Number */}
-      <div
-        style={{
-          position: 'absolute',
-          left: calibration.nationalId.x - 2,
-          top: calibration.nationalId.y - 2,
-          width: calibration.nationalId.whiteoutWidth || 98,
-          height: calibration.nationalId.whiteoutHeight || 20,
-        }}
-        className="bg-white"
-      />
-      <div
-        style={{
-          position: 'absolute',
-          left: calibration.nationalId.x,
-          top: calibration.nationalId.y,
-          width: calibration.nationalId.whiteoutWidth || 98,
-        }}
-        className="flex items-center"
-      >
-        <span
-          style={{
-            fontSize: `${calibration.nationalId.fontSize}px`,
-            fontWeight: calibration.nationalId.fontWeight,
-            color: calibration.nationalId.color,
-            textAlign: calibration.nationalId.textAlign,
-            fontFamily: "'Arial Black', Arial, sans-serif",
-          }}
-          className="leading-none truncate block max-w-full tracking-tight"
-        >
-          {employee.nationalId || '01643970731'}
-        </span>
-      </div>
+      {/* Field 2: National ID Number (Displays all digits completely without truncation or ellipses) */}
+      {(() => {
+        const nid = String(employee.nationalId || '01643970731').trim();
+        const nidLength = nid.length;
+        // Dynamically compute font sizing and weight so all 15 digits fit cleanly without truncation
+        let fontSize = calibration.nationalId.fontSize || 11.5;
+        let fontWeight: string | number = calibration.nationalId.fontWeight || 'bold';
+        let letterSpacing = '0px';
+
+        if (nidLength >= 15) {
+          fontSize = Math.min(9.2, 9.2 * (15 / nidLength));
+          fontWeight = 'bold'; // Clean bold (not 900/black) to ensure crisp digit legibility
+          letterSpacing = '-0.2px';
+        } else if (nidLength >= 13) {
+          fontSize = 10.0;
+          fontWeight = 'bold';
+          letterSpacing = '-0.1px';
+        } else if (nidLength >= 11) {
+          fontSize = 10.8;
+          fontWeight = calibration.nationalId.fontWeight;
+        }
+
+        // Available horizontal space before Blood Group column (starts at x=174)
+        const whiteoutW = Math.max(calibration.nationalId.whiteoutWidth || 98, 116);
+
+        return (
+          <>
+            <div
+              style={{
+                position: 'absolute',
+                left: calibration.nationalId.x - 2,
+                top: calibration.nationalId.y - 2,
+                width: whiteoutW,
+                height: calibration.nationalId.whiteoutHeight || 20,
+              }}
+              className="bg-white"
+            />
+            <div
+              style={{
+                position: 'absolute',
+                left: calibration.nationalId.x,
+                top: calibration.nationalId.y,
+                width: whiteoutW,
+                overflow: 'visible',
+              }}
+              className="flex items-center"
+            >
+              <span
+                style={{
+                  fontSize: `${fontSize}px`,
+                  fontWeight: fontWeight as any,
+                  color: calibration.nationalId.color || '#000000',
+                  textAlign: calibration.nationalId.textAlign || 'left',
+                  fontFamily: "Arial, Helvetica, sans-serif",
+                  letterSpacing,
+                  whiteSpace: 'nowrap',
+                  display: 'inline-block',
+                }}
+                className="leading-none block max-w-none"
+              >
+                {nid}
+              </span>
+            </div>
+          </>
+        );
+      })()}
 
       {/* Field 3: Blood Group */}
       <div

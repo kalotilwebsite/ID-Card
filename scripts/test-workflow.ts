@@ -133,6 +133,33 @@ async function runTestSuite() {
       headers: { Authorization: `Bearer ${adminToken}` },
     });
 
+    // Test NID > 15 digits rejection
+    const rejectOver15Res = await makeRequest(
+      {
+        hostname: 'localhost',
+        port: 3000,
+        path: '/api/submissions',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${supervisorToken}`,
+        },
+      },
+      {
+        enrollId: '586667',
+        nationalId: '19952692018000456', // 17 digits
+        photoUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+        signatureUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+      }
+    );
+    assert(
+      rejectOver15Res.statusCode === 400 &&
+        rejectOver15Res.data?.error === 'আইডি কার্ডের সংখ্যা অনেক বড় হলে প্রথম চারটি সংখ্যা বাদ দিয়ে লিখুন।',
+      'NID > 15 digits rejected with 400 and Bengali instruction message',
+      JSON.stringify(rejectOver15Res.data)
+    );
+
+    // Test valid submission with <= 15 digits (e.g. 15 digits)
     const submitRes = await makeRequest(
       {
         hostname: 'localhost',
@@ -146,14 +173,14 @@ async function runTestSuite() {
       },
       {
         enrollId: '586667',
-        nationalId: '19952692018000456',
+        nationalId: '123456789012345', // exactly 15 digits
         photoUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
         signatureUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
       }
     );
     assert(
       submitRes.statusCode === 201 && submitRes.data?.success === true,
-      'Supervisor can submit ID card data with NID, photo & signature',
+      'Supervisor can submit ID card data with NID (15 digits), photo & signature',
       JSON.stringify(submitRes.data)
     );
 
@@ -171,7 +198,7 @@ async function runTestSuite() {
       },
       {
         enrollId: '586667',
-        nationalId: '19952692018000456',
+        nationalId: '123456789012345',
         photoUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
         signatureUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
       }

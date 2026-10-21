@@ -8,7 +8,15 @@
     "email": "ajkerpage@gmail.com",
     "role": "admin",
     "status": "active",
-    "createdAt": "2026-10-20T06:44:11.376Z"
+    "createdAt": "2026-10-20T06:44:11.376Z",
+    "allowedTabs": [
+      "submissions",
+      "supervisor_submission",
+      "data_entry_form",
+      "employee_data",
+      "user_management",
+      "card_studio"
+    ]
   },
   {
     "id": "user-dataentry-1",

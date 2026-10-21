@@ -33,36 +33,50 @@ export interface CalculatedPrintGeometry {
 }
 
 /**
- * Calculates print geometry strictly preserving the mandatory 47 × 78 mm card dimensions
- * and positioning cards centered with precise print margins.
+ * Calculates print geometry strictly guaranteeing that every card, crop mark,
+ * and text element stays completely inside the page boundaries.
+ * If requested configuration exceeds page printable area, proportionally scales cards
+ * while strictly preserving the aspect ratio.
  */
 export function calculatePrintGeometry(settings: PrintSettings): CalculatedPrintGeometry {
   const isLandscape = settings.orientation === 'landscape';
   const paper =
     settings.paperSize === 'custom'
       ? {
-          width: Math.max(20, Number(settings.customWidthMm) || 297),
-          height: Math.max(20, Number(settings.customHeightMm) || 210),
+          width: Math.max(20, Number(settings.customWidthMm) || 210),
+          height: Math.max(20, Number(settings.customHeightMm) || 297),
         }
-      : PAPER_DIMENSIONS_MM[settings.paperSize] || { width: 297, height: 210 };
+      : PAPER_DIMENSIONS_MM[settings.paperSize] || { width: 210, height: 297 };
 
   // Page dimensions in mm
   const pageWidthMm = isLandscape ? Math.max(paper.width, paper.height) : Math.min(paper.width, paper.height);
   const pageHeightMm = isLandscape ? Math.min(paper.width, paper.height) : Math.max(paper.width, paper.height);
 
-  // Mandatory exact card dimensions: strictly 47 x 78 mm (never distorted or overridden)
-  const cardWidthMm = Number(settings.cardWidthMm) || 47;
-  const cardHeightMm = Number(settings.cardHeightMm) || 78;
-  const scaleFactor = 1.0;
+  // Preserve badge aspect ratio (default 54 x 85.6 mm -> 85.6 / 54 = ~1.585185)
+  const nominalW = Math.max(10, Number(settings.cardWidthMm) || 54);
+  const nominalH = Math.max(10, Number(settings.cardHeightMm) || 85.6);
+  const badgeAspectRatio = nominalH / nominalW;
 
-  const cols = Math.max(1, Number(settings.columnsPerPage) || 4);
-  const rows = Math.max(1, Number(settings.rowsPerPage) || 2);
+  const cols = Math.max(1, Number(settings.columnsPerPage) || 1);
+  const rows = Math.max(1, Number(settings.rowsPerPage) || 1);
 
   // Margin safety minimum to avoid cutting off edge or crop marks
-  const minSafeMargin = settings.showCutMarks ? 4.0 : 2.5;
+  const minSafeMargin = settings.showCutMarks ? 4.5 : 2.5;
+  const userMarginL = Math.max(minSafeMargin, Number(settings.marginsMm?.left) || 10);
+  const userMarginR = Math.max(minSafeMargin, Number(settings.marginsMm?.right) || 10);
+  const userMarginT = Math.max(minSafeMargin, Number(settings.marginsMm?.top) || 10);
+  const userMarginB = Math.max(minSafeMargin, Number(settings.marginsMm?.bottom) || 10);
 
-  const baseGapX = Math.max(0.5, Number(settings.spacingMm?.horizontal) ?? 4);
-  const baseGapY = Math.max(0.5, Number(settings.spacingMm?.vertical) ?? 4);
+  // Available printable area
+  let availW = pageWidthMm - userMarginL - userMarginR;
+  let availH = pageHeightMm - userMarginT - userMarginB;
+  if (availW < 20 || availH < 20) {
+    availW = Math.max(15, pageWidthMm - minSafeMargin * 2);
+    availH = Math.max(15, pageHeightMm - minSafeMargin * 2);
+  }
+
+  const baseGapX = Math.max(0.5, Number(settings.spacingMm?.horizontal) ?? 5);
+  const baseGapY = Math.max(0.5, Number(settings.spacingMm?.vertical) ?? 5);
 
   let colsOfPairs = 1;
   let rowsOfPairs = 1;
@@ -72,7 +86,6 @@ export function calculatePrintGeometry(settings: PrintSettings): CalculatedPrint
   let pairsPerPage = cardsPerPage;
 
   if (settings.layoutMode === 'side-by-side') {
-    // 4 columns per row default: 2 pairs of (Front + Back)
     colsOfPairs = Math.max(1, Math.floor(cols / 2));
     unitsAcross = colsOfPairs * 2;
     unitsDown = rows;
@@ -86,12 +99,34 @@ export function calculatePrintGeometry(settings: PrintSettings): CalculatedPrint
     cardsPerPage = pairsPerPage;
   }
 
-  const gapX = baseGapX;
-  const gapY = baseGapY;
+  // Calculate maximum card width that fits horizontally & vertically
+  const maxWByWidth = (availW - (unitsAcross - 1) * baseGapX) / unitsAcross;
+  const maxWByHeight = (availH - (unitsDown - 1) * baseGapY) / (unitsDown * badgeAspectRatio);
+
+  let targetCardW = Math.min(nominalW, maxWByWidth, maxWByHeight);
+  let scaleFactor = targetCardW / nominalW;
+
+  let gapX = baseGapX;
+  let gapY = baseGapY;
+
+  // If cards need to scale down to fit the page, scale gaps proportionally as well
+  if (scaleFactor < 1.0) {
+    scaleFactor = Math.max(0.15, scaleFactor);
+    gapX = Math.max(0.5, baseGapX * scaleFactor);
+    gapY = Math.max(0.5, baseGapY * scaleFactor);
+
+    // Recompute target width with scaled gaps
+    const refinedMaxWByWidth = (availW - (unitsAcross - 1) * gapX) / unitsAcross;
+    const refinedMaxWByHeight = (availH - (unitsDown - 1) * gapY) / (unitsDown * badgeAspectRatio);
+    targetCardW = Math.max(10, Math.min(nominalW, refinedMaxWByWidth, refinedMaxWByHeight));
+    scaleFactor = targetCardW / nominalW;
+  }
+
+  const targetCardH = targetCardW * badgeAspectRatio;
 
   // Calculate total grid extent
-  const gridW = unitsAcross * cardWidthMm + (unitsAcross - 1) * gapX;
-  const gridH = unitsDown * cardHeightMm + (unitsDown - 1) * gapY;
+  const gridW = unitsAcross * targetCardW + (unitsAcross - 1) * gapX;
+  const gridH = unitsDown * targetCardH + (unitsDown - 1) * gapY;
 
   // Center grid on page within safe bounds
   const startX = Math.max(minSafeMargin, (pageWidthMm - gridW) / 2);
@@ -100,8 +135,8 @@ export function calculatePrintGeometry(settings: PrintSettings): CalculatedPrint
   return {
     pageWidthMm,
     pageHeightMm,
-    cardWidthMm,
-    cardHeightMm,
+    cardWidthMm: targetCardW,
+    cardHeightMm: targetCardH,
     gapX,
     gapY,
     startX,
@@ -117,27 +152,19 @@ export function calculatePrintGeometry(settings: PrintSettings): CalculatedPrint
 }
 
 /**
- * Ensures all images (both HTML <img> and SVG <image>) inside an element
- * are fully loaded and raster-decoded before canvas snapshot.
+ * Ensures all images inside an element are fully decoded into memory before canvas snapshot.
  */
 export async function ensureElementImagesLoaded(element: HTMLElement): Promise<void> {
-  const images = Array.from(element.querySelectorAll('img, image'));
+  const images = Array.from(element.querySelectorAll('img'));
   await Promise.all(
-    images.map((node) => {
-      const img = node as HTMLImageElement;
+    images.map((img) => {
       if (img.complete && img.naturalWidth !== 0) {
-        if (img.decode) {
-          return img.decode().catch(() => {});
-        }
         return Promise.resolve();
       }
       return new Promise<void>((resolve) => {
-        const timer = setTimeout(() => resolve(), 3000);
-        img.onload = async () => {
+        const timer = setTimeout(() => resolve(), 2500);
+        img.onload = () => {
           clearTimeout(timer);
-          if (img.decode) {
-            await img.decode().catch(() => {});
-          }
           resolve();
         };
         img.onerror = () => {
@@ -153,18 +180,7 @@ export async function ensureElementImagesLoaded(element: HTMLElement): Promise<v
  * Capture card element to crisp, high-resolution PNG data URL.
  */
 export async function captureCardToPng(element: HTMLElement): Promise<string> {
-  // Ensure web fonts are completely loaded and layout metrics stabilized
-  if (typeof document !== 'undefined' && document.fonts && document.fonts.ready) {
-    try {
-      await document.fonts.ready;
-    } catch (e) {}
-  }
-
-  // Ensure all images are decoded into GPU/raster memory
   await ensureElementImagesLoaded(element);
-
-  // Short frame wait for any final DOM paint cycles
-  await new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 40)));
 
   const canvas = await html2canvas(element, {
     scale: 3, // 3x scale renders 300 DPI print quality

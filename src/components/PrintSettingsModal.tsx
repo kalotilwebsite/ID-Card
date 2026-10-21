@@ -55,24 +55,24 @@ interface PrintSettingsModalProps {
 
 export const DEFAULT_PRINT_SETTINGS: PrintSettings = {
   paperSize: 'a4',
-  customWidthMm: 297,
-  customHeightMm: 210,
-  orientation: 'landscape',
-  cardWidthMm: 47, // Mandatory fixed width
-  cardHeightMm: 78, // Mandatory fixed height
+  customWidthMm: 210,
+  customHeightMm: 297,
+  orientation: 'portrait',
+  cardWidthMm: 54, // Standard CR80 badge width
+  cardHeightMm: 85.6, // Standard CR80 badge height
   marginsMm: {
-    top: 8,
-    bottom: 8,
-    left: 8,
-    right: 8,
+    top: 10,
+    bottom: 10,
+    left: 10,
+    right: 10,
   },
   spacingMm: {
-    horizontal: 4,
-    vertical: 4,
+    horizontal: 5,
+    vertical: 5,
   },
-  columnsPerPage: 4, // Exactly 4 columns per row
-  rowsPerPage: 2, // 4 cols x 2 rows
-  layoutMode: 'side-by-side', // Default Side-by-Side
+  columnsPerPage: 3,
+  rowsPerPage: 3, // 3x3 = 9 cards per page
+  layoutMode: 'side-by-side',
   showCutMarks: true,
   cardBorderRadiusMm: 3,
 };
@@ -340,8 +340,8 @@ export const PrintSettingsModal: React.FC<PrintSettingsModalProps> = ({
 
     const defaultGetter = (empId: string, side: 'front' | 'back') => {
       return (
-        document.getElementById(`export-${side}-${empId}`) ||
-        document.getElementById(`preview-card-${side}-${empId}`)
+        document.getElementById(`preview-card-${side}-${empId}`) ||
+        document.getElementById(`export-${side}-${empId}`)
       );
     };
 
@@ -381,8 +381,8 @@ export const PrintSettingsModal: React.FC<PrintSettingsModalProps> = ({
 
     const defaultGetter = (empId: string, side: 'front' | 'back') => {
       return (
-        document.getElementById(`export-${side}-${empId}`) ||
-        document.getElementById(`preview-card-${side}-${empId}`)
+        document.getElementById(`preview-card-${side}-${empId}`) ||
+        document.getElementById(`export-${side}-${empId}`)
       );
     };
 
@@ -417,8 +417,8 @@ export const PrintSettingsModal: React.FC<PrintSettingsModalProps> = ({
 
     const defaultGetter = (empId: string, side: 'front' | 'back') => {
       return (
-        document.getElementById(`export-${side}-${empId}`) ||
-        document.getElementById(`preview-card-${side}-${empId}`)
+        document.getElementById(`preview-card-${side}-${empId}`) ||
+        document.getElementById(`export-${side}-${empId}`)
       );
     };
 
@@ -757,10 +757,10 @@ export const PrintSettingsModal: React.FC<PrintSettingsModalProps> = ({
                 </label>
                 <button
                   type="button"
-                  onClick={() => update({ cardWidthMm: 47, cardHeightMm: 78 })}
+                  onClick={() => update({ cardWidthMm: 54, cardHeightMm: 85.6 })}
                   className="text-[10px] text-rose-600 hover:underline font-semibold"
                 >
-                  Standard (47×78 mm)
+                  CR80 (54×85.6)
                 </button>
               </div>
               <div className="grid grid-cols-2 gap-2">

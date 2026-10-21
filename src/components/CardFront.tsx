@@ -400,102 +400,77 @@ export const CardFront: React.FC<CardFrontProps> = ({
           }}
         />
 
-        {/* 1. EMPLOYEE SIGNATURE (Strict box dimensions, preserved aspect ratio, never oversized or shifting) */}
-        {(() => {
-          const sigTop = calibration.signature.y > 100 ? calibration.signature.y - LOWER_START_Y : (calibration.signature.y || 40);
-          const sigHeight = calibration.signature.height || 26;
-          return (
-            <>
-              <div
-                style={{
-                  position: 'absolute',
-                  left: calibration.signature.x ?? 16,
-                  top: sigTop,
-                  width: 68,
-                  height: sigHeight,
-                  maxWidth: 68,
-                  maxHeight: sigHeight,
-                  backgroundColor: '#FFFFFF',
-                  zIndex: 3,
-                  overflow: 'hidden',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  boxSizing: 'border-box',
-                }}
-              >
-                {employee.signatureUrl ? (
-                  <img
-                    src={employee.signatureUrl}
-                    alt={`${employee.name} Signature`}
-                    style={{
-                      maxWidth: '68px',
-                      maxHeight: `${sigHeight}px`,
-                      width: 'auto',
-                      height: 'auto',
-                      objectFit: 'contain',
-                      display: 'block',
-                      margin: 'auto',
-                    }}
-                    loading="eager"
-                    decoding="sync"
-                    crossOrigin="anonymous"
-                    className="pointer-events-none select-none"
-                    referrerPolicy="no-referrer"
-                  />
-                ) : null}
-              </div>
+        {/* 1. EMPLOYEE SIGNATURE (Contained in box, never oversized, never distorted) */}
+        <div
+          style={{
+            position: 'absolute',
+            left: calibration.signature.x,
+            top: calibration.signature.y - LOWER_START_Y,
+            width: 68,
+            height: calibration.signature.height || 26,
+            backgroundColor: '#FFFFFF',
+            zIndex: 3,
+          }}
+          className="flex items-center justify-center overflow-hidden"
+        >
+          {employee.signatureUrl ? (
+            <img
+              src={employee.signatureUrl}
+              alt={`${employee.name} Signature`}
+              style={{
+                maxWidth: '100%',
+                maxHeight: '100%',
+                width: 'auto',
+                height: 'auto',
+                objectFit: 'contain',
+                display: 'block',
+              }}
+              className="pointer-events-none select-none"
+              referrerPolicy="no-referrer"
+            />
+          ) : null}
+        </div>
 
-              {/* Employee signature line & caption */}
-              <div
-                style={{
-                  position: 'absolute',
-                  left: calibration.signature.x ?? 16,
-                  top: sigTop + sigHeight,
-                  width: 68,
-                  zIndex: 3,
-                }}
-                className="text-center"
-              >
-                <div className="w-full border-t border-gray-400 mt-0.5" />
-                <span className="text-[7.5px] font-sans font-bold text-slate-700 block mt-0.5">
-                  Employee
-                </span>
-              </div>
-            </>
-          );
-        })()}
+        {/* Employee signature line & caption */}
+        <div
+          style={{
+            position: 'absolute',
+            left: calibration.signature.x,
+            top: calibration.signature.y - LOWER_START_Y + (calibration.signature.height || 26),
+            width: 68,
+            zIndex: 3,
+          }}
+          className="text-center"
+        >
+          <div className="w-full border-t border-gray-400 mt-0.5" />
+          <span className="text-[7.5px] font-sans font-bold text-slate-700 block mt-0.5">
+            Employee
+          </span>
+        </div>
 
         {/* 2. ISSUING / AUTHORIZED SIGNATURE */}
         <div
           style={{
             position: 'absolute',
             left: 92,
-            top: 28,
-            width: 72,
-            height: 46,
+            top: (calibration.signature.y - LOWER_START_Y) + (calibration.signature.height || 26) + 2 - 33,
+            width: 70,
+            height: 50,
             zIndex: 3,
-            overflow: 'hidden',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
           }}
-          className="pointer-events-none select-none"
+          className="flex items-center justify-center pointer-events-none select-none"
         >
           <img
             src={ISSUING_SIG_BASE64}
             alt="Issuing Authority Signature"
             style={{
-              maxWidth: '72px',
-              maxHeight: '46px',
+              maxWidth: 70,
+              maxHeight: 50,
               width: 'auto',
               height: 'auto',
               objectFit: 'contain',
               display: 'block',
-              margin: 'auto',
             }}
-            loading="eager"
-            decoding="sync"
             referrerPolicy="no-referrer"
           />
         </div>

@@ -185,15 +185,12 @@ export default function App() {
         }
       }
 
-      // Sync saved print layout settings (preserving mandatory 47x78mm card dimensions)
+      // Sync saved print layout settings
       try {
         const settings = await apiService.getPublicSettings();
         if (isMounted && settings) {
           setPrintSettings((prev) => {
             const updated = { ...prev };
-            // Enforce mandatory card dimensions and defaults
-            updated.cardWidthMm = 47;
-            updated.cardHeightMm = 78;
             if (settings.pdfPrintLayout === 'top_bottom') {
               updated.layoutMode = 'top-and-bottom';
             } else if (settings.pdfPrintLayout === 'side_by_side') {
@@ -216,6 +213,9 @@ export default function App() {
               } else if (cpp === 10) {
                 updated.columnsPerPage = 5;
                 updated.rowsPerPage = 2;
+              } else {
+                updated.columnsPerPage = 3;
+                updated.rowsPerPage = 3;
               }
             }
             return updated;
@@ -402,8 +402,8 @@ export default function App() {
 
   const getCardElement = (empId: string, side: 'front' | 'back'): HTMLElement | null => {
     return (
-      document.getElementById(`export-${side}-${empId}`) ||
-      document.getElementById(`preview-card-${side}-${empId}`)
+      document.getElementById(`preview-card-${side}-${empId}`) ||
+      document.getElementById(`export-${side}-${empId}`)
     );
   };
 
@@ -1141,18 +1141,16 @@ export default function App() {
         )}
       </main>
 
-      {/* Offscreen Container for Export Rendering (Positive z-index prevents browser occlusion) */}
+      {/* Offscreen Container for Export Rendering */}
       <div
         ref={exportRenderRef}
-        id="pdf-export-container-stage"
         style={{
           position: 'fixed',
-          left: '-99999px',
+          left: 0,
           top: 0,
-          zIndex: 100,
+          zIndex: -9999,
           pointerEvents: 'none',
           opacity: 1,
-          visibility: 'visible',
         }}
         aria-hidden="true"
       >
@@ -1268,21 +1266,19 @@ export default function App() {
         }}
       />
 
-      {isPrintModalOpen && (
-        <PrintSettingsModal
-          isOpen={isPrintModalOpen}
-          onClose={() => setIsPrintModalOpen(false)}
-          settings={printSettings}
-          onChangeSettings={setPrintSettings}
-          employees={employees}
-          totalCardsCount={employees.length}
-          companyConfig={companyConfig}
-          frontTemplateUrl={frontTemplateUrl}
-          backTemplateUrl={backTemplateUrl}
-          calibration={calibration}
-          getCardElement={getCardElement}
-        />
-      )}
+      <PrintSettingsModal
+        isOpen={isPrintModalOpen}
+        onClose={() => setIsPrintModalOpen(false)}
+        settings={printSettings}
+        onChangeSettings={setPrintSettings}
+        employees={employees}
+        totalCardsCount={employees.length}
+        companyConfig={companyConfig}
+        frontTemplateUrl={frontTemplateUrl}
+        backTemplateUrl={backTemplateUrl}
+        calibration={calibration}
+        getCardElement={getCardElement}
+      />
 
       <ExportModal
         isOpen={isExportModalOpen}

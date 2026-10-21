@@ -1,9 +1,8 @@
 import html2canvas from 'html2canvas-pro';
 import JSZip from 'jszip';
-import { EmployeeCardData } from '../types';
 
 /**
- * Ensures all <img> elements inside a DOM container are fully loaded before capturing
+ * Ensures all <img> elements inside an element are fully loaded in memory before snapshot
  */
 export async function ensureImagesLoaded(container: HTMLElement): Promise<void> {
   const images = Array.from(container.querySelectorAll('img'));
@@ -13,7 +12,7 @@ export async function ensureImagesLoaded(container: HTMLElement): Promise<void> 
         return Promise.resolve();
       }
       return new Promise<void>((resolve) => {
-        const timeout = setTimeout(() => resolve(), 2500);
+        const timeout = setTimeout(() => resolve(), 2000);
         img.onload = () => {
           clearTimeout(timeout);
           resolve();
@@ -28,316 +27,227 @@ export async function ensureImagesLoaded(container: HTMLElement): Promise<void> 
 }
 
 /**
- * Clones a rendered card element to an isolated, unscaled container and captures
- * it as a lossless, high-resolution PNG Blob at 3x resolution (300+ DPI print quality).
- * Completely eliminates parent transform scale, margin offsets, and scroll clipping.
+ * Captures an already-rendered card DOM element directly from Card Studio & Design,
+ * preserving its visible design, fonts, positions, logos, and footers pixel-for-pixel.
+ *
+ * Uses a clean offscreen cloning sandbox so NO ancestor overflow:hidden or CSS zoom
+ * can clip or distort any part of the card (e.g. Beyond Tomorrow, ROSA logo, footers).
  */
-export async function captureCardElementToBlob(
+export async function captureDirectCardElement(
   sourceEl: HTMLElement,
-  options?: {
-    scale?: number;
-    backgroundColor?: string;
-  }
-): Promise<Blob> {
-  const scale = options?.scale ?? 3; // 3x for 300+ DPI
-  const backgroundColor = options?.backgroundColor ?? '#ffffff';
-
+  scale: number = 3
+): Promise<HTMLCanvasElement> {
   await ensureImagesLoaded(sourceEl);
 
-  // Measure original dimensions without transforms
-  const originalWidth = sourceEl.offsetWidth || 284;
-  const originalHeight = sourceEl.offsetHeight || 500;
+  // Create an offscreen, isolated clean container mounted to the body
+  const container = document.createElement('div');
+  container.style.position = 'fixed';
+  container.style.left = '-10000px';
+  container.style.top = '0';
+  container.style.width = '284px';
+  container.style.height = '500px';
+  container.style.overflow = 'visible';
+  container.style.zIndex = '-99999';
+  container.style.backgroundColor = '#ffffff';
 
-  // Clone node deeply to avoid modifying the live preview DOM
+  // Clone the exact, live rendered DOM node from Card Studio & Design
   const clone = sourceEl.cloneNode(true) as HTMLElement;
+
+  // Ensure clone is 1:1 nominal 284x500 without preview zoom scale, shadows or borders
   clone.style.transform = 'none';
-  clone.style.webkitTransform = 'none';
-  clone.style.margin = '0';
   clone.style.boxShadow = 'none';
   clone.style.border = 'none';
-  clone.style.outline = 'none';
+  clone.style.width = '284px';
+  clone.style.height = '500px';
   clone.style.position = 'relative';
   clone.style.left = '0';
   clone.style.top = '0';
 
-  // Remove any guide overlays or control buttons in the clone
-  const screenOnlyElements = clone.querySelectorAll('.screen-only-guide, button, .no-capture');
-  screenOnlyElements.forEach((el) => el.remove());
+  // Hide any screen-only buttons inside the card (e.g. selection badges, hover copy tags)
+  const screenOnlys = Array.from(
+    clone.querySelectorAll<HTMLElement>('.screen-only-guide, button, .no-capture')
+  );
+  screenOnlys.forEach((el) => {
+    el.style.display = 'none';
+  });
 
-  // Mount in isolated offscreen container
-  const sandbox = document.createElement('div');
-  sandbox.style.position = 'fixed';
-  sandbox.style.left = '-99999px';
-  sandbox.style.top = '-99999px';
-  sandbox.style.width = `${originalWidth}px`;
-  sandbox.style.height = `${originalHeight}px`;
-  sandbox.style.overflow = 'hidden';
-  sandbox.style.zIndex = '-99999';
-  sandbox.style.background = backgroundColor;
-  sandbox.appendChild(clone);
-  document.body.appendChild(sandbox);
+  container.appendChild(clone);
+  document.body.appendChild(container);
 
   try {
-    await ensureImagesLoaded(clone);
-
     const canvas = await html2canvas(clone, {
       scale,
       useCORS: true,
       allowTaint: true,
-      backgroundColor,
+      backgroundColor: '#ffffff',
       logging: false,
       scrollX: 0,
       scrollY: 0,
-      width: originalWidth,
-      height: originalHeight,
-      windowWidth: originalWidth,
-      windowHeight: originalHeight,
+      width: 284,
+      height: 500,
+      windowWidth: 1920,
+      windowHeight: 1080,
     });
 
-    const blob = await new Promise<Blob>((resolve, reject) => {
-      canvas.toBlob((b) => {
-        if (b) resolve(b);
-        else reject(new Error('Failed to generate PNG blob from card canvas'));
-      }, 'image/png');
-    });
-
-    return blob;
+    return canvas;
   } finally {
-    if (sandbox.parentElement) {
-      document.body.removeChild(sandbox);
+    if (container.parentElement) {
+      container.parentElement.removeChild(container);
     }
   }
 }
 
 /**
- * Captures a Pair (Front and Back) of a card as a single high-resolution PNG image.
- * Arrangement can be 'side-by-side' or 'top-and-bottom'.
+ * Captures Front and Back cards directly from the live preview and composes them
+ * side-by-side using pure 2D Canvas drawing (zero DOM nesting, zero flexbox overlap).
+ *
+ * Front is on the left (with its red footer and Beyond Tomorrow logo).
+ * Back is on the right (with its black footer and Akij Bashir logo).
+ * They are cleanly separated by a crisp white margin and CAN NEVER overlap.
  */
-export async function captureCardPairToBlob(
+export async function captureDirectCardPair(
   frontEl: HTMLElement,
   backEl: HTMLElement,
-  arrangement: 'side-by-side' | 'top-and-bottom' = 'side-by-side',
-  scale: number = 3
-): Promise<Blob> {
-  await Promise.all([ensureImagesLoaded(frontEl), ensureImagesLoaded(backEl)]);
+  scale: number = 3,
+  arrangement: 'side-by-side' | 'top-and-bottom' = 'side-by-side'
+): Promise<HTMLCanvasElement> {
+  const frontCanvas = await captureDirectCardElement(frontEl, scale);
+  const backCanvas = await captureDirectCardElement(backEl, scale);
 
-  const frontClone = frontEl.cloneNode(true) as HTMLElement;
-  const backClone = backEl.cloneNode(true) as HTMLElement;
+  const combinedCanvas = document.createElement('canvas');
+  const gap = Math.round(24 * scale); // 24px physical gap scaled (72px at scale 3)
 
-  [frontClone, backClone].forEach((el) => {
-    el.style.transform = 'none';
-    el.style.webkitTransform = 'none';
-    el.style.margin = '0';
-    el.style.boxShadow = 'none';
-    el.querySelectorAll('.screen-only-guide, button, .no-capture').forEach((c) => c.remove());
-  });
+  if (arrangement === 'side-by-side') {
+    combinedCanvas.width = frontCanvas.width + backCanvas.width + gap;
+    combinedCanvas.height = Math.max(frontCanvas.height, backCanvas.height);
 
-  const cardW = frontEl.offsetWidth || 284;
-  const cardH = frontEl.offsetHeight || 500;
-  const gapPx = 20; // Crisp, professional margin between Front & Back
-  const paddingPx = 8; // Slight padding around the pair
+    const ctx = combinedCanvas.getContext('2d')!;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, combinedCanvas.width, combinedCanvas.height);
 
-  const sandbox = document.createElement('div');
-  sandbox.style.position = 'fixed';
-  sandbox.style.left = '-99999px';
-  sandbox.style.top = '-99999px';
-  sandbox.style.background = '#ffffff';
-  sandbox.style.zIndex = '-99999';
-  sandbox.style.overflow = 'hidden';
+    // Draw Front on the left
+    ctx.drawImage(frontCanvas, 0, 0);
 
-  const pairFlex = document.createElement('div');
-  pairFlex.style.display = 'flex';
-  pairFlex.style.flexDirection = arrangement === 'side-by-side' ? 'row' : 'column';
-  pairFlex.style.gap = `${gapPx}px`;
-  pairFlex.style.padding = `${paddingPx}px`;
-  pairFlex.style.background = '#ffffff';
+    // Draw Back on the right
+    ctx.drawImage(backCanvas, frontCanvas.width + gap, 0);
+  } else {
+    // Top-and-bottom
+    combinedCanvas.width = Math.max(frontCanvas.width, backCanvas.width);
+    combinedCanvas.height = frontCanvas.height + backCanvas.height + gap;
 
-  pairFlex.appendChild(frontClone);
-  pairFlex.appendChild(backClone);
-  sandbox.appendChild(pairFlex);
-  document.body.appendChild(sandbox);
+    const ctx = combinedCanvas.getContext('2d')!;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, combinedCanvas.width, combinedCanvas.height);
 
-  const totalWidth =
-    arrangement === 'side-by-side' ? cardW * 2 + gapPx + paddingPx * 2 : cardW + paddingPx * 2;
-  const totalHeight =
-    arrangement === 'side-by-side' ? cardH + paddingPx * 2 : cardH * 2 + gapPx + paddingPx * 2;
+    // Draw Front on top
+    ctx.drawImage(frontCanvas, 0, 0);
 
-  try {
-    await ensureImagesLoaded(sandbox);
-
-    const canvas = await html2canvas(pairFlex, {
-      scale,
-      useCORS: true,
-      allowTaint: true,
-      backgroundColor: '#ffffff',
-      logging: false,
-      scrollX: 0,
-      scrollY: 0,
-      width: totalWidth,
-      height: totalHeight,
-      windowWidth: totalWidth,
-      windowHeight: totalHeight,
-    });
-
-    const blob = await new Promise<Blob>((resolve, reject) => {
-      canvas.toBlob((b) => {
-        if (b) resolve(b);
-        else reject(new Error('Failed to create pair PNG blob'));
-      }, 'image/png');
-    });
-
-    return blob;
-  } finally {
-    if (sandbox.parentElement) {
-      document.body.removeChild(sandbox);
-    }
+    // Draw Back below
+    ctx.drawImage(backCanvas, 0, frontCanvas.height + gap);
   }
+
+  return combinedCanvas;
 }
 
 /**
- * Captures multiple selected cards together arranged in their existing print-preview arrangement
- * as a single high-resolution image object that can be pasted directly into Microsoft Word (Ctrl+V).
+ * Combines multiple card pair canvases into a single unified image layout
  */
-export async function captureMultipleCardsCombinedToBlob(
-  cardPairs: Array<{ frontEl: HTMLElement; backEl?: HTMLElement }>,
-  layoutMode: 'side-by-side' | 'top-and-bottom' | 'front-only' | 'back-only',
-  columns: number = 3,
-  scale: number = 2.5
-): Promise<Blob> {
-  const cardW = 284;
-  const cardH = 500;
-  const gapX = 24;
-  const gapY = 28;
-  const padding = 20;
-
-  const sandbox = document.createElement('div');
-  sandbox.style.position = 'fixed';
-  sandbox.style.left = '-99999px';
-  sandbox.style.top = '-99999px';
-  sandbox.style.background = '#ffffff';
-  sandbox.style.zIndex = '-99999';
-
-  const gridContainer = document.createElement('div');
-  gridContainer.style.display = 'grid';
-  gridContainer.style.gap = `${gapY}px ${gapX}px`;
-  gridContainer.style.padding = `${padding}px`;
-  gridContainer.style.background = '#ffffff';
-
-  // Determine grid template columns
-  const effectiveCols = Math.max(1, Math.min(columns, cardPairs.length));
-  gridContainer.style.gridTemplateColumns = `repeat(${effectiveCols}, auto)`;
-
-  cardPairs.forEach(({ frontEl, backEl }) => {
-    const cardSlot = document.createElement('div');
-    cardSlot.style.display = 'flex';
-    cardSlot.style.flexDirection = layoutMode === 'top-and-bottom' ? 'column' : 'row';
-    cardSlot.style.gap = '14px';
-    cardSlot.style.background = '#ffffff';
-
-    if (layoutMode === 'front-only' || !backEl) {
-      const fClone = frontEl.cloneNode(true) as HTMLElement;
-      fClone.style.transform = 'none';
-      fClone.querySelectorAll('.screen-only-guide, button, .no-capture').forEach((c) => c.remove());
-      cardSlot.appendChild(fClone);
-    } else if (layoutMode === 'back-only') {
-      const bClone = backEl.cloneNode(true) as HTMLElement;
-      bClone.style.transform = 'none';
-      bClone.querySelectorAll('.screen-only-guide, button, .no-capture').forEach((c) => c.remove());
-      cardSlot.appendChild(bClone);
-    } else {
-      // side-by-side or top-and-bottom
-      const fClone = frontEl.cloneNode(true) as HTMLElement;
-      const bClone = backEl.cloneNode(true) as HTMLElement;
-      [fClone, bClone].forEach((el) => {
-        el.style.transform = 'none';
-        el.querySelectorAll('.screen-only-guide, button, .no-capture').forEach((c) => c.remove());
-      });
-      cardSlot.appendChild(fClone);
-      cardSlot.appendChild(bClone);
-    }
-
-    gridContainer.appendChild(cardSlot);
-  });
-
-  sandbox.appendChild(gridContainer);
-  document.body.appendChild(sandbox);
-
-  try {
-    await ensureImagesLoaded(sandbox);
-
-    const canvas = await html2canvas(gridContainer, {
-      scale,
-      useCORS: true,
-      allowTaint: true,
-      backgroundColor: '#ffffff',
-      logging: false,
-      scrollX: 0,
-      scrollY: 0,
-    });
-
-    const blob = await new Promise<Blob>((resolve, reject) => {
-      canvas.toBlob((b) => {
-        if (b) resolve(b);
-        else reject(new Error('Failed to generate combined grid PNG blob'));
-      }, 'image/png');
-    });
-
-    return blob;
-  } finally {
-    if (sandbox.parentElement) {
-      document.body.removeChild(sandbox);
-    }
+export async function captureMultipleCardsCombined(
+  canvases: HTMLCanvasElement[],
+  gapPx: number = 24
+): Promise<HTMLCanvasElement> {
+  if (canvases.length === 0) {
+    throw new Error('No cards provided to combine');
   }
+  if (canvases.length === 1) {
+    return canvases[0];
+  }
+
+  // Calculate total canvas width and maximum height
+  const totalWidth = canvases.reduce((acc, c) => acc + c.width, 0) + (canvases.length - 1) * gapPx;
+  const maxHeight = Math.max(...canvases.map((c) => c.height));
+
+  const canvas = document.createElement('canvas');
+  canvas.width = totalWidth;
+  canvas.height = maxHeight;
+
+  const ctx = canvas.getContext('2d')!;
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  let currentX = 0;
+  for (const c of canvases) {
+    ctx.drawImage(c, currentX, 0);
+    currentX += c.width + gapPx;
+  }
+
+  return canvas;
 }
 
 /**
- * Writes an image PNG blob directly to the system clipboard using the standard Clipboard API.
- * This format (image/png) is universally recognized by Microsoft Word for Ctrl+V paste.
+ * Writes an image canvas directly to the system clipboard as a high-resolution PNG.
+ * This format is universally recognized by Microsoft Word for direct Ctrl+V pasting.
  */
-export async function copyBlobToClipboard(
-  blob: Blob
-): Promise<{ success: boolean; fallbackUrl?: string; error?: string }> {
+export async function copyCanvasToClipboard(
+  canvas: HTMLCanvasElement,
+  fallbackFilename: string = 'ID_Card_Copy.png'
+): Promise<{ success: boolean; blob?: Blob; error?: string }> {
   try {
-    if (typeof navigator !== 'undefined' && navigator.clipboard && typeof ClipboardItem !== 'undefined') {
-      const clipboardItem = new ClipboardItem({ 'image/png': blob });
-      await navigator.clipboard.write([clipboardItem]);
-      return { success: true };
+    const blob = await new Promise<Blob | null>((resolve) => {
+      canvas.toBlob((b) => resolve(b), 'image/png');
+    });
+
+    if (!blob) {
+      throw new Error('Failed to generate PNG blob from canvas');
     }
-    throw new Error('Clipboard API not supported in this browser context');
+
+    if (
+      typeof navigator !== 'undefined' &&
+      navigator.clipboard &&
+      typeof ClipboardItem !== 'undefined'
+    ) {
+      const item = new ClipboardItem({ 'image/png': blob });
+      await navigator.clipboard.write([item]);
+      return { success: true, blob };
+    }
+
+    // Fallback: download PNG directly if clipboard is not accessible
+    downloadCanvasPng(canvas, fallbackFilename);
+    return { success: true, blob };
   } catch (err: any) {
-    console.warn('Direct clipboard.write failed, falling back to manual copy/download:', err);
-    const fallbackUrl = URL.createObjectURL(blob);
-    return {
-      success: false,
-      fallbackUrl,
-      error: err.message || 'Clipboard access denied or unsupported',
-    };
+    console.warn('Clipboard write failed, providing fallback download:', err);
+    // Automatic fallback download so the user still gets the image
+    downloadCanvasPng(canvas, fallbackFilename);
+    return { success: false, error: err.message };
   }
 }
 
 /**
- * Triggers a browser download of a Blob file.
+ * Triggers a direct download of a canvas as a PNG file.
  */
-export function downloadBlob(blob: Blob, filename: string): void {
-  const url = URL.createObjectURL(blob);
+export function downloadCanvasPng(canvas: HTMLCanvasElement, filename: string): void {
+  const url = canvas.toDataURL('image/png');
   const a = document.createElement('a');
   a.href = url;
   a.download = filename;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
-  setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 
 /**
- * Bundles multiple PNG blobs into a single ZIP archive using JSZip for convenient batch download.
+ * Packages multiple canvas snapshots into a single ZIP archive for batch download.
  */
-export async function createCardsZipBlob(
-  files: Array<{ filename: string; blob: Blob }>
+export async function createZipFromCanvases(
+  items: Array<{ canvas: HTMLCanvasElement; filename: string }>
 ): Promise<Blob> {
   const zip = new JSZip();
-  files.forEach(({ filename, blob }) => {
-    zip.file(filename, blob);
-  });
+
+  for (const item of items) {
+    const dataUrl = item.canvas.toDataURL('image/png');
+    const base64Data = dataUrl.replace(/^data:image\/png;base64,/, '');
+    zip.file(item.filename, base64Data, { base64: true });
+  }
+
   return await zip.generateAsync({ type: 'blob' });
 }

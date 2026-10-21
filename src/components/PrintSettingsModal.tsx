@@ -39,11 +39,12 @@ import { exportCardsToExcel } from '../services/excelService';
 import { CardFront } from './CardFront';
 import { CardBack } from './CardBack';
 import { FRONT_TEMPLATE_SVG, BACK_TEMPLATE_SVG } from '../data/cardTemplates';
-import { CopyCardsModal } from './CopyCardsModal';
 import {
-  captureCardElementToBlob,
-  captureCardPairToBlob,
-  copyBlobToClipboard,
+  captureDirectCardElement,
+  captureDirectCardPair,
+  copyCanvasToClipboard,
+  downloadCanvasPng,
+  createZipFromCanvases,
 } from '../services/cardImageCopyService';
 import confetti from 'canvas-confetti';
 
@@ -108,7 +109,6 @@ export const PrintSettingsModal: React.FC<PrintSettingsModalProps> = ({
   const [selectedEmpIds, setSelectedEmpIds] = useState<Set<string>>(
     () => new Set(employees.map((e) => e.id))
   );
-  const [isCopyModalOpen, setIsCopyModalOpen] = useState(false);
   const [copyNotification, setCopyNotification] = useState<string | null>(null);
   const [isQuickCopying, setIsQuickCopying] = useState(false);
 
@@ -156,35 +156,41 @@ export const PrintSettingsModal: React.FC<PrintSettingsModalProps> = ({
     return document.getElementById(`export-${side}-${empId}`);
   };
 
-  // Quick 1-click copy for an individual card slot
+  // Sequential copy index for multiple cards
+  const [copyStepIndex, setCopyStepIndex] = useState(0);
+
+  // Quick 1-click copy for an individual card slot directly from the live preview DOM
   const handleQuickCopySlot = async (emp: EmployeeCardData, side: 'front' | 'back') => {
     setIsQuickCopying(true);
-    setCopyNotification(`Rendering ${side} card for ${emp.name}...`);
+    setCopyNotification(`Copying ${side} card for ${emp.name} directly from preview...`);
     try {
       const el = getCardDomElement(emp.id, side);
       if (!el) throw new Error(`Preview element for ${side} card not found.`);
-      const blob = await captureCardElementToBlob(el, { scale: 3 });
-      const res = await copyBlobToClipboard(blob);
+      const canvas = await captureDirectCardElement(el, 3);
+      const res = await copyCanvasToClipboard(canvas);
       if (res.success) {
         try {
           confetti({ particleCount: 35, spread: 50, origin: { y: 0.8 } });
         } catch (e) {}
         setCopyNotification(
-          `Copied ${side.toUpperCase()} for ${emp.name} to clipboard! Paste into Microsoft Word with Ctrl+V.`
+          `Copied ${side.toUpperCase()} of ${emp.name}'s card to clipboard! Paste into Microsoft Word with Ctrl+V.`
         );
-        setTimeout(() => setCopyNotification(null), 4500);
       } else {
-        setIsCopyModalOpen(true);
+        setCopyNotification(
+          `Clipboard access restricted by browser. PNG image downloaded directly for Word.`
+        );
       }
+      setTimeout(() => setCopyNotification(null), 5000);
     } catch (err: any) {
       console.error('Quick copy slot error:', err);
-      setIsCopyModalOpen(true);
+      setCopyNotification(`Failed to copy card: ${err.message}`);
+      setTimeout(() => setCopyNotification(null), 4000);
     } finally {
       setIsQuickCopying(false);
     }
   };
 
-  // Main header "Copy Selected Cards" action handler
+  // Main header "Copy Selected Cards" action handler - copies directly without opening any separate popup
   const handleCopySelectedCardsClick = async () => {
     if (selectedCount === 0) {
       setCopyNotification('Please select at least one card in the preview.');
@@ -192,52 +198,108 @@ export const PrintSettingsModal: React.FC<PrintSettingsModalProps> = ({
       return;
     }
 
-    // Exactly 1 card selected: capture and copy immediately to clipboard as high-res image
-    if (selectedCount === 1) {
-      const emp = selectedEmployees[0];
-      setIsQuickCopying(true);
-      setCopyNotification(`Rendering high-res card image for ${emp.name}...`);
-      try {
+    const targetEmp = selectedEmployees[copyStepIndex] || selectedEmployees[0];
+    setIsQuickCopying(true);
+    setCopyNotification(
+      selectedCount === 1
+        ? `Copying ${targetEmp.name}'s card directly from preview...`
+        : `Copying card ${copyStepIndex + 1} of ${selectedCount} (${targetEmp.name}) directly to clipboard...`
+    );
+
+    try {
+      const f = getCardDomElement(targetEmp.id, 'front');
+      const b = getCardDomElement(targetEmp.id, 'back');
+
+      let canvas: HTMLCanvasElement;
+      if (settings.layoutMode === 'front-only' || !b) {
+        if (!f) throw new Error('Card front element not found in preview.');
+        canvas = await captureDirectCardElement(f, 3);
+      } else if (settings.layoutMode === 'back-only') {
+        if (!b) throw new Error('Card back element not found in preview.');
+        canvas = await captureDirectCardElement(b, 3);
+      } else {
+        // side-by-side or top-and-bottom: draw side-by-side cleanly without DOM overlap
+        if (!f || !b) throw new Error('Card elements not found in preview.');
+        const arrangement =
+          settings.layoutMode === 'top-and-bottom' ? 'top-and-bottom' : 'side-by-side';
+        canvas = await captureDirectCardPair(f, b, 3, arrangement);
+      }
+
+      const res = await copyCanvasToClipboard(canvas);
+      if (res.success) {
+        try {
+          confetti({ particleCount: 45, spread: 60, origin: { y: 0.75 } });
+        } catch (e) {}
+
+        if (selectedCount === 1) {
+          setCopyNotification(
+            `Copied ${targetEmp.name}'s ID card image to clipboard! Ready to paste into Microsoft Word (Ctrl+V).`
+          );
+        } else {
+          const nextIndex = (copyStepIndex + 1) % selectedCount;
+          setCopyStepIndex(nextIndex);
+          setCopyNotification(
+            `Copied ${targetEmp.name} (Card ${copyStepIndex + 1} of ${selectedCount}) to clipboard! Paste into Word with Ctrl+V. Click button again to copy Card ${nextIndex + 1}.`
+          );
+        }
+      } else {
+        setCopyNotification('Clipboard access restricted. PNG downloaded directly for Word.');
+      }
+      setTimeout(() => setCopyNotification(null), 6000);
+    } catch (err: any) {
+      console.error('Card copy error:', err);
+      setCopyNotification(`Failed to copy: ${err.message}`);
+      setTimeout(() => setCopyNotification(null), 4000);
+    } finally {
+      setIsQuickCopying(false);
+    }
+  };
+
+  // Download all selected cards as separate PNGs in a ZIP archive
+  const handleDownloadSelectedPngs = async () => {
+    if (selectedCount === 0) return;
+    setIsQuickCopying(true);
+    setCopyNotification(`Packaging ${selectedCount} high-resolution card images...`);
+    try {
+      const items: Array<{ canvas: HTMLCanvasElement; filename: string }> = [];
+      for (let i = 0; i < selectedEmployees.length; i++) {
+        const emp = selectedEmployees[i];
+        const num = String(i + 1).padStart(2, '0');
+        const cleanName = emp.name.replace(/[^a-zA-Z0-9_-]/g, '_');
         const f = getCardDomElement(emp.id, 'front');
         const b = getCardDomElement(emp.id, 'back');
 
-        let blob: Blob;
-        if (settings.layoutMode === 'front-only' || !b) {
-          if (!f) throw new Error('Card front element not found in preview.');
-          blob = await captureCardElementToBlob(f, { scale: 3 });
-        } else if (settings.layoutMode === 'back-only') {
-          if (!b) throw new Error('Card back element not found in preview.');
-          blob = await captureCardElementToBlob(b, { scale: 3 });
-        } else {
-          // side-by-side or top-and-bottom
-          if (!f || !b) throw new Error('Card elements not found in preview.');
-          const arrangement =
-            settings.layoutMode === 'top-and-bottom' ? 'top-and-bottom' : 'side-by-side';
-          blob = await captureCardPairToBlob(f, b, arrangement, 3);
+        if (f && b) {
+          const pairCanvas = await captureDirectCardPair(f, b, 3, 'side-by-side');
+          items.push({ canvas: pairCanvas, filename: `${num}_${emp.enrollId}_${cleanName}_Pair.png` });
         }
-
-        const res = await copyBlobToClipboard(blob);
-        if (res.success) {
-          try {
-            confetti({ particleCount: 45, spread: 60, origin: { y: 0.75 } });
-          } catch (e) {}
-          setCopyNotification(
-            `Copied ${emp.name}'s ID card image to clipboard! Ready to paste into Microsoft Word (Ctrl+V).`
-          );
-          setTimeout(() => setCopyNotification(null), 5000);
-        } else {
-          setIsCopyModalOpen(true);
+        if (f) {
+          const frontCanvas = await captureDirectCardElement(f, 3);
+          items.push({ canvas: frontCanvas, filename: `${num}_${emp.enrollId}_${cleanName}_Front.png` });
         }
-      } catch (err: any) {
-        console.error('Single card copy error:', err);
-        setIsCopyModalOpen(true);
-      } finally {
-        setIsQuickCopying(false);
+        if (b) {
+          const backCanvas = await captureDirectCardElement(b, 3);
+          items.push({ canvas: backCanvas, filename: `${num}_${emp.enrollId}_${cleanName}_Back.png` });
+        }
       }
-    } else {
-      // 2, 3, 5, or more cards selected: open the CopyCardsModal to choose
-      // Combined Layout Image vs Separate Cards Step-by-Step vs ZIP download
-      setIsCopyModalOpen(true);
+
+      const zipBlob = await createZipFromCanvases(items);
+      const url = URL.createObjectURL(zipBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `ID_Cards_PNGs_${selectedCount}_Selected.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      setCopyNotification(`Downloaded ${items.length} separate PNG card images in ZIP! Drag & drop into Word.`);
+      setTimeout(() => setCopyNotification(null), 5000);
+    } catch (err: any) {
+      setCopyNotification(`Failed to download PNGs: ${err.message}`);
+      setTimeout(() => setCopyNotification(null), 4000);
+    } finally {
+      setIsQuickCopying(false);
     }
   };
 
@@ -608,12 +670,12 @@ export const PrintSettingsModal: React.FC<PrintSettingsModalProps> = ({
 
           {/* Quick Actions */}
           <div className="flex items-center gap-2">
-            {/* Copy Selected Cards as Image for Word Button (PROMINENT & HIGHEST PRIORITY) */}
-            <div className="flex items-center shadow-md rounded-xl overflow-hidden ring-1 ring-emerald-400/50">
+            {/* Direct Copy Selected Cards as Image for Word (PROMINENT - DIRECT TO CLIPBOARD) */}
+            <div className="flex items-center gap-1.5">
               <button
                 onClick={handleCopySelectedCardsClick}
                 disabled={isExporting || selectedCount === 0 || isQuickCopying}
-                className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:from-emerald-700 active:to-teal-700 text-white text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:from-emerald-700 active:to-teal-700 text-white text-xs font-bold rounded-xl shadow-md hover:shadow-lg transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50 ring-1 ring-emerald-400/50"
                 title="Copy rendered card preview directly to clipboard as high-res PNG for Microsoft Word (Ctrl+V)"
               >
                 {isQuickCopying ? (
@@ -623,18 +685,22 @@ export const PrintSettingsModal: React.FC<PrintSettingsModalProps> = ({
                 )}
                 <span>
                   {selectedCount === 1
-                    ? 'Copy Selected Card (1)'
-                    : `Copy Selected Cards (${selectedCount})`}
+                    ? 'Copy Card as Image (Ctrl+C)'
+                    : `Copy Card ${copyStepIndex + 1} of ${selectedCount} (Ctrl+V)`}
                 </span>
               </button>
-              <button
-                onClick={() => setIsCopyModalOpen(true)}
-                disabled={isExporting || selectedCount === 0}
-                className="px-2 py-2 bg-teal-700 hover:bg-teal-600 active:bg-teal-800 text-teal-100 text-xs font-bold transition-colors border-l border-teal-500/50 cursor-pointer disabled:opacity-50"
-                title="View copy options (Separate Cards, Combined Layout, or ZIP download)"
-              >
-                <ChevronDown className="w-3.5 h-3.5" />
-              </button>
+
+              {selectedCount > 1 && (
+                <button
+                  onClick={handleDownloadSelectedPngs}
+                  disabled={isExporting || selectedCount === 0 || isQuickCopying}
+                  className="px-3 py-2 bg-teal-800 hover:bg-teal-700 active:bg-teal-900 text-teal-100 text-xs font-bold rounded-xl transition-colors border border-teal-600/50 cursor-pointer disabled:opacity-50 shadow-xs flex items-center gap-1"
+                  title="Download all selected cards as separate PNG images in a ZIP"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Download All ({selectedCount})</span>
+                </button>
+              )}
             </div>
 
             {/* Direct Print Button (Requires NO PDF download) */}
@@ -1307,19 +1373,6 @@ export const PrintSettingsModal: React.FC<PrintSettingsModalProps> = ({
           </div>
         </div>
       </div>
-
-      {/* Copy Selected Cards Modal */}
-      <CopyCardsModal
-        isOpen={isCopyModalOpen}
-        onClose={() => setIsCopyModalOpen(false)}
-        selectedEmployees={selectedEmployees}
-        settings={settings}
-        getCardElement={getCardDomElement}
-        onSuccessNotification={(msg) => {
-          setCopyNotification(msg);
-          setTimeout(() => setCopyNotification(null), 5000);
-        }}
-      />
     </div>
   );
 };

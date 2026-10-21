@@ -23,6 +23,10 @@ interface EmployeeTableEditorProps {
   onUpdateEmployees: (employees: EmployeeCardData[]) => void;
   onSelectEmployeeForPreview: (employeeId: string) => void;
   selectedEmployeeId?: string;
+  selectedEmployeeIds?: Set<string>;
+  onToggleSelectEmployee?: (employeeId: string) => void;
+  onSelectAllEmployees?: () => void;
+  onClearSelectedEmployees?: () => void;
 }
 
 export const EmployeeTableEditor: React.FC<EmployeeTableEditorProps> = ({
@@ -30,6 +34,10 @@ export const EmployeeTableEditor: React.FC<EmployeeTableEditorProps> = ({
   onUpdateEmployees,
   onSelectEmployeeForPreview,
   selectedEmployeeId,
+  selectedEmployeeIds,
+  onToggleSelectEmployee,
+  onSelectAllEmployees,
+  onClearSelectedEmployees,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'valid' | 'invalid'>('all');
@@ -298,6 +306,22 @@ export const EmployeeTableEditor: React.FC<EmployeeTableEditorProps> = ({
         <table className="w-full text-left border-collapse text-xs">
           <thead>
             <tr className="bg-gray-100/70 text-gray-600 uppercase text-[10px] font-bold tracking-wider border-b border-gray-200 sticky top-0 z-10 backdrop-blur-sm">
+              {onToggleSelectEmployee && (
+                <th className="py-2.5 px-3 text-center w-10">
+                  <input
+                    type="checkbox"
+                    checked={
+                      Boolean(selectedEmployeeIds && employees.length > 0 && selectedEmployeeIds.size === employees.length)
+                    }
+                    onChange={(e) => {
+                      if (e.target.checked) onSelectAllEmployees?.();
+                      else onClearSelectedEmployees?.();
+                    }}
+                    className="rounded text-rose-600 focus:ring-0 w-3.5 h-3.5 cursor-pointer"
+                    title="Select/Deselect all cards"
+                  />
+                </th>
+              )}
               <th className="py-2.5 px-3">Status</th>
               <th className="py-2.5 px-3">Photo</th>
               <th className="py-2.5 px-3">Sign</th>
@@ -317,6 +341,7 @@ export const EmployeeTableEditor: React.FC<EmployeeTableEditorProps> = ({
             {filteredEmployees.map((emp) => {
               const validation = validateEmployee(emp);
               const isSelected = emp.id === selectedEmployeeId;
+              const isChecked = selectedEmployeeIds?.has(emp.id) || false;
               const isEditing = emp.id === editingId;
 
               return (
@@ -324,13 +349,26 @@ export const EmployeeTableEditor: React.FC<EmployeeTableEditorProps> = ({
                   key={emp.id}
                   onClick={() => onSelectEmployeeForPreview(emp.id)}
                   className={`cursor-pointer transition-colors ${
-                    isSelected
+                    isSelected || isChecked
                       ? 'bg-rose-50/70 font-medium'
                       : !validation.isValid
                       ? 'bg-red-50/30 hover:bg-red-50/50'
                       : 'hover:bg-gray-50'
                   }`}
                 >
+                  {/* Multi-selection Checkbox */}
+                  {onToggleSelectEmployee && (
+                    <td className="py-2 px-3 text-center" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => onToggleSelectEmployee(emp.id)}
+                        className="rounded text-rose-600 focus:ring-0 w-3.5 h-3.5 cursor-pointer"
+                        title={`Select ${emp.name} for copying/printing`}
+                      />
+                    </td>
+                  )}
+
                   {/* Status Indicator */}
                   <td className="py-2 px-3">
                     {validation.isValid ? (

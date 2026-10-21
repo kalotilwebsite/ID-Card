@@ -54,5 +54,21 @@
   "d2d23bb3ce366589aa9eea283595f655b637722540ad8bb6f3b9a78dd19555af": {
     "userId": "user-admin-1",
     "expiresAt": 1795182754776
+  },
+  "a75a425ad6e58415d85db3689a8d9c52ff22dc59c30a2b282bd6013175d3c1ce": {
+    "userId": "user-supervisor-1",
+    "expiresAt": 1795188240635
+  },
+  "da7de9903bb8d7f970346b2b89648717784a431156a5e225a9d4c72347e59f46": {
+    "userId": "user-admin-1",
+    "expiresAt": 1795188240762
+  },
+  "2fc83ed53ac1a220dbfffc63d154712d83abf4202f1832e0a0f8fa426a0ad008": {
+    "userId": "user-admin-1",
+    "expiresAt": 1795188278472
+  },
+  "56e3e3f719896f7218ea699d16eb10d6eedf89a824f51dfc0b441dc2dae59f18": {
+    "userId": "user-supervisor-1",
+    "expiresAt": 1795188278529
   }
 }

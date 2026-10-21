@@ -76,7 +76,6 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => getStoredUser());
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
-  const [loginInitialMode, setLoginInitialMode] = useState<'supervisor' | 'system'>('supervisor');
   const [isAdminSettingsOpen, setIsAdminSettingsOpen] = useState(false);
   const [loginBackgroundImage, setLoginBackgroundImage] = useState<string>(() => {
     try {
@@ -434,7 +433,11 @@ export default function App() {
             printedAt: now,
             reprintHistory: [
               ...(e.reprintHistory || []),
-              { printedAt: now, printedBy: currentUser?.name || 'Admin' },
+              {
+                printedAt: now,
+                printedBy: currentUser?.name || 'Admin',
+                action: (e.printCount || 0) > 0 ? 'reprint' : 'initial_print',
+              },
             ],
           };
         }
@@ -464,7 +467,12 @@ export default function App() {
             printedAt: now,
             reprintHistory: [
               ...(e.reprintHistory || []),
-              { printedAt: now, printedBy: currentUser?.name || 'Admin' },
+              {
+                printedAt: now,
+                printedBy: currentUser?.name || 'Admin',
+                action: (e.printCount || 0) > 0 ? 'reprint' : 'initial_print',
+                note: 'Marked Print OK from Card Studio',
+              },
             ],
           };
         }
@@ -847,7 +855,7 @@ export default function App() {
                       }`}
                     >
                       <TableIcon className="w-3.5 h-3.5" />
-                      Employee Table &amp; Validation ({employees.length})
+                      Table ({employees.length})
                     </button>
 
                     <button
@@ -859,7 +867,7 @@ export default function App() {
                       }`}
                     >
                       <Eye className="w-3.5 h-3.5" />
-                      All Cards Gallery
+                      Gallery
                     </button>
                   </div>
 
@@ -952,20 +960,41 @@ export default function App() {
                         Card {selectedEmpIndex + 1} of {employees.length}
                       </span>
 
-                      {/* Print Status Badge in Inspector Header */}
+                      {/* Print Status Badge & Action in Inspector Header */}
                       {currentEmployee.printStatus === 'printed' ? (
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
-                          <CheckCircle className="w-3 h-3 text-emerald-600" />
-                          <span>Print OK</span>
-                          {currentEmployee.printCount && currentEmployee.printCount > 1 ? (
-                            <span className="text-[9px] opacity-80">({currentEmployee.printCount}x)</span>
-                          ) : null}
-                        </span>
+                        <div className="flex items-center gap-1">
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
+                            <CheckCircle className="w-3 h-3 text-emerald-600" />
+                            <span>Print OK</span>
+                            {currentEmployee.printCount && currentEmployee.printCount > 1 ? (
+                              <span className="text-[9px] opacity-80">({currentEmployee.printCount}x)</span>
+                            ) : null}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleToggleCardPrintStatus(currentEmployee)}
+                            title="Reset status back to Print Pending"
+                            className="px-1.5 py-0.5 rounded text-[10px] font-semibold text-slate-500 hover:text-amber-800 hover:bg-amber-50 border border-transparent hover:border-amber-200 transition-colors"
+                          >
+                            Reset
+                          </button>
+                        </div>
                       ) : (
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 flex items-center gap-1">
-                          <Clock className="w-3 h-3 text-amber-600" />
-                          <span>Print Pending</span>
-                        </span>
+                        <div className="flex items-center gap-1">
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 flex items-center gap-1">
+                            <Clock className="w-3 h-3 text-amber-600" />
+                            <span>Print Pending</span>
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleMarkSinglePrintOk(currentEmployee)}
+                            title="Mark this card as Print OK"
+                            className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs transition-colors flex items-center gap-1"
+                          >
+                            <Check className="w-3 h-3" />
+                            <span>Mark Print OK</span>
+                          </button>
+                        </div>
                       )}
 
                       {/* Minimal Copy Icon Button */}
@@ -1222,6 +1251,7 @@ export default function App() {
       <LoginModal
         isOpen={isLoginModalOpen}
         onClose={() => setIsLoginModalOpen(false)}
+        backgroundImageUrl={loginBackgroundImage}
         onLoginSuccess={(user) => {
           setCurrentUser(user);
           if (user.role === 'supervisor') {
@@ -1316,6 +1346,17 @@ export default function App() {
         settings={printSettings}
         onChangeSettings={setPrintSettings}
         totalCardsCount={employees.length}
+        onConfirmPrintOk={async () => {
+          const validIds = employees.map((e) => e.enrollId).filter(Boolean);
+          if (validIds.length > 0) {
+            try {
+              await apiService.bulkMarkPrinted(validIds, 'Marked Print OK from Print Settings');
+            } catch (err) {
+              console.warn('Backend mark note:', err);
+            }
+            handleCardsMarkedPrinted(validIds);
+          }
+        }}
       />
 
       <ExportModal
@@ -1325,12 +1366,20 @@ export default function App() {
         settings={printSettings}
         companyConfig={companyConfig}
         getCardElement={getCardElement}
+        onCardsPrinted={handleCardsMarkedPrinted}
       />
 
       {/* Admin Settings Modal (Configures supervisor submission confirmation message & settings) */}
       <AdminSettingsModal
         isOpen={isAdminSettingsOpen}
         onClose={() => setIsAdminSettingsOpen(false)}
+        onSettingsSaved={() => {
+          apiService.getPublicSettings().then((settings) => {
+            if (settings?.loginBackgroundImage !== undefined) {
+              setLoginBackgroundImage(settings.loginBackgroundImage || '');
+            }
+          });
+        }}
       />
     </div>
   );

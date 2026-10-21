@@ -191,7 +191,7 @@ export function LoginModal({
             ) : (
               <>
                 <Lock className="w-4 h-4" />
-                <span>Access Account</span>
+                <span>Access / Login</span>
               </>
             )}
           </button>

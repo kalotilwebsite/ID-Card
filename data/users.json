@@ -2,6 +2,7 @@
   {
     "id": "user-admin-1",
     "username": "admin",
+    "employeeId": "admin",
     "passwordHash": "ad1982518f978feeda4b890c1c4e2c8eae62989c6ccd0c4876e6c92443bcb313",
     "name": "System Administrator",
     "email": "ajkerpage@gmail.com",

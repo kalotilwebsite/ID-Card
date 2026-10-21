@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { PrintSettings, PaperSizeConfig } from '../types';
 import { Printer, Settings2, Sliders, Check, HelpCircle } from 'lucide-react';
 

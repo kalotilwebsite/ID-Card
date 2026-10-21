@@ -292,11 +292,11 @@ export function SubmissionsSection({
             </span>
             <h2 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight flex items-center gap-2">
               <TableIcon className="w-5 h-5 text-rose-600" />
-              <span>Supervisor ID Card Submissions &amp; Print Queue</span>
+              <span>Print Queue</span>
             </h2>
           </div>
           <p className="text-xs text-slate-600 max-w-2xl">
-            Review employee ID card data submitted by supervisors and operators. Track print status (Pending vs Printed), execute ID card printing using the exact template, and log reprint history.
+            Review supervisor submissions, manage print status (Pending vs Print OK), and print ID cards.
           </p>
         </div>
 
@@ -370,7 +370,7 @@ export function SubmissionsSection({
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            All Submissions ({submissions.length})
+            All ({submissions.length})
           </button>
 
           <button

@@ -119,16 +119,27 @@ function removeSession(token: string): void {
 function initializeDatabase() {
   // 1. Users
   const users = readJsonFile<any[]>(USERS_FILE, []);
+  const existingAdmin = users.find((u) => u.role === 'admin');
+
   if (users.length === 0) {
     const adminUser = {
       id: 'user-admin-1',
-      username: 'admin',
-      passwordHash: hashPassword('admin123'),
+      username: 'Admin',
+      employeeId: 'Admin',
+      passwordHash: hashPassword('466035'),
       name: 'System Administrator',
       email: 'ajkerpage@gmail.com',
       role: 'admin',
       status: 'active',
       createdAt: new Date().toISOString(),
+      allowedTabs: [
+        'submissions',
+        'supervisor_submission',
+        'data_entry_form',
+        'employee_data',
+        'user_management',
+        'card_studio',
+      ],
     };
     const demoDataEntryUser = {
       id: 'user-dataentry-1',
@@ -153,7 +164,32 @@ function initializeDatabase() {
       createdAt: new Date().toISOString(),
     };
     writeJsonFile(USERS_FILE, [adminUser, demoDataEntryUser, demoSupervisorUser]);
-  } else if (!users.some((u) => u.role === 'supervisor')) {
+  } else if (!existingAdmin) {
+    // Configure initial Admin credentials only if an Admin account has not yet been configured
+    const adminUser = {
+      id: 'user-admin-1',
+      username: 'Admin',
+      employeeId: 'Admin',
+      passwordHash: hashPassword('466035'),
+      name: 'System Administrator',
+      email: 'ajkerpage@gmail.com',
+      role: 'admin',
+      status: 'active',
+      createdAt: new Date().toISOString(),
+      allowedTabs: [
+        'submissions',
+        'supervisor_submission',
+        'data_entry_form',
+        'employee_data',
+        'user_management',
+        'card_studio',
+      ],
+    };
+    users.unshift(adminUser);
+    writeJsonFile(USERS_FILE, users);
+  }
+
+  if (!users.some((u) => u.role === 'supervisor')) {
     const demoSupervisorUser = {
       id: 'user-supervisor-1',
       username: 'supervisor1',
@@ -344,13 +380,28 @@ app.post('/api/auth/login', (req: Request, res: Response) => {
 
   const cleanInput = rawId.toLowerCase();
   const users = readJsonFile<any[]>(USERS_FILE, []);
-  const user = users.find(
+  let user = users.find(
     (u) =>
       (u.username.toLowerCase() === cleanInput ||
         (u.email && u.email.toLowerCase() === cleanInput) ||
         (u.employeeId && u.employeeId.toLowerCase() === cleanInput)) &&
       u.passwordHash === hashPassword(password)
   );
+
+  // If logging in with default initial Admin credentials (Enrollment ID: Admin, Password: 466035)
+  // and the Admin account was still on initial default seed, authenticate and sync
+  if (!user && cleanInput === 'admin' && password === '466035') {
+    const adminUser = users.find(
+      (u) => u.role === 'admin' && (u.username.toLowerCase() === 'admin' || (u.employeeId && u.employeeId.toLowerCase() === 'admin'))
+    );
+    if (adminUser && (adminUser.passwordHash === hashPassword('admin123') || adminUser.passwordHash === hashPassword('466035'))) {
+      adminUser.passwordHash = hashPassword('466035');
+      adminUser.employeeId = 'Admin';
+      adminUser.username = 'Admin';
+      writeJsonFile(USERS_FILE, users);
+      user = adminUser;
+    }
+  }
 
   if (!user) {
     res.status(401).json({ error: 'Invalid Enrollment ID or password.' });

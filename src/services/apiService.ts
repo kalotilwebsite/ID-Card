@@ -68,7 +68,12 @@ async function request<T>(endpoint: string, options: RequestInit = {}, retryOn40
       setStoredToken(null);
       setStoredUser(null);
       try {
-        const loginRes = await apiService.login('admin', 'admin123');
+        let loginRes;
+        try {
+          loginRes = await apiService.login('Admin', '466035');
+        } catch {
+          loginRes = await apiService.login('admin', 'admin123').catch(() => null);
+        }
         if (loginRes?.token) {
           return await request<T>(endpoint, options, false);
         }

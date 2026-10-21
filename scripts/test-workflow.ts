@@ -86,7 +86,7 @@ async function runTestSuite() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       },
-      { username: 'admin', password: 'admin123' }
+      { enrollmentId: 'Admin', password: '466035' }
     );
     assert(
       adminLoginRes.statusCode === 200 && adminLoginRes.data?.user?.role === 'admin',

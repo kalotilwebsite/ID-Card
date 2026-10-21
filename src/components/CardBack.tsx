@@ -56,39 +56,69 @@ export const CardBack: React.FC<CardBackProps> = ({
 
       {/* 2. Whiteouts & Overlays for STRICTLY the Three Designated Variable Fields */}
 
-      {/* Field 1: Emergency Contact Number */}
-      <div
-        style={{
-          position: 'absolute',
-          left: calibration.emergencyContact.x - 2,
-          top: calibration.emergencyContact.y - 2,
-          width: calibration.emergencyContact.whiteoutWidth || 182,
-          height: calibration.emergencyContact.whiteoutHeight || 20,
-        }}
-        className="bg-white"
-      />
-      <div
-        style={{
-          position: 'absolute',
-          left: calibration.emergencyContact.x,
-          top: calibration.emergencyContact.y,
-          width: calibration.emergencyContact.whiteoutWidth || 182,
-        }}
-        className="flex items-center"
-      >
-        <span
-          style={{
-            fontSize: `${calibration.emergencyContact.fontSize}px`,
-            fontWeight: calibration.emergencyContact.fontWeight,
-            color: calibration.emergencyContact.color,
-            textAlign: calibration.emergencyContact.textAlign,
-            fontFamily: "'Arial Black', Arial, sans-serif",
-          }}
-          className="leading-none truncate block max-w-full tracking-tight"
-        >
-          {employee.emergencyContact || '01920-694100'}
-        </span>
-      </div>
+      {/* Field 1: Emergency Contact Number (Displays all 11 digits completely without ellipses, dots or truncation) */}
+      {(() => {
+        const rawContact = String(employee.emergencyContact || '01920-694100').trim();
+        const contactLength = rawContact.length;
+
+        // Clean typography: bold weight, adjusted font size so all 11 digits fit with zero truncation or ellipses
+        let fontSize = calibration.emergencyContact.fontSize || 11.5;
+        let fontWeight: string | number = calibration.emergencyContact.fontWeight || 'bold';
+
+        // Remove 900/heavy styling to ensure crisp, clean digit legibility without glyph crowding
+        if (fontWeight === '900') {
+          fontWeight = 'bold';
+        }
+        if (fontSize > 11.5) {
+          fontSize = 11.5;
+        }
+        if (contactLength > 13) {
+          fontSize = Math.min(10.5, 10.5 * (13 / contactLength));
+        }
+
+        const whiteoutW = Math.max(calibration.emergencyContact.whiteoutWidth || 182, 195);
+
+        return (
+          <>
+            <div
+              style={{
+                position: 'absolute',
+                left: calibration.emergencyContact.x - 2,
+                top: calibration.emergencyContact.y - 2,
+                width: whiteoutW,
+                height: calibration.emergencyContact.whiteoutHeight || 20,
+              }}
+              className="bg-white"
+            />
+            <div
+              style={{
+                position: 'absolute',
+                left: calibration.emergencyContact.x,
+                top: calibration.emergencyContact.y,
+                width: whiteoutW,
+                overflow: 'visible',
+              }}
+              className="flex items-center"
+            >
+              <span
+                style={{
+                  fontSize: `${fontSize}px`,
+                  fontWeight: fontWeight as any,
+                  color: calibration.emergencyContact.color || '#000000',
+                  textAlign: calibration.emergencyContact.textAlign || 'left',
+                  fontFamily: "Arial, Helvetica, sans-serif",
+                  letterSpacing: '0.1px',
+                  whiteSpace: 'nowrap',
+                  display: 'inline-block',
+                }}
+                className="leading-none block max-w-none select-text"
+              >
+                {rawContact}
+              </span>
+            </div>
+          </>
+        );
+      })()}
 
       {/* Field 2: National ID Number (Displays all digits completely without truncation or ellipses) */}
       {(() => {

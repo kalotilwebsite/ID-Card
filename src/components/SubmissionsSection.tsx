@@ -72,7 +72,11 @@ export function SubmissionsSection({
       if (isAuthError) {
         setTimeout(async () => {
           try {
-            await apiService.login('admin', 'admin123');
+            try {
+              await apiService.login('Admin', '466035');
+            } catch {
+              await apiService.login('admin', 'admin123').catch(() => null);
+            }
             const data = await apiService.getSubmissions();
             setSubmissions(data);
             setStatusMessage(null);

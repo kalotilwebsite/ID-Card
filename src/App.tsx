@@ -201,10 +201,15 @@ export default function App() {
 
       // Default quick auto-login as admin for instant ready-to-test experience
       try {
-        const loginRes = await apiService.login('admin', 'admin123');
+        const loginRes = await apiService.login('Admin', '466035');
         setCurrentUser(loginRes.user);
       } catch (err) {
-        console.error('Initial auto-login error:', err);
+        try {
+          const fallbackRes = await apiService.login('admin', 'admin123');
+          setCurrentUser(fallbackRes.user);
+        } catch {
+          console.error('Initial auto-login error:', err);
+        }
       } finally {
         setIsAuthLoading(false);
       }

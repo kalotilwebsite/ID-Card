@@ -1,9 +1,9 @@
 [
   {
     "id": "user-admin-1",
-    "username": "admin",
-    "employeeId": "admin",
-    "passwordHash": "ad1982518f978feeda4b890c1c4e2c8eae62989c6ccd0c4876e6c92443bcb313",
+    "username": "Admin",
+    "employeeId": "Admin",
+    "passwordHash": "840e146a4f9d8e03345ed9f0f6de7729553f476b666fb759878bb500ccebf5b9",
     "name": "System Administrator",
     "email": "ajkerpage@gmail.com",
     "role": "admin",

@@ -182,11 +182,11 @@ export const DEFAULT_CALIBRATION: CardCalibrationSettings = {
     emergencyContact: {
       x: 52,
       y: 236,
-      fontSize: 12,
-      fontWeight: '900',
+      fontSize: 11.5,
+      fontWeight: 'bold',
       color: '#000000',
       textAlign: 'left',
-      whiteoutWidth: 182,
+      whiteoutWidth: 195,
       whiteoutHeight: 20,
     },
     nationalId: {

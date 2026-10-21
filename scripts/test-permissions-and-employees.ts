@@ -52,7 +52,7 @@ async function runAuditTests() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       },
-      { username: 'admin', password: 'admin123' }
+      { enrollmentId: 'Admin', password: '466035' }
     );
     assert(adminRes.statusCode === 200, 'Admin can login');
     const adminToken = adminRes.data?.token;

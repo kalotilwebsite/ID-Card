@@ -648,11 +648,17 @@ app.post('/api/master-employees/import', authenticateToken, requireTabAccess('em
 
 // Restricted Employee Edit: ONLY Contact Number and Blood Group can be updated
 app.put('/api/master-employees/:enrollId', authenticateToken, requireTabAccess('employee_data'), (req: Request, res: Response) => {
-  const { enrollId } = req.params;
+  const targetId = decodeURIComponent(String(req.params.enrollId || '')).trim();
   const master = readJsonFile<Record<string, any>>(MASTER_FILE, {});
 
-  if (!master[enrollId]) {
-    res.status(404).json({ error: `Employee with Enrollment ID "${enrollId}" not found.` });
+  const matchedKey = Object.keys(master).find(
+    (k) =>
+      k.trim().toLowerCase() === targetId.toLowerCase() ||
+      String(master[k]?.enrollId || '').trim().toLowerCase() === targetId.toLowerCase()
+  );
+
+  if (!matchedKey) {
+    res.status(404).json({ error: `Employee with Enrollment ID "${targetId}" not found.` });
     return;
   }
 
@@ -665,7 +671,7 @@ app.put('/api/master-employees/:enrollId', authenticateToken, requireTabAccess('
       res.status(400).json({ error: 'Contact Number is required and cannot be empty.' });
       return;
     }
-    master[enrollId].emergencyContact = contactStr;
+    master[matchedKey].emergencyContact = contactStr;
   }
 
   // Validate Blood Group (required, valid blood group format)
@@ -678,37 +684,46 @@ app.put('/api/master-employees/:enrollId', authenticateToken, requireTabAccess('
       });
       return;
     }
-    master[enrollId].bloodGroup = bgStr;
+    master[matchedKey].bloodGroup = bgStr;
   }
 
   // Strictly enforce that NO OTHER employee fields can be altered via edit
-  master[enrollId].updatedAt = new Date().toISOString();
+  master[matchedKey].updatedAt = new Date().toISOString();
 
   writeJsonFile(MASTER_FILE, master);
   res.json({
     success: true,
-    message: `Employee ${enrollId} updated successfully (Contact Number & Blood Group).`,
-    employee: master[enrollId],
+    message: `Employee ${master[matchedKey].enrollId} updated successfully (Contact Number & Blood Group).`,
+    employee: master[matchedKey],
   });
 });
 
-app.delete('/api/master-employees/:enrollId', authenticateToken, requireTabAccess('employee_data'), (req: Request, res: Response) => {
-  const { enrollId } = req.params;
-  const master = readJsonFile<Record<string, any>>(MASTER_FILE, {});
-
-  if (!master[enrollId]) {
-    res.status(404).json({ error: `Employee with Enrollment ID "${enrollId}" not found.` });
-    return;
-  }
-
-  delete master[enrollId];
-  writeJsonFile(MASTER_FILE, master);
-  res.json({ success: true, message: `Employee ${enrollId} deleted from master database.` });
-});
-
+// Clear All Master Employees (Delete All)
 app.delete('/api/master-employees', authenticateToken, requireTabAccess('employee_data'), (_req: Request, res: Response) => {
   writeJsonFile(MASTER_FILE, {});
   res.json({ success: true, message: 'All master employee records have been cleared.' });
+});
+
+// Delete Individual Master Employee
+app.delete('/api/master-employees/:enrollId', authenticateToken, requireTabAccess('employee_data'), (req: Request, res: Response) => {
+  const targetId = decodeURIComponent(String(req.params.enrollId || '')).trim();
+  const master = readJsonFile<Record<string, any>>(MASTER_FILE, {});
+
+  const matchedKey = Object.keys(master).find(
+    (k) =>
+      k.trim().toLowerCase() === targetId.toLowerCase() ||
+      String(master[k]?.enrollId || '').trim().toLowerCase() === targetId.toLowerCase()
+  );
+
+  if (!matchedKey) {
+    res.status(404).json({ error: `Employee with Enrollment ID "${targetId}" not found.` });
+    return;
+  }
+
+  const deletedId = master[matchedKey]?.enrollId || targetId;
+  delete master[matchedKey];
+  writeJsonFile(MASTER_FILE, master);
+  res.json({ success: true, message: `Employee ${deletedId} deleted from master database.` });
 });
 
 // --- LOOKUP EMPLOYEE (AUTHENTICATED DATA ENTRY & ADMIN) ---
@@ -716,7 +731,11 @@ app.delete('/api/master-employees', authenticateToken, requireTabAccess('employe
 app.get('/api/lookup-employee/:enrollId', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
   if (req.user?.role === 'data_entry') {
     const allowed = getEffectiveAllowedTabs(req.user);
-    if (!allowed.includes('data_entry_form') && !allowed.includes('supervisor_submission')) {
+    if (
+      !allowed.includes('data_entry_form') &&
+      !allowed.includes('supervisor_submission') &&
+      !allowed.includes('employee_data')
+    ) {
       res.status(403).json({ error: 'Access forbidden. You do not have permission for employee lookup.' });
       return;
     }

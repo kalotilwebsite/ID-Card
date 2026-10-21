@@ -451,31 +451,30 @@ export const CardFront: React.FC<CardFrontProps> = ({
           )}
         </div>
 
-        {/* 4. FOOTER: BLACK PILLAR ICON & TEXT ("BEYOND TOMORROW") */}
-        {/* Crisp vector icon placed beside text with small visible gap, clear of Authorized Signature */}
+        {/* 4. FOOTER: BLACK LOGO ICON & TEXT ("BEYOND TOMORROW") */}
+        {/* Crisp extracted logo placed beside text with small visible gap, clear of Authorized Signature */}
         <div
           style={{
             position: 'absolute',
             left: 140,
             top: 92,
-            width: 22,
+            width: 23,
             height: 44,
             zIndex: 10,
           }}
-          className="pointer-events-none select-none"
+          className="pointer-events-none select-none flex items-center justify-center"
         >
-          <svg
-            viewBox="0 0 22 44"
-            width="22"
-            height="44"
-            fill="none"
-            className="w-full h-full"
-          >
-            <path
-              d="M 2 43 L 2 13 C 2 5.5, 7 1, 14 1 C 18 1, 20.5 2.5, 22 4.5 L 19.5 8 C 18 6.8, 16 6, 13.5 6 C 8.5 6, 6.5 9.5, 6.5 14 L 6.5 38.5 L 16.5 38.5 L 16.5 15.5 L 21 13 L 21 43 Z"
-              fill="#000000"
-            />
-          </svg>
+          <img
+            src="/assets/front_footer_logo_transparent.png"
+            alt="Rosa Beyond Tomorrow Logo"
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'contain',
+            }}
+            className="pointer-events-none select-none"
+            referrerPolicy="no-referrer"
+          />
         </div>
 
         {/* White "BEYOND TOMORROW" typography matching reference */}

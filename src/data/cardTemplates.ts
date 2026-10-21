@@ -36,8 +36,8 @@ export const FRONT_TEMPLATE_SVG = `data:image/svg+xml;utf8,${encodeURIComponent(
     <!-- Bottom Red Banner -->
     <rect x="0" y="438" width="284" height="62" fill="#E31B23"/>
     
-    <!-- Black Pillar Logo Icon overlapping into red banner -->
-    <image href="/assets/footer_pillar_icon.png" x="135" y="416" width="28" height="44" preserveAspectRatio="xMidYMid meet"/>
+    <!-- Black Logo Icon overlapping into red banner -->
+    <image href="/assets/front_footer_logo_transparent.png" x="140" y="424" width="23" height="44" preserveAspectRatio="xMidYMid meet"/>
     
     <!-- BEYOND TOMORROW Stacked Typography -->
     <text x="167" y="458" font-family="'Arial Black', Arial, sans-serif" font-weight="900" font-size="13" fill="#FFFFFF" letter-spacing="0.4">BEYOND</text>

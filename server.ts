@@ -16,7 +16,9 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = 3000;
-const DATA_DIR = path.resolve(__dirname, 'data');
+const DATA_DIR = process.env.DATA_DIR
+  ? path.resolve(process.env.DATA_DIR)
+  : path.resolve(__dirname, 'data');
 
 // Ensure data directory exists for local fallback
 if (!fs.existsSync(DATA_DIR)) {
@@ -214,12 +216,37 @@ const SessionModel =
 const AppSettingsModel =
   mongoose.models.AppSettings || mongoose.model<IAppSettings>('AppSettings', AppSettingsSchema);
 
-// Connection Status Flag
+// Custom error to prevent silent fallbacks to empty databases
+class DatabaseConnectionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'DatabaseConnectionError';
+  }
+}
+
+// Connection Status Flags
 let isMongoConnected = false;
+let mongoConnectionFailed = false;
+let mongoErrorMessage: string | null = null;
 
 // =========================================================================
 // LOCAL FALLBACK HELPER FUNCTIONS
 // =========================================================================
+
+function isLocalUsersEmpty(): boolean {
+  const users = readJsonFile<any[]>(USERS_FILE, []);
+  return users.length === 0;
+}
+
+function isLocalMasterEmpty(): boolean {
+  const master = readJsonFile<Record<string, any>>(MASTER_FILE, {});
+  return Object.keys(master).length === 0;
+}
+
+function isLocalSubmissionsEmpty(): boolean {
+  const subs = readJsonFile<Record<string, any>>(SUBMISSIONS_FILE, {});
+  return Object.keys(subs).length === 0;
+}
 
 const DEFAULT_SETTINGS: Omit<IAppSettings, 'key'> = {
   supervisorSuccessMessage:
@@ -420,105 +447,101 @@ const INITIAL_MASTER_EMPLOYEES: Record<string, any> = {
   },
 };
 
-// Initialize Local JSON files so fallback is always populated
+// Safe database initialization for local fallback storage (never overwrites existing data)
 function initializeLocalDatabase(): void {
-  // 1. Users
+  // 1. Users: Only seed if completely empty or missing admin
   const users = readJsonFile<any[]>(USERS_FILE, []);
-  let admin = users.find((u) => u.role === 'admin');
-  if (!admin) {
-    users.unshift({ ...INITIAL_ADMIN });
+  if (users.length === 0) {
+    users.push({ ...INITIAL_ADMIN }, { ...INITIAL_SUPERVISOR });
+    writeJsonFile(USERS_FILE, users);
+    console.log('[LocalStorage] Initialized default admin and supervisor users into empty users file.');
   } else {
-    admin.email = INITIAL_ADMIN.email;
-    admin.username = INITIAL_ADMIN.username;
-    admin.employeeId = '466035';
-    admin.passwordHash = INITIAL_ADMIN.passwordHash;
-    admin.status = 'active';
+    // If no admin user exists at all, append initial admin without modifying any existing users
+    if (!users.some((u) => u.role === 'admin')) {
+      users.unshift({ ...INITIAL_ADMIN });
+      writeJsonFile(USERS_FILE, users);
+    }
   }
 
-  if (!users.some((u) => u.role === 'supervisor')) {
-    users.push({ ...INITIAL_SUPERVISOR });
-  }
-  writeJsonFile(USERS_FILE, users);
-
-  // 2. Master Employees
+  // 2. Master Employees: Only seed demo employees if completely empty
   const master = readJsonFile<Record<string, any>>(MASTER_FILE, {});
   if (Object.keys(master).length === 0) {
     writeJsonFile(MASTER_FILE, INITIAL_MASTER_EMPLOYEES);
+    console.log('[LocalStorage] Initialized demo master employees into empty master file.');
   }
 
-  // 3. Submissions
-  readJsonFile<Record<string, any>>(SUBMISSIONS_FILE, {});
+  // 3. Submissions: Ensure file exists without touching existing submissions
+  if (!fs.existsSync(SUBMISSIONS_FILE)) {
+    writeJsonFile(SUBMISSIONS_FILE, {});
+  }
 
-  // 4. Settings
-  const settings = readJsonFile<any>(SETTINGS_FILE, DEFAULT_SETTINGS);
-  writeJsonFile(SETTINGS_FILE, { ...DEFAULT_SETTINGS, ...settings });
+  // 4. Settings: Ensure file exists without overwriting existing settings
+  if (!fs.existsSync(SETTINGS_FILE)) {
+    writeJsonFile(SETTINGS_FILE, DEFAULT_SETTINGS);
+  }
 }
 
 initializeLocalDatabase();
 
 // =========================================================================
-// MONGODB CONNECTION & SEEDING
+// MONGODB CONNECTION & SAFE SEEDING (PREVENTS RESET ON RESTART / DEPLOYMENT)
 // =========================================================================
 
 async function seedMongoDatabase(): Promise<void> {
   try {
-    // 1. Users seeding
+    // 1. Users collection: ONLY insert default admin user and supervisor if collection is completely EMPTY
     const userCount = await UserModel.countDocuments();
     if (userCount === 0) {
-      // Seed from local users.json if populated, otherwise use initial records
       const localUsers = readJsonFile<any[]>(USERS_FILE, []);
       const usersToSeed = localUsers.length > 0 ? localUsers : [INITIAL_ADMIN, INITIAL_SUPERVISOR];
       await UserModel.insertMany(usersToSeed);
-      console.log(`[MongoDB] Seeded ${usersToSeed.length} user accounts into MongoDB.`);
+      console.log(`[MongoDB] Initialized default accounts into empty Users collection (${usersToSeed.length} users).`);
     } else {
-      // Ensure required admin credentials always match
-      await UserModel.findOneAndUpdate(
-        { role: 'admin' },
-        {
-          $set: {
-            username: INITIAL_ADMIN.username,
-            employeeId: '466035',
-            email: INITIAL_ADMIN.email,
-            passwordHash: INITIAL_ADMIN.passwordHash,
-            status: 'active',
-          },
-        },
-        { upsert: true }
-      );
+      console.log(`[MongoDB] Users collection already exists with ${userCount} record(s). Preserving existing users without modification.`);
     }
 
-    // 2. Master Employees seeding
+    // 2. Master Employees collection: ONLY insert demo master employees if collection is completely EMPTY
     const empCount = await MasterEmployeeModel.countDocuments();
     if (empCount === 0) {
       const localMaster = readJsonFile<Record<string, any>>(MASTER_FILE, INITIAL_MASTER_EMPLOYEES);
       const employeesToSeed = Object.values(localMaster);
       if (employeesToSeed.length > 0) {
         await MasterEmployeeModel.insertMany(employeesToSeed);
-        console.log(`[MongoDB] Seeded ${employeesToSeed.length} master employee records into MongoDB.`);
+        console.log(`[MongoDB] Initialized demo master employees into empty MasterEmployee collection (${employeesToSeed.length} employees).`);
       }
+    } else {
+      console.log(`[MongoDB] MasterEmployee collection already exists with ${empCount} record(s). Preserving existing master employees without modification.`);
     }
 
-    // 3. Settings seeding
-    const existingSettings = await AppSettingsModel.findOne({ key: 'global' });
-    if (!existingSettings) {
+    // 3. Submissions collection protection: check count and ensure submissions are never cleared, reset, or overwritten on boot
+    const submissionCount = await SubmissionModel.countDocuments();
+    console.log(`[MongoDB] Submissions collection verified (${submissionCount} existing submission(s) preserved).`);
+
+    // 4. Settings collection: ONLY insert default settings if collection is completely EMPTY
+    const settingsCount = await AppSettingsModel.countDocuments();
+    if (settingsCount === 0) {
       const localSettings = readJsonFile<any>(SETTINGS_FILE, DEFAULT_SETTINGS);
       await AppSettingsModel.create({
         key: 'global',
         ...DEFAULT_SETTINGS,
         ...localSettings,
       });
-      console.log('[MongoDB] Seeded application settings into MongoDB.');
+      console.log('[MongoDB] Initialized default settings into empty Settings collection.');
+    } else {
+      console.log(`[MongoDB] Settings collection already exists with ${settingsCount} record(s). Preserving existing settings without modification.`);
     }
   } catch (err: any) {
-    console.error('[MongoDB] Seeding error:', err.message);
+    console.error('[MongoDB] Safe database initialization error:', err.message);
   }
 }
 
 async function connectMongoDB(): Promise<void> {
   const uri = process.env.MONGODB_URI;
   if (!uri || !uri.trim()) {
-    console.log('[MongoDB] MONGODB_URI is not configured. Server running gracefully with local persistent storage.');
+    console.log(`[Storage] MONGODB_URI is not configured. Server running with local persistent storage at: ${DATA_DIR}`);
     isMongoConnected = false;
+    mongoConnectionFailed = false;
+    mongoErrorMessage = null;
     return;
   }
 
@@ -532,12 +555,24 @@ async function connectMongoDB(): Promise<void> {
     });
 
     isMongoConnected = true;
+    mongoConnectionFailed = false;
+    mongoErrorMessage = null;
     console.log('[MongoDB] Connected successfully to MongoDB Atlas.');
     await seedMongoDatabase();
   } catch (err: any) {
     isMongoConnected = false;
-    console.warn('[MongoDB] Could not establish connection to MongoDB Atlas:', err.message);
-    console.warn('[MongoDB] Falling back gracefully to local file storage. All features remain 100% operational.');
+    mongoConnectionFailed = true;
+    mongoErrorMessage = 'Failed to connect to configured MongoDB cluster.';
+    console.error('[CRITICAL] Could not establish connection to MongoDB Atlas:', err.message);
+
+    if (isLocalMasterEmpty() && isLocalUsersEmpty()) {
+      console.error(
+        '[CRITICAL ALERT] MONGODB_URI is configured, but database connection failed and local JSON fallback is empty. ' +
+        'System will not silently switch to an empty database to protect against perceived data loss. Please verify MongoDB network connectivity and credentials.'
+      );
+    } else {
+      console.warn('[Storage] Preserved local persistent storage records available as fallback while MongoDB is unreachable.');
+    }
   }
 }
 
@@ -681,11 +716,16 @@ async function getAllUsersList(): Promise<IUser[]> {
   if (isMongoConnected) {
     try {
       const users = await UserModel.find().lean();
-      if (users && users.length > 0) return users as IUser[];
+      return (users || []) as IUser[];
     } catch (e) {
-      // Fallback below
+      console.warn('[MongoDB] getAllUsersList query error:', e);
     }
   }
+
+  if (mongoConnectionFailed && isLocalUsersEmpty()) {
+    throw new DatabaseConnectionError('Production MongoDB connection failed and local fallback contains no user records.');
+  }
+
   return readJsonFile<IUser[]>(USERS_FILE, []);
 }
 
@@ -782,10 +822,14 @@ async function getAllMasterEmployeesList(): Promise<IMasterEmployee[]> {
   if (isMongoConnected) {
     try {
       const records = await MasterEmployeeModel.find().lean();
-      if (records && records.length > 0) return records as IMasterEmployee[];
+      return (records || []) as IMasterEmployee[];
     } catch (e) {
-      // Fallback below
+      console.warn('[MongoDB] getAllMasterEmployeesList query error:', e);
     }
+  }
+
+  if (mongoConnectionFailed && isLocalMasterEmpty()) {
+    throw new DatabaseConnectionError('Production MongoDB connection failed and local fallback contains no employee records.');
   }
 
   const master = readJsonFile<Record<string, any>>(MASTER_FILE, {});
@@ -869,10 +913,14 @@ async function getAllSubmissionsList(): Promise<ISubmission[]> {
   if (isMongoConnected) {
     try {
       const list = await SubmissionModel.find().lean();
-      if (list && list.length > 0) return list as ISubmission[];
+      return (list || []) as ISubmission[];
     } catch (e) {
-      // Fallback below
+      console.warn('[MongoDB] getAllSubmissionsList query error:', e);
     }
+  }
+
+  if (mongoConnectionFailed && isLocalSubmissionsEmpty()) {
+    throw new DatabaseConnectionError('Production MongoDB connection failed and local fallback contains no submission records.');
   }
 
   const submissions = readJsonFile<Record<string, any>>(SUBMISSIONS_FILE, {});
@@ -1994,11 +2042,25 @@ app.get('/api/system/db-status', authenticateToken, requireAdminRole, (_req: Req
     databaseType: isMongoConnected ? 'MongoDB Atlas' : 'Local Persistent Storage (Fallback)',
     isMongoConnected,
     hasMongoUriConfigured: Boolean(process.env.MONGODB_URI),
+    connectionStatus: isMongoConnected
+      ? 'connected'
+      : mongoConnectionFailed
+      ? 'connection_failed'
+      : 'local_storage',
+    error: mongoErrorMessage || null,
+    storagePath: DATA_DIR,
   });
 });
 
-// Database offline error middleware for graceful resilience
+// Database offline / connection error middleware for graceful resilience
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {
+  if (err && (err instanceof DatabaseConnectionError || err.name === 'DatabaseConnectionError')) {
+    console.warn('[AI Studio] Database connection error (preventing silent empty fallback):', err.message);
+    return res.status(503).json({
+      error: 'Production database is temporarily unavailable. Local fallback storage has no records.',
+      code: 'DATABASE_UNAVAILABLE',
+    });
+  }
   if (err && (err.name === 'MongooseError' || err.name === 'MongoNetworkError' || (typeof err.message === 'string' && err.message.includes('buffering timed out')))) {
     console.warn('[AI Studio] Database offline or buffering error — returning graceful response');
     if (req.method === 'GET') {

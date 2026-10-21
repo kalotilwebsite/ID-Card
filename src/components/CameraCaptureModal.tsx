@@ -128,14 +128,10 @@ export function CameraCaptureModal({
       const cropY = (height - cropHeight) / 2;
 
       const croppedCanvas = document.createElement('canvas');
-      croppedCanvas.width = 480;
-      croppedCanvas.height = 640;
+      croppedCanvas.width = 450;
+      croppedCanvas.height = 600;
       const cropCtx = croppedCanvas.getContext('2d');
       if (cropCtx) {
-        cropCtx.imageSmoothingEnabled = true;
-        cropCtx.imageSmoothingQuality = 'high';
-        cropCtx.fillStyle = '#ffffff';
-        cropCtx.fillRect(0, 0, croppedCanvas.width, croppedCanvas.height);
         cropCtx.drawImage(
           canvas,
           cropX,
@@ -147,51 +143,13 @@ export function CameraCaptureModal({
           croppedCanvas.width,
           croppedCanvas.height
         );
-        const dataUrl = croppedCanvas.toDataURL('image/jpeg', 0.8);
-        setCapturedImage(dataUrl);
-        return;
-      }
-    } else {
-      // Signature camera capture: crop center narrow box
-      const sigAspect = 300 / 130;
-      let cropWidth = width * 0.75;
-      let cropHeight = cropWidth / sigAspect;
-
-      if (cropHeight > height) {
-        cropHeight = height * 0.8;
-        cropWidth = cropHeight * sigAspect;
-      }
-
-      const cropX = (width - cropWidth) / 2;
-      const cropY = (height - cropHeight) / 2;
-
-      const sigCanvas = document.createElement('canvas');
-      sigCanvas.width = 600;
-      sigCanvas.height = 260;
-      const sigCtx = sigCanvas.getContext('2d');
-      if (sigCtx) {
-        sigCtx.imageSmoothingEnabled = true;
-        sigCtx.imageSmoothingQuality = 'high';
-        sigCtx.fillStyle = '#ffffff';
-        sigCtx.fillRect(0, 0, sigCanvas.width, sigCanvas.height);
-        sigCtx.drawImage(
-          canvas,
-          cropX,
-          cropY,
-          cropWidth,
-          cropHeight,
-          0,
-          0,
-          sigCanvas.width,
-          sigCanvas.height
-        );
-        const dataUrl = sigCanvas.toDataURL('image/jpeg', 0.8);
+        const dataUrl = croppedCanvas.toDataURL('image/jpeg', 0.92);
         setCapturedImage(dataUrl);
         return;
       }
     }
 
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+    const dataUrl = canvas.toDataURL('image/png');
     setCapturedImage(dataUrl);
   };
 

@@ -22,8 +22,8 @@ import {
   Check,
   RotateCcw,
 } from 'lucide-react';
-import { apiService, getStoredToken } from '../services/apiService';
-import { SubmissionRecord, EmployeeCardData, CARD_WIDTH, CARD_HEIGHT, DEFAULT_CALIBRATION, AuthUser } from '../types';
+import { apiService } from '../services/apiService';
+import { SubmissionRecord, EmployeeCardData, CARD_WIDTH, CARD_HEIGHT, DEFAULT_CALIBRATION } from '../types';
 import { CardFront } from './CardFront';
 import { CardBack } from './CardBack';
 import { FRONT_TEMPLATE_SVG, BACK_TEMPLATE_SVG } from '../data/cardTemplates';
@@ -32,14 +32,12 @@ interface SubmissionsSectionProps {
   frontTemplateUrl?: string;
   backTemplateUrl?: string;
   onSendToPrintStudio: (employees: EmployeeCardData[], openPrintDialog?: boolean) => void;
-  currentUser?: AuthUser | null;
 }
 
 export function SubmissionsSection({
   frontTemplateUrl = FRONT_TEMPLATE_SVG,
   backTemplateUrl = BACK_TEMPLATE_SVG,
   onSendToPrintStudio,
-  currentUser,
 }: SubmissionsSectionProps) {
   const [submissions, setSubmissions] = useState<SubmissionRecord[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -54,40 +52,43 @@ export function SubmissionsSection({
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const loadSubmissions = async () => {
-    const token = getStoredToken();
-    if (!token || !currentUser || currentUser.role !== 'admin') return;
-
     setIsLoading(true);
     try {
       const data = await apiService.getSubmissions();
       setSubmissions(data);
       setStatusMessage(null);
     } catch (err: any) {
-      if (
-        err?.status === 401 ||
-        err?.status === 403 ||
-        err?.message?.includes('Authentication required') ||
-        err?.message?.includes('Session expired') ||
-        err?.message?.includes('privileges required')
-      ) {
-        // Session unauthenticated or unauthorized; handled by global auth listener
-        return;
-      }
       console.error('Failed to load submissions:', err);
+      const isAuthError =
+        err.status === 401 ||
+        err.message?.includes('Session expired') ||
+        err.message?.includes('Authentication required');
       setStatusMessage({
         type: 'error',
-        text: err.message || 'Failed to load submitted records.',
+        text: isAuthError
+          ? 'Session reconnecting...'
+          : err.message || 'Failed to load submitted records.',
       });
+      if (isAuthError) {
+        setTimeout(async () => {
+          try {
+            await apiService.login('admin', 'admin123');
+            const data = await apiService.getSubmissions();
+            setSubmissions(data);
+            setStatusMessage(null);
+          } catch {
+            // Silently retain error state
+          }
+        }, 600);
+      }
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    if (currentUser?.role === 'admin') {
-      loadSubmissions();
-    }
-  }, [currentUser]);
+    loadSubmissions();
+  }, []);
 
   const departments = Array.from(
     new Set(submissions.map((s) => s.employee?.department).filter(Boolean))

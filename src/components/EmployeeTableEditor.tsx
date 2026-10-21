@@ -12,21 +12,12 @@ import {
   Check,
   X,
 } from 'lucide-react';
-import { BanglaSizeAlertModal } from './BanglaSizeAlertModal';
-import {
-  compressImageFile,
-  MAX_FILE_SIZE_BYTES,
-} from '../utils/imageCompression';
 
 interface EmployeeTableEditorProps {
   employees: EmployeeCardData[];
   onUpdateEmployees: (employees: EmployeeCardData[]) => void;
   onSelectEmployeeForPreview: (employeeId: string) => void;
   selectedEmployeeId?: string;
-  selectedEmployeeIds?: Set<string>;
-  onToggleSelectEmployee?: (employeeId: string) => void;
-  onSelectAllEmployees?: () => void;
-  onClearSelectedEmployees?: () => void;
 }
 
 export const EmployeeTableEditor: React.FC<EmployeeTableEditorProps> = ({
@@ -34,16 +25,11 @@ export const EmployeeTableEditor: React.FC<EmployeeTableEditorProps> = ({
   onUpdateEmployees,
   onSelectEmployeeForPreview,
   selectedEmployeeId,
-  selectedEmployeeIds,
-  onToggleSelectEmployee,
-  onSelectAllEmployees,
-  onClearSelectedEmployees,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'valid' | 'invalid'>('all');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editFormData, setEditFormData] = useState<Partial<EmployeeCardData>>({});
-  const [isSizeAlertOpen, setIsSizeAlertOpen] = useState(false);
 
   const validateEmployee = (emp: EmployeeCardData): { isValid: boolean; errors: string[] } => {
     const errors: string[] = [];
@@ -204,36 +190,28 @@ export const EmployeeTableEditor: React.FC<EmployeeTableEditorProps> = ({
     setIsAddModalOpen(false);
   };
 
-  const handlePhotoUpload = async (empId: string, file: File) => {
-    try {
-      const result = await compressImageFile(file, { maxWidth: 800, maxHeight: 800, quality: 0.8 });
-      if (!result.isValidSize || result.sizeBytes > MAX_FILE_SIZE_BYTES) {
-        setIsSizeAlertOpen(true);
-        return;
-      }
+  const handlePhotoUpload = (empId: string, file: File) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const dataUrl = e.target?.result as string;
       const updated = employees.map((emp) =>
-        emp.id === empId ? { ...emp, photoUrl: result.dataUrl } : emp
+        emp.id === empId ? { ...emp, photoUrl: dataUrl } : emp
       );
       onUpdateEmployees(updated);
-    } catch (err) {
-      console.error('Error compressing employee photo:', err);
-    }
+    };
+    reader.readAsDataURL(file);
   };
 
-  const handleSignatureUpload = async (empId: string, file: File) => {
-    try {
-      const result = await compressImageFile(file, { maxWidth: 800, maxHeight: 800, quality: 0.8, isSignature: true });
-      if (!result.isValidSize || result.sizeBytes > MAX_FILE_SIZE_BYTES) {
-        setIsSizeAlertOpen(true);
-        return;
-      }
+  const handleSignatureUpload = (empId: string, file: File) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const dataUrl = e.target?.result as string;
       const updated = employees.map((emp) =>
-        emp.id === empId ? { ...emp, signatureUrl: result.dataUrl } : emp
+        emp.id === empId ? { ...emp, signatureUrl: dataUrl } : emp
       );
       onUpdateEmployees(updated);
-    } catch (err) {
-      console.error('Error compressing employee signature:', err);
-    }
+    };
+    reader.readAsDataURL(file);
   };
 
   return (
@@ -306,22 +284,6 @@ export const EmployeeTableEditor: React.FC<EmployeeTableEditorProps> = ({
         <table className="w-full text-left border-collapse text-xs">
           <thead>
             <tr className="bg-gray-100/70 text-gray-600 uppercase text-[10px] font-bold tracking-wider border-b border-gray-200 sticky top-0 z-10 backdrop-blur-sm">
-              {onToggleSelectEmployee && (
-                <th className="py-2.5 px-3 text-center w-10">
-                  <input
-                    type="checkbox"
-                    checked={
-                      Boolean(selectedEmployeeIds && employees.length > 0 && selectedEmployeeIds.size === employees.length)
-                    }
-                    onChange={(e) => {
-                      if (e.target.checked) onSelectAllEmployees?.();
-                      else onClearSelectedEmployees?.();
-                    }}
-                    className="rounded text-rose-600 focus:ring-0 w-3.5 h-3.5 cursor-pointer"
-                    title="Select/Deselect all cards"
-                  />
-                </th>
-              )}
               <th className="py-2.5 px-3">Status</th>
               <th className="py-2.5 px-3">Photo</th>
               <th className="py-2.5 px-3">Sign</th>
@@ -341,7 +303,6 @@ export const EmployeeTableEditor: React.FC<EmployeeTableEditorProps> = ({
             {filteredEmployees.map((emp) => {
               const validation = validateEmployee(emp);
               const isSelected = emp.id === selectedEmployeeId;
-              const isChecked = selectedEmployeeIds?.has(emp.id) || false;
               const isEditing = emp.id === editingId;
 
               return (
@@ -349,26 +310,13 @@ export const EmployeeTableEditor: React.FC<EmployeeTableEditorProps> = ({
                   key={emp.id}
                   onClick={() => onSelectEmployeeForPreview(emp.id)}
                   className={`cursor-pointer transition-colors ${
-                    isSelected || isChecked
+                    isSelected
                       ? 'bg-rose-50/70 font-medium'
                       : !validation.isValid
                       ? 'bg-red-50/30 hover:bg-red-50/50'
                       : 'hover:bg-gray-50'
                   }`}
                 >
-                  {/* Multi-selection Checkbox */}
-                  {onToggleSelectEmployee && (
-                    <td className="py-2 px-3 text-center" onClick={(e) => e.stopPropagation()}>
-                      <input
-                        type="checkbox"
-                        checked={isChecked}
-                        onChange={() => onToggleSelectEmployee(emp.id)}
-                        className="rounded text-rose-600 focus:ring-0 w-3.5 h-3.5 cursor-pointer"
-                        title={`Select ${emp.name} for copying/printing`}
-                      />
-                    </td>
-                  )}
-
                   {/* Status Indicator */}
                   <td className="py-2 px-3">
                     {validation.isValid ? (
@@ -1027,12 +975,6 @@ export const EmployeeTableEditor: React.FC<EmployeeTableEditorProps> = ({
           </div>
         </div>
       )}
-
-      {/* Bangla 1MB Size Alert Popup Modal */}
-      <BanglaSizeAlertModal
-        isOpen={isSizeAlertOpen}
-        onClose={() => setIsSizeAlertOpen(false)}
-      />
     </div>
   );
 };

@@ -92,7 +92,7 @@ export function SignaturePadModal({ isOpen, onClose, onSave }: SignaturePadModal
   const handleSave = () => {
     const canvas = canvasRef.current;
     if (!canvas || !hasDrawn) return;
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+    const dataUrl = canvas.toDataURL('image/png');
     onSave(dataUrl);
     onClose();
   };

@@ -28,13 +28,6 @@ import { CardBack } from './CardBack';
 import { FRONT_TEMPLATE_SVG, BACK_TEMPLATE_SVG } from '../data/cardTemplates';
 import { CameraCaptureModal } from './CameraCaptureModal';
 import { SignaturePadModal } from './SignaturePadModal';
-import { BanglaSizeAlertModal } from './BanglaSizeAlertModal';
-import {
-  compressImageFile,
-  compressDataUrl,
-  getDataUrlSizeBytes,
-  MAX_FILE_SIZE_BYTES,
-} from '../utils/imageCompression';
 
 interface DataEntryFormProps {
   frontTemplateUrl?: string;
@@ -71,9 +64,6 @@ export function DataEntryForm({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
-
-  // Bangla Size Alert State
-  const [isSizeAlertOpen, setIsSizeAlertOpen] = useState(false);
 
   // Hidden file inputs
   const photoFileInputRef = useRef<HTMLInputElement>(null);
@@ -126,48 +116,27 @@ export function DataEntryForm({
     }
   };
 
-  // Image Upload Handlers with Automatic Client-Side Compression & 1MB Validation
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>, target: 'photo' | 'sig') => {
+  // Image Upload Handlers
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, target: 'photo' | 'sig') => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     if (!file.type.startsWith('image/')) {
       setSubmitError('Please upload a valid image file (PNG, JPG, WebP).');
-      e.target.value = '';
       return;
     }
 
-    try {
-      const result = await compressImageFile(file, {
-        maxWidth: 800,
-        maxHeight: 800,
-        quality: 0.8,
-        isSignature: target === 'sig',
-      });
-
-      if (!result.isValidSize || result.sizeBytes > MAX_FILE_SIZE_BYTES) {
-        setIsSizeAlertOpen(true);
-        if (target === 'photo') {
-          setPhotoUrl('');
-          if (photoFileInputRef.current) photoFileInputRef.current.value = '';
-        } else {
-          setSignatureUrl('');
-          if (sigFileInputRef.current) sigFileInputRef.current.value = '';
-        }
-        return;
-      }
-
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const result = event.target?.result as string;
       if (target === 'photo') {
-        setPhotoUrl(result.dataUrl);
+        setPhotoUrl(result);
       } else {
-        setSignatureUrl(result.dataUrl);
+        setSignatureUrl(result);
       }
-    } catch (err: any) {
-      console.error('Image compression error:', err);
-      setSubmitError('Failed to process image file. Please try another image.');
-    } finally {
-      e.target.value = '';
-    }
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
   };
 
   const openCamera = (type: 'photo' | 'signature') => {
@@ -175,47 +144,11 @@ export function DataEntryForm({
     setIsCameraOpen(true);
   };
 
-  const handleCameraCapture = async (dataUrl: string) => {
-    try {
-      const result = await compressDataUrl(dataUrl, {
-        maxWidth: 800,
-        maxHeight: 800,
-        quality: 0.8,
-        isSignature: cameraType === 'signature',
-      });
-
-      if (!result.isValidSize || result.sizeBytes > MAX_FILE_SIZE_BYTES) {
-        setIsSizeAlertOpen(true);
-        return;
-      }
-
-      if (cameraType === 'photo') {
-        setPhotoUrl(result.dataUrl);
-      } else {
-        setSignatureUrl(result.dataUrl);
-      }
-    } catch (err) {
-      console.error('Camera capture compression error:', err);
-    }
-  };
-
-  const handleSignaturePadSave = async (dataUrl: string) => {
-    try {
-      const result = await compressDataUrl(dataUrl, {
-        maxWidth: 800,
-        maxHeight: 800,
-        quality: 0.8,
-        isSignature: true,
-      });
-
-      if (!result.isValidSize || result.sizeBytes > MAX_FILE_SIZE_BYTES) {
-        setIsSizeAlertOpen(true);
-        return;
-      }
-
-      setSignatureUrl(result.dataUrl);
-    } catch (err) {
-      console.error('Signature pad compression error:', err);
+  const handleCameraCapture = (dataUrl: string) => {
+    if (cameraType === 'photo') {
+      setPhotoUrl(dataUrl);
+    } else {
+      setSignatureUrl(dataUrl);
     }
   };
 
@@ -257,15 +190,6 @@ export function DataEntryForm({
 
     if (!signatureUrl) {
       setSubmitError('Employee Signature Photo is required.');
-      return;
-    }
-
-    // Strict 1 MB File Size Validation
-    if (
-      getDataUrlSizeBytes(photoUrl) > MAX_FILE_SIZE_BYTES ||
-      getDataUrlSizeBytes(signatureUrl) > MAX_FILE_SIZE_BYTES
-    ) {
-      setIsSizeAlertOpen(true);
       return;
     }
 
@@ -821,17 +745,7 @@ export function DataEntryForm({
       <SignaturePadModal
         isOpen={isSignaturePadOpen}
         onClose={() => setIsSignaturePadOpen(false)}
-        onSave={handleSignaturePadSave}
-      />
-
-      {/* Bangla 1MB Size Alert Popup Modal */}
-      <BanglaSizeAlertModal
-        isOpen={isSizeAlertOpen}
-        onClose={() => {
-          setIsSizeAlertOpen(false);
-          if (photoFileInputRef.current) photoFileInputRef.current.value = '';
-          if (sigFileInputRef.current) sigFileInputRef.current.value = '';
-        }}
+        onSave={(dataUrl) => setSignatureUrl(dataUrl)}
       />
     </div>
   );

@@ -1,26 +1,18 @@
-import express from 'express';
-import type { Request, Response, NextFunction } from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
-import mongoose, { Schema } from 'mongoose';
-import dotenv from 'dotenv';
-import sharp from 'sharp';
-
-dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = 3000;
-const DATA_DIR = process.env.DATA_DIR
-  ? path.resolve(process.env.DATA_DIR)
-  : path.resolve(__dirname, 'data');
+const DATA_DIR = path.resolve(__dirname, 'data');
 
-// Ensure data directory exists for local fallback
+// Ensure data directory exists
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
@@ -31,245 +23,19 @@ const SUBMISSIONS_FILE = path.join(DATA_DIR, 'submissions.json');
 const SESSIONS_FILE = path.join(DATA_DIR, 'sessions.json');
 const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
 
-// =========================================================================
-// MONGOOSE SCHEMAS & MODELS
-// =========================================================================
-
-export interface IUser {
-  id: string;
-  username: string;
-  employeeId?: string;
-  passwordHash: string;
-  name: string;
-  email?: string;
-  role: 'admin' | 'supervisor' | 'data_entry';
-  status: 'active' | 'inactive';
-  createdAt: string;
-}
-
-const UserSchema = new Schema<IUser>(
-  {
-    id: { type: String, required: true, unique: true, index: true },
-    username: { type: String, required: true, unique: true, index: true },
-    employeeId: { type: String, index: true },
-    passwordHash: { type: String, required: true },
-    name: { type: String, required: true },
-    email: { type: String, default: '' },
-    role: { type: String, enum: ['admin', 'supervisor', 'data_entry'], required: true },
-    status: { type: String, enum: ['active', 'inactive'], default: 'active' },
-    createdAt: { type: String, default: () => new Date().toISOString() },
-  },
-  { timestamps: false, collection: 'users' }
-);
-
-export interface IMasterEmployee {
-  enrollId: string;
-  name: string;
-  designation: string;
-  department: string;
-  jobType: string;
-  joiningDate: string;
-  cardIssue: string;
-  emergencyContact: string;
-  permanentAddress: string;
-  bloodGroup: string;
-  nationalId?: string;
-  photo?: string;
-  signature?: string;
-  importedAt: string;
-  updatedAt?: string;
-}
-
-const MasterEmployeeSchema = new Schema<IMasterEmployee>(
-  {
-    enrollId: { type: String, required: true, unique: true, index: true },
-    name: { type: String, required: true },
-    designation: { type: String, default: '' },
-    department: { type: String, default: '' },
-    jobType: { type: String, default: 'Permanent' },
-    joiningDate: { type: String, default: '01/03/2026' },
-    cardIssue: { type: String, default: '19/10/2026' },
-    emergencyContact: { type: String, default: '' },
-    permanentAddress: { type: String, default: '' },
-    bloodGroup: { type: String, default: 'O+' },
-    nationalId: { type: String, default: '' },
-    photo: { type: String, default: '' },
-    signature: { type: String, default: '' },
-    importedAt: { type: String, default: () => new Date().toISOString() },
-    updatedAt: { type: String },
-  },
-  { timestamps: false, collection: 'master_employees' }
-);
-
-export interface ISubmission {
-  id: string;
-  enrollId: string;
-  nationalId: string;
-  photoUrl: string;
-  signatureUrl: string;
-  employee: any;
-  submittedBy: {
-    id: string;
-    name: string;
-    username: string;
-    employeeId: string;
-    role: string;
-  };
-  submittedAt: string;
-  printStatus: 'pending' | 'printed';
-  printCount: number;
-  printedAt: string | null;
-  reprintHistory: Array<{
-    printedAt: string;
-    printedBy: string;
-    action: string;
-    note: string;
-  }>;
-}
-
-const SubmissionSchema = new Schema<ISubmission>(
-  {
-    id: { type: String, required: true, index: true },
-    enrollId: { type: String, required: true, unique: true, index: true },
-    nationalId: { type: String, required: true },
-    photoUrl: { type: String, required: true },
-    signatureUrl: { type: String, required: true },
-    employee: { type: Schema.Types.Mixed, required: true },
-    submittedBy: {
-      id: String,
-      name: String,
-      username: String,
-      employeeId: String,
-      role: String,
-    },
-    submittedAt: { type: String, default: () => new Date().toISOString() },
-    printStatus: { type: String, enum: ['pending', 'printed'], default: 'pending' },
-    printCount: { type: Number, default: 0 },
-    printedAt: { type: String, default: null },
-    reprintHistory: [
-      {
-        printedAt: { type: String, required: true },
-        printedBy: { type: String, required: true },
-        action: { type: String, required: true },
-        note: { type: String, default: '' },
-      },
-    ],
-  },
-  { timestamps: false, collection: 'submissions' }
-);
-
-export interface ISession {
-  token: string;
-  userId: string;
-  expiresAt: number;
-}
-
-const SessionSchema = new Schema<ISession>(
-  {
-    token: { type: String, required: true, unique: true, index: true },
-    userId: { type: String, required: true },
-    expiresAt: { type: Number, required: true },
-  },
-  { timestamps: false, collection: 'sessions' }
-);
-
-export interface IAppSettings {
-  key: string;
+interface AppSettings {
   supervisorSuccessMessage: string;
-  supervisorFormEnabled: boolean;
-  supervisorFormDisabledMessage: string;
-  pdfPrintLayout: 'side_by_side' | 'top_bottom';
-  loginBackgroundImage: string;
-  paperSize: string;
-  cardsPerPage: number;
 }
 
-const AppSettingsSchema = new Schema<IAppSettings>(
-  {
-    key: { type: String, required: true, unique: true, default: 'global' },
-    supervisorSuccessMessage: {
-      type: String,
-      default:
-        'Employee ID Card data has been submitted successfully and queued for administrative review and printing. Thank you!',
-    },
-    supervisorFormEnabled: { type: Boolean, default: true },
-    supervisorFormDisabledMessage: {
-      type: String,
-      default:
-        'সাময়িক রক্ষণাবেক্ষণের জন্য আইডি কার্ড আবেদন কার্যক্রম বন্ধ রয়েছে। অনুগ্রহ করে কিছুক্ষণ পর আবার চেষ্টা করুন।',
-    },
-    pdfPrintLayout: { type: String, enum: ['side_by_side', 'top_bottom'], default: 'side_by_side' },
-    loginBackgroundImage: { type: String, default: '/assets/default_login_bg.jpg' },
-    paperSize: { type: String, default: 'a4' },
-    cardsPerPage: { type: Number, default: 9 },
-  },
-  { timestamps: false, collection: 'settings' }
-);
-
-const UserModel = mongoose.models.User || mongoose.model<IUser>('User', UserSchema);
-const MasterEmployeeModel =
-  mongoose.models.MasterEmployee || mongoose.model<IMasterEmployee>('MasterEmployee', MasterEmployeeSchema);
-const SubmissionModel =
-  mongoose.models.Submission || mongoose.model<ISubmission>('Submission', SubmissionSchema);
-const SessionModel =
-  mongoose.models.Session || mongoose.model<ISession>('Session', SessionSchema);
-const AppSettingsModel =
-  mongoose.models.AppSettings || mongoose.model<IAppSettings>('AppSettings', AppSettingsSchema);
-
-// Custom error to prevent silent fallbacks to empty databases
-class DatabaseConnectionError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'DatabaseConnectionError';
-  }
-}
-
-// Connection Status Flags
-let isMongoConnected = false;
-let mongoConnectionFailed = false;
-let mongoErrorMessage: string | null = null;
-
-// =========================================================================
-// LOCAL FALLBACK HELPER FUNCTIONS
-// =========================================================================
-
-function isLocalUsersEmpty(): boolean {
-  const users = readJsonFile<any[]>(USERS_FILE, []);
-  return users.length === 0;
-}
-
-function isLocalMasterEmpty(): boolean {
-  const master = readJsonFile<Record<string, any>>(MASTER_FILE, {});
-  return Object.keys(master).length === 0;
-}
-
-function isLocalSubmissionsEmpty(): boolean {
-  const subs = readJsonFile<Record<string, any>>(SUBMISSIONS_FILE, {});
-  return Object.keys(subs).length === 0;
-}
-
-const DEFAULT_SETTINGS: Omit<IAppSettings, 'key'> = {
+const DEFAULT_SETTINGS: AppSettings = {
   supervisorSuccessMessage:
     'Employee ID Card data has been submitted successfully and queued for administrative review and printing. Thank you!',
-  supervisorFormEnabled: true,
-  supervisorFormDisabledMessage:
-    'সাময়িক রক্ষণাবেক্ষণের জন্য আইডি কার্ড আবেদন কার্যক্রম বন্ধ রয়েছে। অনুগ্রহ করে কিছুক্ষণ পর আবার চেষ্টা করুন।',
-  pdfPrintLayout: 'side_by_side' as const,
-  loginBackgroundImage: '/assets/default_login_bg.jpg',
-  paperSize: 'a4',
-  cardsPerPage: 9,
 };
 
+// Helper for atomic file read/write
 function readJsonFile<T>(filePath: string, fallback: T): T {
   try {
     if (!fs.existsSync(filePath)) {
-      if (filePath === USERS_FILE) {
-        const altPath = path.join(DATA_DIR, 'user.json');
-        if (fs.existsSync(altPath)) {
-          const content = fs.readFileSync(altPath, 'utf-8');
-          return JSON.parse(content) as T;
-        }
-      }
       fs.writeFileSync(filePath, JSON.stringify(fallback, null, 2), 'utf-8');
       return fallback;
     }
@@ -286,89 +52,8 @@ function writeJsonFile<T>(filePath: string, data: T): void {
     const tempPath = `${filePath}.tmp.${Date.now()}`;
     fs.writeFileSync(tempPath, JSON.stringify(data, null, 2), 'utf-8');
     fs.renameSync(tempPath, filePath);
-    if (filePath === USERS_FILE) {
-      try {
-        const altPath = path.join(DATA_DIR, 'user.json');
-        const altTemp = `${altPath}.tmp.${Date.now()}`;
-        fs.writeFileSync(altTemp, JSON.stringify(data, null, 2), 'utf-8');
-        fs.renameSync(altTemp, altPath);
-      } catch {}
-    }
   } catch (err) {
     console.error(`Error writing ${filePath}:`, err);
-  }
-}
-
-/**
- * Server-side image optimization and compression helper:
- * - Targets <= 200 KB per photo/signature image while preserving aspect ratio and clarity
- * - Handles failures gracefully and ensures binary size is strictly validated
- */
-async function optimizeImageForStorage(
-  dataUrl: string,
-  isSignature = false
-): Promise<{ dataUrl: string; sizeBytes: number; isValid: boolean }> {
-  if (!dataUrl || !dataUrl.trim()) {
-    return { dataUrl: '', sizeBytes: 0, isValid: true };
-  }
-
-  const raw = dataUrl.trim();
-  if (!raw.startsWith('data:image')) {
-    return { dataUrl: raw, sizeBytes: raw.length, isValid: true };
-  }
-
-  const commaIdx = raw.indexOf(',');
-  const base64Data = commaIdx >= 0 ? raw.slice(commaIdx + 1) : raw;
-  const initialBytes = Math.round((base64Data.length * 3) / 4);
-
-  // If already <= 200 KB, preserve pristine original
-  if (initialBytes <= 200 * 1024) {
-    return { dataUrl: raw, sizeBytes: initialBytes, isValid: true };
-  }
-
-  try {
-    const inputBuffer = Buffer.from(base64Data, 'base64');
-    const maxWidth = isSignature ? 600 : 750;
-    const maxHeight = isSignature ? 240 : 800;
-
-    let outputBuffer = await sharp(inputBuffer)
-      .resize(maxWidth, maxHeight, { fit: 'inside', withoutEnlargement: true })
-      .jpeg({ quality: 82, progressive: true })
-      .toBuffer();
-
-    if (outputBuffer.length > 200 * 1024) {
-      outputBuffer = await sharp(inputBuffer)
-        .resize(Math.round(maxWidth * 0.85), Math.round(maxHeight * 0.85), {
-          fit: 'inside',
-          withoutEnlargement: true,
-        })
-        .jpeg({ quality: 74, progressive: true })
-        .toBuffer();
-    }
-
-    if (outputBuffer.length > 200 * 1024) {
-      outputBuffer = await sharp(inputBuffer)
-        .resize(Math.round(maxWidth * 0.72), Math.round(maxHeight * 0.72), {
-          fit: 'inside',
-          withoutEnlargement: true,
-        })
-        .jpeg({ quality: 66, progressive: true })
-        .toBuffer();
-    }
-
-    const compressedDataUrl = `data:image/jpeg;base64,${outputBuffer.toString('base64')}`;
-    const finalSize = outputBuffer.length;
-    return {
-      dataUrl: compressedDataUrl,
-      sizeBytes: finalSize,
-      isValid: finalSize <= 200 * 1024,
-    };
-  } catch (err) {
-    return {
-      dataUrl: raw,
-      sizeBytes: initialBytes,
-      isValid: initialBytes <= 200 * 1024,
-    };
   }
 }
 
@@ -377,690 +62,161 @@ function hashPassword(password: string, salt = 'idcard_salt_2026'): string {
   return crypto.scryptSync(password, salt, 32).toString('hex');
 }
 
-// Seed Records for Initial Setup
-const INITIAL_ADMIN = {
-  id: 'user-admin-1',
-  username: 'Idcard@nuralam.com',
-  employeeId: '466035',
-  passwordHash: hashPassword('803517'),
-  name: 'System Administrator',
-  email: 'Idcard@nuralam.com',
-  role: 'admin' as const,
-  status: 'active' as const,
-  createdAt: new Date().toISOString(),
-};
-
-const INITIAL_SUPERVISOR = {
-  id: 'user-supervisor-1',
-  username: 'supervisor1',
-  employeeId: 'SUP-2026-01',
-  passwordHash: hashPassword('supervisor123'),
-  name: 'Production Shift Supervisor',
-  email: 'supervisor@company.com',
-  role: 'supervisor' as const,
-  status: 'active' as const,
-  createdAt: new Date().toISOString(),
-};
-
-const INITIAL_MASTER_EMPLOYEES: Record<string, any> = {
-  '586665': {
-    enrollId: '586665',
-    name: 'MD. RABIUL AWAL',
-    designation: 'Asst.Caster',
-    department: 'Casting',
-    jobType: 'Permanent',
-    joiningDate: '01/03/2026',
-    cardIssue: '19/10/2026',
-    emergencyContact: '01920-694100',
-    permanentAddress: 'Mukkhopur, Trishal, Mymensingh',
-    bloodGroup: 'O+',
-    nationalId: '',
-    importedAt: new Date().toISOString(),
-  },
-  '586666': {
-    enrollId: '586666',
-    name: 'MD. JAHIDUL ISLAM',
-    designation: 'Senior Glazer',
-    department: 'Glazing',
-    jobType: 'Permanent',
-    joiningDate: '15/02/2025',
-    cardIssue: '19/10/2026',
-    emergencyContact: '01712-345678',
-    permanentAddress: 'Dhanmondi, Dhaka',
-    bloodGroup: 'A+',
-    nationalId: '',
-    importedAt: new Date().toISOString(),
-  },
-  '586667': {
-    enrollId: '586667',
-    name: 'SHARIFUL ISLAM',
-    designation: 'Quality Inspector',
-    department: 'QC',
-    jobType: 'Permanent',
-    joiningDate: '10/01/2024',
-    cardIssue: '19/10/2026',
-    emergencyContact: '01819-876543',
-    permanentAddress: 'Kotwali, Mymensingh',
-    bloodGroup: 'B+',
-    nationalId: '',
-    importedAt: new Date().toISOString(),
-  },
-};
-
-// Safe database initialization for local fallback storage (never overwrites existing data)
-function initializeLocalDatabase(): void {
-  // 1. Users: Only seed if completely empty or missing admin
-  const users = readJsonFile<any[]>(USERS_FILE, []);
-  if (users.length === 0) {
-    users.push({ ...INITIAL_ADMIN }, { ...INITIAL_SUPERVISOR });
-    writeJsonFile(USERS_FILE, users);
-    console.log('[LocalStorage] Initialized default admin and supervisor users into empty users file.');
-  } else {
-    // If no admin user exists at all, append initial admin without modifying any existing users
-    if (!users.some((u) => u.role === 'admin')) {
-      users.unshift({ ...INITIAL_ADMIN });
-      writeJsonFile(USERS_FILE, users);
-    }
-  }
-
-  // 2. Master Employees: Only seed demo employees if completely empty
-  const master = readJsonFile<Record<string, any>>(MASTER_FILE, {});
-  if (Object.keys(master).length === 0) {
-    writeJsonFile(MASTER_FILE, INITIAL_MASTER_EMPLOYEES);
-    console.log('[LocalStorage] Initialized demo master employees into empty master file.');
-  }
-
-  // 3. Submissions: Ensure file exists without touching existing submissions
-  if (!fs.existsSync(SUBMISSIONS_FILE)) {
-    writeJsonFile(SUBMISSIONS_FILE, {});
-  }
-
-  // 4. Settings: Ensure file exists without overwriting existing settings
-  if (!fs.existsSync(SETTINGS_FILE)) {
-    writeJsonFile(SETTINGS_FILE, DEFAULT_SETTINGS);
-  }
+// Persistent token store: saved to DATA_DIR/sessions.json
+function getSessions(): Record<string, { userId: string; expiresAt: number }> {
+  return readJsonFile<Record<string, { userId: string; expiresAt: number }>>(SESSIONS_FILE, {});
 }
 
-initializeLocalDatabase();
-
-// =========================================================================
-// MONGODB CONNECTION & SAFE SEEDING (PREVENTS RESET ON RESTART / DEPLOYMENT)
-// =========================================================================
-
-async function seedMongoDatabase(): Promise<void> {
-  try {
-    // 1. Users collection: ONLY insert default admin user and supervisor if collection is completely EMPTY
-    const userCount = await UserModel.countDocuments();
-    if (userCount === 0) {
-      const localUsers = readJsonFile<any[]>(USERS_FILE, []);
-      const usersToSeed = localUsers.length > 0 ? localUsers : [INITIAL_ADMIN, INITIAL_SUPERVISOR];
-      await UserModel.insertMany(usersToSeed);
-      console.log(`[MongoDB] Initialized default accounts into empty Users collection (${usersToSeed.length} users).`);
-    } else {
-      console.log(`[MongoDB] Users collection already exists with ${userCount} record(s). Preserving existing users without modification.`);
-    }
-
-    // 2. Master Employees collection: ONLY insert demo master employees if collection is completely EMPTY
-    const empCount = await MasterEmployeeModel.countDocuments();
-    if (empCount === 0) {
-      const localMaster = readJsonFile<Record<string, any>>(MASTER_FILE, INITIAL_MASTER_EMPLOYEES);
-      const employeesToSeed = Object.values(localMaster);
-      if (employeesToSeed.length > 0) {
-        await MasterEmployeeModel.insertMany(employeesToSeed);
-        console.log(`[MongoDB] Initialized demo master employees into empty MasterEmployee collection (${employeesToSeed.length} employees).`);
-      }
-    } else {
-      console.log(`[MongoDB] MasterEmployee collection already exists with ${empCount} record(s). Preserving existing master employees without modification.`);
-    }
-
-    // 3. Submissions collection protection: check count and ensure submissions are never cleared, reset, or overwritten on boot
-    const submissionCount = await SubmissionModel.countDocuments();
-    console.log(`[MongoDB] Submissions collection verified (${submissionCount} existing submission(s) preserved).`);
-
-    // 4. Settings collection: ONLY insert default settings if collection is completely EMPTY
-    const settingsCount = await AppSettingsModel.countDocuments();
-    if (settingsCount === 0) {
-      const localSettings = readJsonFile<any>(SETTINGS_FILE, DEFAULT_SETTINGS);
-      await AppSettingsModel.create({
-        key: 'global',
-        ...DEFAULT_SETTINGS,
-        ...localSettings,
-      });
-      console.log('[MongoDB] Initialized default settings into empty Settings collection.');
-    } else {
-      console.log(`[MongoDB] Settings collection already exists with ${settingsCount} record(s). Preserving existing settings without modification.`);
-    }
-  } catch (err: any) {
-    console.error('[MongoDB] Safe database initialization error:', err.message);
-  }
+function saveSessions(sessions: Record<string, { userId: string; expiresAt: number }>): void {
+  writeJsonFile(SESSIONS_FILE, sessions);
 }
 
-async function connectMongoDB(): Promise<void> {
-  const uri = process.env.MONGODB_URI;
-  if (!uri || !uri.trim()) {
-    console.log(`[Storage] MONGODB_URI is not configured. Server running with local persistent storage at: ${DATA_DIR}`);
-    isMongoConnected = false;
-    mongoConnectionFailed = false;
-    mongoErrorMessage = null;
-    return;
-  }
-
-  try {
-    // Fail fast if offline, preventing hanging queries
-    mongoose.set('bufferCommands', false);
-    console.log('[MongoDB] Connecting to MongoDB Atlas...');
-    await mongoose.connect(uri.trim(), {
-      serverSelectionTimeoutMS: 5000,
-      connectTimeoutMS: 8000,
-    });
-
-    isMongoConnected = true;
-    mongoConnectionFailed = false;
-    mongoErrorMessage = null;
-    console.log('[MongoDB] Connected successfully to MongoDB Atlas.');
-    await seedMongoDatabase();
-  } catch (err: any) {
-    isMongoConnected = false;
-    mongoConnectionFailed = true;
-    mongoErrorMessage = 'Failed to connect to configured MongoDB cluster.';
-    console.error('[CRITICAL] Could not establish connection to MongoDB Atlas:', err.message);
-
-    if (isLocalMasterEmpty() && isLocalUsersEmpty()) {
-      console.error(
-        '[CRITICAL ALERT] MONGODB_URI is configured, but database connection failed and local JSON fallback is empty. ' +
-        'System will not silently switch to an empty database to protect against perceived data loss. Please verify MongoDB network connectivity and credentials.'
-      );
-    } else {
-      console.warn('[Storage] Preserved local persistent storage records available as fallback while MongoDB is unreachable.');
-    }
-  }
-}
-
-// =========================================================================
-// UNIFIED DATA ACCESS LAYER (MongoDB with Graceful Local Fallback)
-// =========================================================================
-
-// --- SESSIONS ---
-async function createToken(userId: string): Promise<string> {
+function createToken(userId: string): string {
   const token = crypto.randomBytes(32).toString('hex');
-  const expiresAt = Date.now() + 30 * 24 * 60 * 60 * 1000; // 30 days
-
-  // Always update local sessions file
-  const localSessions = readJsonFile<Record<string, { userId: string; expiresAt: number }>>(SESSIONS_FILE, {});
-  localSessions[token] = { userId, expiresAt };
-  writeJsonFile(SESSIONS_FILE, localSessions);
-
-  if (isMongoConnected) {
-    try {
-      await SessionModel.create({ token, userId, expiresAt });
-    } catch (e) {
-      // Non-fatal
-    }
-  }
+  const sessions = getSessions();
+  // 30 days expiration
+  sessions[token] = { userId, expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000 };
+  saveSessions(sessions);
   return token;
 }
 
-async function validateAndGetSession(token: string): Promise<{ userId: string; expiresAt: number } | null> {
-  if (isMongoConnected) {
-    try {
-      const session = await SessionModel.findOne({ token }).lean();
-      if (session) {
-        if (session.expiresAt < Date.now()) {
-          await SessionModel.deleteOne({ token });
-          return null;
-        }
-        return { userId: session.userId, expiresAt: session.expiresAt };
-      }
-    } catch (e) {
-      // Fallback below
-    }
-  }
-
-  // Local fallback
-  const localSessions = readJsonFile<Record<string, { userId: string; expiresAt: number }>>(SESSIONS_FILE, {});
-  const session = localSessions[token];
+function validateAndGetSession(token: string): { userId: string; expiresAt: number } | null {
+  const sessions = getSessions();
+  const session = sessions[token];
   if (!session) return null;
   if (session.expiresAt < Date.now()) {
-    delete localSessions[token];
-    writeJsonFile(SESSIONS_FILE, localSessions);
+    delete sessions[token];
+    saveSessions(sessions);
     return null;
   }
   return session;
 }
 
-// --- USERS ---
-async function findUserByCredentials(loginInput: string, passwordHash: string): Promise<IUser | null> {
-  const clean = loginInput.trim().toLowerCase();
-
-  if (isMongoConnected) {
-    try {
-      const orConditions: any[] = [
-        { username: clean },
-        { email: clean },
-        { employeeId: clean },
-      ];
-      if (clean === 'admin') {
-        orConditions.push({ role: 'admin' });
-      }
-      const user = await UserModel.findOne({
-        $or: orConditions,
-        passwordHash,
-      }).lean();
-      if (user) return user as IUser;
-    } catch (e) {
-      // Fallback below
-    }
-  }
-
-  // Local fallback
-  const users = readJsonFile<IUser[]>(USERS_FILE, []);
-  const user = users.find(
-    (u) =>
-      (u.username.toLowerCase() === clean ||
-        (u.email && u.email.toLowerCase() === clean) ||
-        (u.employeeId && u.employeeId.toLowerCase() === clean) ||
-        (clean === 'admin' && u.role === 'admin')) &&
-      u.passwordHash === passwordHash
-  );
-  return user || null;
-}
-
-async function findSupervisorByCredentials(employeeId: string, passwordHash: string): Promise<IUser | null> {
-  const cleanId = String(employeeId).trim().toLowerCase();
-
-  if (isMongoConnected) {
-    try {
-      const sup = await UserModel.findOne({
-        role: 'supervisor',
-        $or: [
-          { employeeId: cleanId },
-          { username: cleanId },
-          { email: cleanId },
-        ],
-        passwordHash,
-      }).lean();
-      if (sup) return sup as IUser;
-    } catch (e) {
-      // Fallback below
-    }
-  }
-
-  // Local fallback
-  const users = readJsonFile<IUser[]>(USERS_FILE, []);
-  const sup = users.find(
-    (u) =>
-      u.role === 'supervisor' &&
-      ((u.employeeId && u.employeeId.toLowerCase() === cleanId) ||
-        u.username.toLowerCase() === cleanId ||
-        (u.email && u.email.toLowerCase() === cleanId)) &&
-      u.passwordHash === passwordHash
-  );
-  return sup || null;
-}
-
-async function findUserById(id: string): Promise<IUser | null> {
-  if (isMongoConnected) {
-    try {
-      const user = await UserModel.findOne({ id }).lean();
-      if (user) return user as IUser;
-    } catch (e) {
-      // Fallback below
-    }
-  }
-
-  const users = readJsonFile<IUser[]>(USERS_FILE, []);
-  return users.find((u) => u.id === id) || null;
-}
-
-async function getAllUsersList(): Promise<IUser[]> {
-  if (isMongoConnected) {
-    try {
-      const users = await UserModel.find().lean();
-      return (users || []) as IUser[];
-    } catch (e) {
-      console.warn('[MongoDB] getAllUsersList query error:', e);
-    }
-  }
-
-  if (mongoConnectionFailed && isLocalUsersEmpty()) {
-    throw new DatabaseConnectionError('Production MongoDB connection failed and local fallback contains no user records.');
-  }
-
-  return readJsonFile<IUser[]>(USERS_FILE, []);
-}
-
-async function insertUserRecord(userData: IUser): Promise<IUser> {
-  // Sync to local file
-  const localUsers = readJsonFile<IUser[]>(USERS_FILE, []);
-  localUsers.push(userData);
-  writeJsonFile(USERS_FILE, localUsers);
-
-  if (isMongoConnected) {
-    try {
-      await UserModel.create(userData);
-    } catch (e) {
-      console.warn('[MongoDB] User create error:', e);
-    }
-  }
-  return userData;
-}
-
-async function updateUserRecord(id: string, updates: Partial<IUser>): Promise<IUser | null> {
-  // Sync local file
-  const localUsers = readJsonFile<IUser[]>(USERS_FILE, []);
-  const idx = localUsers.findIndex((u) => u.id === id);
-  let updatedUser: IUser | null = null;
-  if (idx !== -1) {
-    localUsers[idx] = { ...localUsers[idx], ...updates };
-    updatedUser = localUsers[idx];
-    writeJsonFile(USERS_FILE, localUsers);
-  }
-
-  if (isMongoConnected) {
-    try {
-      const res = await UserModel.findOneAndUpdate({ id }, { $set: updates }, { new: true }).lean();
-      if (res) updatedUser = res as IUser;
-    } catch (e) {
-      console.warn('[MongoDB] User update error:', e);
-    }
-  }
-  return updatedUser;
-}
-
-async function deleteUserRecord(id: string): Promise<boolean> {
-  const localUsers = readJsonFile<IUser[]>(USERS_FILE, []);
-  const filtered = localUsers.filter((u) => u.id !== id);
-  writeJsonFile(USERS_FILE, filtered);
-
-  if (isMongoConnected) {
-    try {
-      await UserModel.deleteOne({ id });
-    } catch (e) {
-      console.warn('[MongoDB] User delete error:', e);
-    }
-  }
-  return true;
-}
-
-// --- MASTER EMPLOYEES ---
-async function getMasterEmployeeRecord(enrollId: string): Promise<IMasterEmployee | null> {
-  const cleanId = String(enrollId).trim();
-
-  if (isMongoConnected) {
-    try {
-      const emp = await MasterEmployeeModel.findOne({ enrollId: cleanId }).lean();
-      if (emp) return emp as IMasterEmployee;
-    } catch (e) {
-      // Fallback below
-    }
-  }
-
-  const master = readJsonFile<Record<string, any>>(MASTER_FILE, {});
-  return master[cleanId] || null;
-}
-
-async function insertMasterEmployeeRecord(emp: IMasterEmployee): Promise<IMasterEmployee> {
-  const cleanId = String(emp.enrollId).trim();
-
-  // Local sync
-  const master = readJsonFile<Record<string, any>>(MASTER_FILE, {});
-  master[cleanId] = emp;
-  writeJsonFile(MASTER_FILE, master);
-
-  if (isMongoConnected) {
-    try {
-      await MasterEmployeeModel.create(emp);
-    } catch (e: any) {
-      console.warn('[MongoDB] Master employee insert error:', e.message);
-    }
-  }
-
-  return emp;
-}
-
-async function getAllMasterEmployeesList(): Promise<IMasterEmployee[]> {
-  if (isMongoConnected) {
-    try {
-      const records = await MasterEmployeeModel.find().lean();
-      return (records || []) as IMasterEmployee[];
-    } catch (e) {
-      console.warn('[MongoDB] getAllMasterEmployeesList query error:', e);
-    }
-  }
-
-  if (mongoConnectionFailed && isLocalMasterEmpty()) {
-    throw new DatabaseConnectionError('Production MongoDB connection failed and local fallback contains no employee records.');
-  }
-
-  const master = readJsonFile<Record<string, any>>(MASTER_FILE, {});
-  return Object.values(master);
-}
-
-async function updateMasterEmployeeRecord(enrollId: string, updates: Partial<IMasterEmployee>): Promise<IMasterEmployee | null> {
-  const cleanId = String(enrollId).trim();
-
-  // Local sync
-  const master = readJsonFile<Record<string, any>>(MASTER_FILE, {});
-  let updated: IMasterEmployee | null = null;
-  if (master[cleanId]) {
-    master[cleanId] = { ...master[cleanId], ...updates, updatedAt: new Date().toISOString() };
-    updated = master[cleanId];
-    writeJsonFile(MASTER_FILE, master);
-  }
-
-  if (isMongoConnected) {
-    try {
-      const res = await MasterEmployeeModel.findOneAndUpdate(
-        { enrollId: cleanId },
-        { $set: { ...updates, updatedAt: new Date().toISOString() } },
-        { new: true }
-      ).lean();
-      if (res) updated = res as IMasterEmployee;
-    } catch (e) {
-      console.warn('[MongoDB] Master employee update error:', e);
-    }
-  }
-  return updated;
-}
-
-async function deleteMasterEmployeeRecord(enrollId: string): Promise<boolean> {
-  const cleanId = String(enrollId).trim();
-
-  const master = readJsonFile<Record<string, any>>(MASTER_FILE, {});
-  delete master[cleanId];
-  writeJsonFile(MASTER_FILE, master);
-
-  if (isMongoConnected) {
-    try {
-      await MasterEmployeeModel.deleteOne({ enrollId: cleanId });
-    } catch (e) {
-      console.warn('[MongoDB] Master employee delete error:', e);
-    }
-  }
-  return true;
-}
-
-async function clearAllMasterEmployeesRecords(): Promise<void> {
-  writeJsonFile(MASTER_FILE, {});
-
-  if (isMongoConnected) {
-    try {
-      await MasterEmployeeModel.deleteMany({});
-    } catch (e) {
-      console.warn('[MongoDB] Clear master employees error:', e);
-    }
+function removeSession(token: string): void {
+  const sessions = getSessions();
+  if (sessions[token]) {
+    delete sessions[token];
+    saveSessions(sessions);
   }
 }
 
-// --- SUBMISSIONS ---
-async function getSubmissionRecord(enrollId: string): Promise<ISubmission | null> {
-  const cleanId = String(enrollId).trim();
-
-  if (isMongoConnected) {
-    try {
-      const sub = await SubmissionModel.findOne({ enrollId: cleanId }).lean();
-      if (sub) return sub as ISubmission;
-    } catch (e) {
-      // Fallback below
-    }
+// Initialize seed data
+function initializeDatabase() {
+  // 1. Users
+  const users = readJsonFile<any[]>(USERS_FILE, []);
+  if (users.length === 0) {
+    const adminUser = {
+      id: 'user-admin-1',
+      username: 'admin',
+      passwordHash: hashPassword('admin123'),
+      name: 'System Administrator',
+      email: 'ajkerpage@gmail.com',
+      role: 'admin',
+      status: 'active',
+      createdAt: new Date().toISOString(),
+    };
+    const demoDataEntryUser = {
+      id: 'user-dataentry-1',
+      username: 'operator1',
+      employeeId: 'OP-101',
+      passwordHash: hashPassword('operator123'),
+      name: 'Data Entry Operator',
+      email: 'operator1@company.com',
+      role: 'data_entry',
+      status: 'active',
+      createdAt: new Date().toISOString(),
+    };
+    const demoSupervisorUser = {
+      id: 'user-supervisor-1',
+      username: 'supervisor1',
+      employeeId: 'SUP-2026-01',
+      passwordHash: hashPassword('supervisor123'),
+      name: 'Production Shift Supervisor',
+      email: 'supervisor@company.com',
+      role: 'supervisor',
+      status: 'active',
+      createdAt: new Date().toISOString(),
+    };
+    writeJsonFile(USERS_FILE, [adminUser, demoDataEntryUser, demoSupervisorUser]);
+  } else if (!users.some((u) => u.role === 'supervisor')) {
+    const demoSupervisorUser = {
+      id: 'user-supervisor-1',
+      username: 'supervisor1',
+      employeeId: 'SUP-2026-01',
+      passwordHash: hashPassword('supervisor123'),
+      name: 'Production Shift Supervisor',
+      email: 'supervisor@company.com',
+      role: 'supervisor',
+      status: 'active',
+      createdAt: new Date().toISOString(),
+    };
+    users.push(demoSupervisorUser);
+    writeJsonFile(USERS_FILE, users);
   }
 
-  const submissions = readJsonFile<Record<string, any>>(SUBMISSIONS_FILE, {});
-  return submissions[cleanId] || null;
+  // 2. Master Employees (seed with initial sample data so lookup works right out of the box)
+  const masterEmployees = readJsonFile<Record<string, any>>(MASTER_FILE, {});
+  if (Object.keys(masterEmployees).length === 0) {
+    const seedRecords: Record<string, any> = {
+      '586665': {
+        enrollId: '586665',
+        name: 'MD. RABIUL AWAL',
+        designation: 'Asst.Caster',
+        department: 'Casting',
+        jobType: 'Permanent',
+        joiningDate: '01/03/2026',
+        cardIssue: '19/10/2026',
+        emergencyContact: '01920-694100',
+        permanentAddress: 'Mukkhopur, Trishal, Mymensingh',
+        bloodGroup: 'O+',
+        nationalId: '',
+        importedAt: new Date().toISOString(),
+      },
+      '586666': {
+        enrollId: '586666',
+        name: 'MD. JAHIDUL ISLAM',
+        designation: 'Senior Glazer',
+        department: 'Glazing',
+        jobType: 'Permanent',
+        joiningDate: '15/02/2025',
+        cardIssue: '19/10/2026',
+        emergencyContact: '01712-345678',
+        permanentAddress: 'Dhanmondi, Dhaka',
+        bloodGroup: 'A+',
+        nationalId: '',
+        importedAt: new Date().toISOString(),
+      },
+      '586667': {
+        enrollId: '586667',
+        name: 'SHARIFUL ISLAM',
+        designation: 'Quality Inspector',
+        department: 'QC',
+        jobType: 'Permanent',
+        joiningDate: '10/01/2024',
+        cardIssue: '19/10/2026',
+        emergencyContact: '01819-876543',
+        permanentAddress: 'Kotwali, Mymensingh',
+        bloodGroup: 'B+',
+        nationalId: '',
+        importedAt: new Date().toISOString(),
+      },
+    };
+    writeJsonFile(MASTER_FILE, seedRecords);
+  }
+
+  // 3. Submissions
+  readJsonFile<Record<string, any>>(SUBMISSIONS_FILE, {});
+
+  // 4. Settings
+  const settings = readJsonFile<AppSettings>(SETTINGS_FILE, DEFAULT_SETTINGS);
+  if (!settings.supervisorSuccessMessage) {
+    writeJsonFile(SETTINGS_FILE, DEFAULT_SETTINGS);
+  }
 }
 
-async function getAllSubmissionsList(): Promise<ISubmission[]> {
-  if (isMongoConnected) {
-    try {
-      const list = await SubmissionModel.find().lean();
-      return (list || []) as ISubmission[];
-    } catch (e) {
-      console.warn('[MongoDB] getAllSubmissionsList query error:', e);
-    }
-  }
+initializeDatabase();
 
-  if (mongoConnectionFailed && isLocalSubmissionsEmpty()) {
-    throw new DatabaseConnectionError('Production MongoDB connection failed and local fallback contains no submission records.');
-  }
-
-  const submissions = readJsonFile<Record<string, any>>(SUBMISSIONS_FILE, {});
-  return Object.values(submissions);
-}
-
-async function createSubmissionRecord(submissionData: ISubmission): Promise<ISubmission> {
-  // Local sync
-  const submissions = readJsonFile<Record<string, any>>(SUBMISSIONS_FILE, {});
-  submissions[submissionData.enrollId] = submissionData;
-  writeJsonFile(SUBMISSIONS_FILE, submissions);
-
-  if (isMongoConnected) {
-    try {
-      await SubmissionModel.create(submissionData);
-    } catch (e) {
-      console.warn('[MongoDB] Submission create error:', e);
-    }
-  }
-  return submissionData;
-}
-
-async function updateSubmissionRecord(enrollId: string, updates: Partial<ISubmission>): Promise<ISubmission | null> {
-  const cleanId = String(enrollId).trim();
-
-  const submissions = readJsonFile<Record<string, any>>(SUBMISSIONS_FILE, {});
-  let updated: ISubmission | null = null;
-  if (submissions[cleanId]) {
-    submissions[cleanId] = { ...submissions[cleanId], ...updates };
-    updated = submissions[cleanId];
-    writeJsonFile(SUBMISSIONS_FILE, submissions);
-  }
-
-  if (isMongoConnected) {
-    try {
-      const res = await SubmissionModel.findOneAndUpdate(
-        { enrollId: cleanId },
-        { $set: updates },
-        { new: true }
-      ).lean();
-      if (res) updated = res as ISubmission;
-    } catch (e) {
-      console.warn('[MongoDB] Submission update error:', e);
-    }
-  }
-  return updated;
-}
-
-async function deleteSubmissionRecord(enrollId: string): Promise<boolean> {
-  const cleanId = String(enrollId).trim();
-
-  const submissions = readJsonFile<Record<string, any>>(SUBMISSIONS_FILE, {});
-  delete submissions[cleanId];
-  writeJsonFile(SUBMISSIONS_FILE, submissions);
-
-  if (isMongoConnected) {
-    try {
-      await SubmissionModel.deleteOne({ enrollId: cleanId });
-    } catch (e) {
-      console.warn('[MongoDB] Submission delete error:', e);
-    }
-  }
-  return true;
-}
-
-// --- SETTINGS ---
-async function getApplicationSettings(): Promise<IAppSettings> {
-  if (isMongoConnected) {
-    try {
-      const settings = await AppSettingsModel.findOne({ key: 'global' }).lean();
-      if (settings) {
-        return {
-          key: 'global',
-          supervisorSuccessMessage: settings.supervisorSuccessMessage || DEFAULT_SETTINGS.supervisorSuccessMessage,
-          supervisorFormEnabled: settings.supervisorFormEnabled !== false,
-          supervisorFormDisabledMessage: settings.supervisorFormDisabledMessage || DEFAULT_SETTINGS.supervisorFormDisabledMessage,
-          pdfPrintLayout: settings.pdfPrintLayout || DEFAULT_SETTINGS.pdfPrintLayout,
-          loginBackgroundImage: settings.loginBackgroundImage || DEFAULT_SETTINGS.loginBackgroundImage,
-          paperSize: settings.paperSize || DEFAULT_SETTINGS.paperSize,
-          cardsPerPage: Number(settings.cardsPerPage) || DEFAULT_SETTINGS.cardsPerPage,
-        };
-      }
-    } catch (e) {
-      // Fallback below
-    }
-  }
-
-  const local = readJsonFile<any>(SETTINGS_FILE, DEFAULT_SETTINGS);
-  return {
-    key: 'global',
-    supervisorSuccessMessage: local.supervisorSuccessMessage || DEFAULT_SETTINGS.supervisorSuccessMessage,
-    supervisorFormEnabled: local.supervisorFormEnabled !== false,
-    supervisorFormDisabledMessage: local.supervisorFormDisabledMessage || DEFAULT_SETTINGS.supervisorFormDisabledMessage,
-    pdfPrintLayout: local.pdfPrintLayout || DEFAULT_SETTINGS.pdfPrintLayout,
-    loginBackgroundImage: local.loginBackgroundImage || DEFAULT_SETTINGS.loginBackgroundImage,
-    paperSize: local.paperSize || DEFAULT_SETTINGS.paperSize,
-    cardsPerPage: Number(local.cardsPerPage) || DEFAULT_SETTINGS.cardsPerPage,
-  };
-}
-
-async function updateApplicationSettings(updates: Partial<IAppSettings>): Promise<IAppSettings> {
-  const current = await getApplicationSettings();
-  const merged: IAppSettings = {
-    key: 'global',
-    supervisorSuccessMessage:
-      updates.supervisorSuccessMessage !== undefined
-        ? String(updates.supervisorSuccessMessage).trim()
-        : current.supervisorSuccessMessage,
-    supervisorFormEnabled:
-      updates.supervisorFormEnabled !== undefined ? Boolean(updates.supervisorFormEnabled) : current.supervisorFormEnabled,
-    supervisorFormDisabledMessage:
-      updates.supervisorFormDisabledMessage !== undefined
-        ? String(updates.supervisorFormDisabledMessage).trim()
-        : current.supervisorFormDisabledMessage,
-    pdfPrintLayout: updates.pdfPrintLayout === 'top_bottom' ? 'top_bottom' : 'side_by_side',
-    loginBackgroundImage:
-      updates.loginBackgroundImage !== undefined
-        ? String(updates.loginBackgroundImage).trim()
-        : current.loginBackgroundImage,
-    paperSize: updates.paperSize !== undefined ? String(updates.paperSize).trim() : current.paperSize,
-    cardsPerPage:
-      updates.cardsPerPage !== undefined ? Number(updates.cardsPerPage) || 9 : current.cardsPerPage,
-  };
-
-  writeJsonFile(SETTINGS_FILE, merged);
-
-  if (isMongoConnected) {
-    try {
-      await AppSettingsModel.findOneAndUpdate({ key: 'global' }, { $set: merged }, { upsert: true, new: true }).lean();
-    } catch (e) {
-      console.warn('[MongoDB] Settings update error:', e);
-    }
-  }
-  return merged;
-}
-
-// =========================================================================
-// EXPRESS MIDDLEWARE
-// =========================================================================
-
+// Middleware
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
@@ -1069,7 +225,7 @@ interface AuthenticatedRequest extends Request {
 }
 
 // Authentication Middleware
-async function authenticateToken(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
+function authenticateToken(req: AuthenticatedRequest, res: Response, next: NextFunction): void {
   const authHeader = req.headers.authorization;
   const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
 
@@ -1078,13 +234,14 @@ async function authenticateToken(req: AuthenticatedRequest, res: Response, next:
     return;
   }
 
-  const session = await validateAndGetSession(token);
+  const session = validateAndGetSession(token);
   if (!session) {
     res.status(401).json({ error: 'Session expired. Please sign in again.' });
     return;
   }
 
-  const user = await findUserById(session.userId);
+  const users = readJsonFile<any[]>(USERS_FILE, []);
+  const user = users.find((u) => u.id === session.userId);
 
   if (!user || user.status !== 'active') {
     res.status(403).json({ error: 'Account not found or inactive.' });
@@ -1110,19 +267,25 @@ function requireAdminRole(req: AuthenticatedRequest, res: Response, next: NextFu
 
 // --- AUTHENTICATION ---
 
-app.post('/api/auth/login', async (req: Request, res: Response) => {
-  const loginInput = req.body.enroll || req.body.username || req.body.employeeId;
-  const { password } = req.body;
-  if (!loginInput || !String(loginInput).trim() || !password) {
-    res.status(400).json({ error: 'Please enter Enroll and Password.' });
+app.post('/api/auth/login', (req: Request, res: Response) => {
+  const { username, password } = req.body;
+  if (!username || !password) {
+    res.status(400).json({ error: 'Username and password are required.' });
     return;
   }
 
-  const pwHash = hashPassword(password);
-  const user = await findUserByCredentials(String(loginInput).trim(), pwHash);
+  const cleanInput = username.trim().toLowerCase();
+  const users = readJsonFile<any[]>(USERS_FILE, []);
+  const user = users.find(
+    (u) =>
+      (u.username.toLowerCase() === cleanInput ||
+        (u.email && u.email.toLowerCase() === cleanInput) ||
+        (u.employeeId && u.employeeId.toLowerCase() === cleanInput)) &&
+      u.passwordHash === hashPassword(password)
+  );
 
   if (!user) {
-    res.status(401).json({ error: 'Invalid Enroll or Password.' });
+    res.status(401).json({ error: 'Invalid username or password.' });
     return;
   }
 
@@ -1131,7 +294,7 @@ app.post('/api/auth/login', async (req: Request, res: Response) => {
     return;
   }
 
-  const token = await createToken(user.id);
+  const token = createToken(user.id);
 
   res.json({
     token,
@@ -1148,21 +311,29 @@ app.post('/api/auth/login', async (req: Request, res: Response) => {
 });
 
 // Dedicated Supervisor Login using Employee ID / Enrollment Number and password
-app.post('/api/auth/supervisor-login', async (req: Request, res: Response) => {
+app.post('/api/auth/supervisor-login', (req: Request, res: Response) => {
   const { employeeId, password } = req.body;
   if (!employeeId || !String(employeeId).trim() || !password) {
     res.status(400).json({ error: 'Supervisor Employee ID/Enrollment Number and password are required.' });
     return;
   }
 
-  const pwHash = hashPassword(password);
-  const supervisor = await findSupervisorByCredentials(employeeId, pwHash);
+  const cleanId = String(employeeId).trim().toLowerCase();
+  const users = readJsonFile<any[]>(USERS_FILE, []);
+
+  // Find user matching employeeId, username, or email
+  const supervisor = users.find(
+    (u) =>
+      u.role === 'supervisor' &&
+      ((u.employeeId && u.employeeId.toLowerCase() === cleanId) ||
+        u.username.toLowerCase() === cleanId ||
+        (u.email && u.email.toLowerCase() === cleanId)) &&
+      u.passwordHash === hashPassword(password)
+  );
 
   if (!supervisor) {
     // Check if account exists with non-supervisor role or invalid password
-    const allUsers = await getAllUsersList();
-    const cleanId = String(employeeId).trim().toLowerCase();
-    const otherAccount = allUsers.find(
+    const otherAccount = users.find(
       (u) =>
         (u.employeeId && u.employeeId.toLowerCase() === cleanId) ||
         u.username.toLowerCase() === cleanId
@@ -1183,7 +354,7 @@ app.post('/api/auth/supervisor-login', async (req: Request, res: Response) => {
     return;
   }
 
-  const token = await createToken(supervisor.id);
+  const token = createToken(supervisor.id);
 
   res.json({
     token,
@@ -1206,13 +377,13 @@ app.get('/api/auth/me', authenticateToken, (req: AuthenticatedRequest, res: Resp
 
 // --- USER MANAGEMENT (ADMIN ONLY) ---
 
-app.get('/api/users', authenticateToken, requireAdminRole, async (_req: Request, res: Response) => {
-  const users = await getAllUsersList();
+app.get('/api/users', authenticateToken, requireAdminRole, (_req: Request, res: Response) => {
+  const users = readJsonFile<any[]>(USERS_FILE, []);
   const safeUsers = users.map(({ passwordHash, ...u }) => u);
   res.json(safeUsers);
 });
 
-app.post('/api/users', authenticateToken, requireAdminRole, async (req: Request, res: Response) => {
+app.post('/api/users', authenticateToken, requireAdminRole, (req: Request, res: Response) => {
   const { username, password, name, email, role, employeeId } = req.body;
 
   if (!username || !password || !name) {
@@ -1221,9 +392,9 @@ app.post('/api/users', authenticateToken, requireAdminRole, async (req: Request,
   }
 
   const cleanUsername = username.trim().toLowerCase();
-  const allUsers = await getAllUsersList();
+  const users = readJsonFile<any[]>(USERS_FILE, []);
 
-  if (allUsers.some((u) => u.username.toLowerCase() === cleanUsername)) {
+  if (users.some((u) => u.username.toLowerCase() === cleanUsername)) {
     res.status(409).json({ error: `Username "${username}" is already taken.` });
     return;
   }
@@ -1234,7 +405,7 @@ app.post('/api/users', authenticateToken, requireAdminRole, async (req: Request,
 
   const cleanEmployeeId = employeeId ? String(employeeId).trim() : cleanUsername;
 
-  const newUser: IUser = {
+  const newUser = {
     id: `user-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
     username: cleanUsername,
     employeeId: cleanEmployeeId,
@@ -1246,49 +417,51 @@ app.post('/api/users', authenticateToken, requireAdminRole, async (req: Request,
     createdAt: new Date().toISOString(),
   };
 
-  await insertUserRecord(newUser);
+  users.push(newUser);
+  writeJsonFile(USERS_FILE, users);
 
-  const { passwordHash: _, ...safeUser } = newUser;
+  const { passwordHash, ...safeUser } = newUser;
   res.status(201).json(safeUser);
 });
 
-app.put('/api/users/:id', authenticateToken, requireAdminRole, async (req: Request, res: Response) => {
+app.put('/api/users/:id', authenticateToken, requireAdminRole, (req: Request, res: Response) => {
   const { id } = req.params;
   const { name, email, role, status, password, employeeId } = req.body;
 
-  const existing = await findUserById(id);
-  if (!existing) {
+  const users = readJsonFile<any[]>(USERS_FILE, []);
+  const index = users.findIndex((u) => u.id === id);
+
+  if (index === -1) {
     res.status(404).json({ error: 'User not found.' });
     return;
   }
 
-  const updates: Partial<IUser> = {};
-  if (name !== undefined) updates.name = name.trim();
-  if (email !== undefined) updates.email = email.trim();
+  const existing = users[index];
+  if (name !== undefined) existing.name = name.trim();
+  if (email !== undefined) existing.email = email.trim();
   if (role !== undefined) {
-    if (role === 'admin') updates.role = 'admin';
-    else if (role === 'supervisor') updates.role = 'supervisor';
-    else updates.role = 'data_entry';
+    if (role === 'admin') existing.role = 'admin';
+    else if (role === 'supervisor') existing.role = 'supervisor';
+    else existing.role = 'data_entry';
   }
-  if (employeeId !== undefined) updates.employeeId = String(employeeId).trim();
-  if (status !== undefined) updates.status = status === 'inactive' ? 'inactive' : 'active';
+  if (employeeId !== undefined) existing.employeeId = String(employeeId).trim();
+  if (status !== undefined) existing.status = status === 'inactive' ? 'inactive' : 'active';
   if (password && password.trim() !== '') {
-    updates.passwordHash = hashPassword(password.trim());
+    existing.passwordHash = hashPassword(password.trim());
   }
 
-  const updated = await updateUserRecord(id, updates);
-  if (!updated) {
-    res.status(500).json({ error: 'Failed to update user.' });
-    return;
-  }
+  users[index] = existing;
+  writeJsonFile(USERS_FILE, users);
 
-  const { passwordHash: _, ...safeUser } = updated;
+  const { passwordHash, ...safeUser } = existing;
   res.json(safeUser);
 });
 
-app.delete('/api/users/:id', authenticateToken, requireAdminRole, async (req: Request, res: Response) => {
+app.delete('/api/users/:id', authenticateToken, requireAdminRole, (req: Request, res: Response) => {
   const { id } = req.params;
-  const target = await findUserById(id);
+  const users = readJsonFile<any[]>(USERS_FILE, []);
+
+  const target = users.find((u) => u.id === id);
   if (!target) {
     res.status(404).json({ error: 'User not found.' });
     return;
@@ -1296,26 +469,26 @@ app.delete('/api/users/:id', authenticateToken, requireAdminRole, async (req: Re
 
   // Prevent deleting the last admin
   if (target.role === 'admin') {
-    const allUsers = await getAllUsersList();
-    const adminCount = allUsers.filter((u) => u.role === 'admin').length;
+    const adminCount = users.filter((u) => u.role === 'admin').length;
     if (adminCount <= 1) {
       res.status(400).json({ error: 'Cannot delete the only administrator account.' });
       return;
     }
   }
 
-  await deleteUserRecord(id);
+  const filtered = users.filter((u) => u.id !== id);
+  writeJsonFile(USERS_FILE, filtered);
   res.json({ success: true, message: 'User deleted successfully.' });
 });
 
 // --- EMPLOYEE MASTER DATABASE (ADMIN ONLY FOR MANAGEMENT) ---
 
-app.get('/api/master-employees', authenticateToken, requireAdminRole, async (_req: Request, res: Response) => {
-  const records = await getAllMasterEmployeesList();
-  res.json(records);
+app.get('/api/master-employees', authenticateToken, requireAdminRole, (_req: Request, res: Response) => {
+  const master = readJsonFile<Record<string, any>>(MASTER_FILE, {});
+  res.json(Object.values(master));
 });
 
-app.post('/api/master-employees/import', authenticateToken, requireAdminRole, async (req: Request, res: Response) => {
+app.post('/api/master-employees/import', authenticateToken, requireAdminRole, (req: Request, res: Response) => {
   const { employees } = req.body;
 
   if (!Array.isArray(employees) || employees.length === 0) {
@@ -1323,402 +496,73 @@ app.post('/api/master-employees/import', authenticateToken, requireAdminRole, as
     return;
   }
 
-  // Fetch current database records to prevent overwriting
-  const currentRecords = await getAllMasterEmployeesList();
-  const existingMap = new Map<string, IMasterEmployee>();
-  for (const r of currentRecords) {
-    existingMap.set(r.enrollId, r);
-  }
-
-  const seenInBatch = new Set<string>();
+  const master = readJsonFile<Record<string, any>>(MASTER_FILE, {});
   let addedCount = 0;
-  let duplicateCount = 0;
-  let failedCount = 0;
+  let updatedCount = 0;
 
-  const sampleDuplicates: string[] = [];
-  const sampleFailed: string[] = [];
-  const recordsToInsert: IMasterEmployee[] = [];
+  for (const emp of employees) {
+    const enrollId = String(emp.enrollId || '').trim();
+    if (!enrollId) continue;
 
-  for (let i = 0; i < employees.length; i++) {
-    const emp = employees[i];
-    if (!emp || typeof emp !== 'object') {
-      failedCount++;
-      continue;
-    }
-
-    const rawEnrollId = emp.enrollId !== undefined && emp.enrollId !== null ? String(emp.enrollId).trim() : '';
-    const rawName = emp.name !== undefined && emp.name !== null ? String(emp.name).trim() : '';
-
-    // Validate required fields
-    if (!rawEnrollId || !rawName) {
-      failedCount++;
-      if (sampleFailed.length < 10) {
-        sampleFailed.push(`Row ${i + 1}: Missing Enrollment ID or Name`);
-      }
-      continue;
-    }
-
-    // Duplicate detection within the incoming file itself
-    if (seenInBatch.has(rawEnrollId)) {
-      duplicateCount++;
-      if (sampleDuplicates.length < 15) {
-        sampleDuplicates.push(`${rawEnrollId} (duplicate in file)`);
-      }
-      continue;
-    }
-    seenInBatch.add(rawEnrollId);
-
-    // Duplicate detection against existing database records: NEVER silently overwrite
-    if (existingMap.has(rawEnrollId)) {
-      duplicateCount++;
-      if (sampleDuplicates.length < 15) {
-        sampleDuplicates.push(`${rawEnrollId} (already in database)`);
-      }
-      continue;
-    }
-
-    const record: IMasterEmployee = {
-      enrollId: rawEnrollId,
-      name: rawName,
+    const record = {
+      enrollId,
+      name: String(emp.name || '').trim(),
       designation: String(emp.designation || '').trim(),
       department: String(emp.department || '').trim(),
       jobType: String(emp.jobType || 'Permanent').trim(),
       joiningDate: String(emp.joiningDate || '01/03/2026').trim(),
       cardIssue: String(emp.cardIssue || '19/10/2026').trim(),
-      emergencyContact: String(emp.emergencyContact || emp.contactNumber || '').trim(),
-      permanentAddress: String(emp.permanentAddress || '').trim(),
+      emergencyContact: String(emp.emergencyContact || '01920-694100').trim(),
+      permanentAddress: String(emp.permanentAddress || 'Mukkhopur, Trishal, Mymensingh').trim(),
       bloodGroup: String(emp.bloodGroup || 'O+').trim(),
       nationalId: String(emp.nationalId || '').trim(),
-      photo: String(emp.photo || emp.photoUrl || '').trim(),
-      signature: String(emp.signature || emp.signatureUrl || '').trim(),
       importedAt: new Date().toISOString(),
     };
 
-    recordsToInsert.push(record);
-    existingMap.set(rawEnrollId, record);
-    addedCount++;
-  }
-
-  // Atomically persist to MongoDB collection if connected
-  if (isMongoConnected && recordsToInsert.length > 0) {
-    try {
-      await MasterEmployeeModel.insertMany(recordsToInsert);
-    } catch (err: any) {
-      console.warn('[MongoDB] Batch import insert error:', err.message);
+    if (master[enrollId]) {
+      updatedCount++;
+    } else {
+      addedCount++;
     }
+    master[enrollId] = record;
   }
 
-  // Sync to local JSON file
-  const localMaster = readJsonFile<Record<string, any>>(MASTER_FILE, {});
-  for (const r of recordsToInsert) {
-    localMaster[r.enrollId] = r;
-  }
-  writeJsonFile(MASTER_FILE, localMaster);
-
+  writeJsonFile(MASTER_FILE, master);
   res.json({
     success: true,
-    summary: {
-      total: employees.length,
-      successful: addedCount,
-      duplicates: duplicateCount,
-      failed: failedCount,
-    },
-    sampleDuplicates,
-    sampleFailed,
-    message: `Import completed: ${addedCount} added successfully, ${duplicateCount} duplicates skipped, ${failedCount} invalid records skipped.`,
-    totalRecords: existingMap.size,
+    message: `Imported ${addedCount} new and updated ${updatedCount} employee records.`,
+    totalRecords: Object.keys(master).length,
   });
 });
 
-// Admin-only: add individual employee to master database
-app.post('/api/master-employees', authenticateToken, requireAdminRole, async (req: Request, res: Response) => {
-  const {
-    enrollId,
-    name,
-    designation,
-    department,
-    jobType,
-    joiningDate,
-    cardIssue,
-    emergencyContact,
-    contactNumber,
-    permanentAddress,
-    bloodGroup,
-    nationalId,
-    photo,
-    photoUrl,
-    signature,
-    signatureUrl,
-  } = req.body;
-
-  const cleanEnrollId = enrollId !== undefined && enrollId !== null ? String(enrollId).trim() : '';
-  const cleanName = name !== undefined && name !== null ? String(name).trim() : '';
-
-  if (!cleanEnrollId || !cleanName) {
-    res.status(400).json({ error: 'Enrollment ID and Name are required.' });
-    return;
-  }
-
-  // Prevent duplicate Enrollment ID
-  const existing = await getMasterEmployeeRecord(cleanEnrollId);
-  if (existing) {
-    res.status(409).json({ error: `An employee with Enrollment ID "${cleanEnrollId}" already exists in the master database.` });
-    return;
-  }
-
-  const finalPhoto = String(photo || photoUrl || '').trim();
-  const finalSignature = String(signature || signatureUrl || '').trim();
-
-  let storedPhoto = finalPhoto;
-  let storedSig = finalSignature;
-
-  // Optimize and validate photo (target <= 200 KB)
-  if (finalPhoto && finalPhoto.startsWith('data:image')) {
-    const opt = await optimizeImageForStorage(finalPhoto, false);
-    if (!opt.isValid || opt.sizeBytes > 200 * 1024) {
-      res.status(400).json({
-        error: 'Employee photo size exceeds 200 KB limit. Please upload a compressed photo.',
-      });
-      return;
-    }
-    storedPhoto = opt.dataUrl;
-  }
-
-  // Optimize and validate signature (target <= 200 KB)
-  if (finalSignature && finalSignature.startsWith('data:image')) {
-    const opt = await optimizeImageForStorage(finalSignature, true);
-    if (!opt.isValid || opt.sizeBytes > 200 * 1024) {
-      res.status(400).json({
-        error: 'Employee signature size exceeds 200 KB limit. Please upload a compressed signature.',
-      });
-      return;
-    }
-    storedSig = opt.dataUrl;
-  }
-
-  const newEmployee: IMasterEmployee = {
-    enrollId: cleanEnrollId,
-    name: cleanName,
-    designation: String(designation || '').trim(),
-    department: String(department || '').trim(),
-    jobType: String(jobType || 'Permanent').trim(),
-    joiningDate: String(joiningDate || '01/03/2026').trim(),
-    cardIssue: String(cardIssue || '19/10/2026').trim(),
-    emergencyContact: String(emergencyContact || contactNumber || '').trim(),
-    permanentAddress: String(permanentAddress || '').trim(),
-    bloodGroup: String(bloodGroup || 'O+').trim(),
-    nationalId: String(nationalId || '').trim(),
-    photo: storedPhoto,
-    signature: storedSig,
-    importedAt: new Date().toISOString(),
-  };
-
-  await insertMasterEmployeeRecord(newEmployee);
-
-  res.status(201).json({
-    success: true,
-    message: `Employee "${cleanEnrollId} - ${cleanName}" added to master database.`,
-    employee: newEmployee,
-  });
-});
-
-app.put('/api/master-employees/:enrollId', authenticateToken, requireAdminRole, async (req: Request, res: Response) => {
+app.delete('/api/master-employees/:enrollId', authenticateToken, requireAdminRole, (req: Request, res: Response) => {
   const { enrollId } = req.params;
-  const existing = await getMasterEmployeeRecord(enrollId);
+  const master = readJsonFile<Record<string, any>>(MASTER_FILE, {});
 
-  if (!existing) {
+  if (!master[enrollId]) {
     res.status(404).json({ error: `Employee with Enrollment ID "${enrollId}" not found.` });
     return;
   }
 
-  const b = req.body;
-  const updates: Partial<IMasterEmployee> = {};
-
-  if (b.name !== undefined) {
-    const cleanName = String(b.name).trim();
-    if (!cleanName) {
-      res.status(400).json({ error: 'Employee Name cannot be empty.' });
-      return;
-    }
-    updates.name = cleanName;
-  }
-  if (b.designation !== undefined) updates.designation = String(b.designation).trim();
-  if (b.department !== undefined) updates.department = String(b.department).trim();
-  if (b.jobType !== undefined) updates.jobType = String(b.jobType).trim();
-  if (b.joiningDate !== undefined) updates.joiningDate = String(b.joiningDate).trim();
-  if (b.cardIssue !== undefined) updates.cardIssue = String(b.cardIssue).trim();
-  if (b.emergencyContact !== undefined) updates.emergencyContact = String(b.emergencyContact).trim();
-  if (b.permanentAddress !== undefined) updates.permanentAddress = String(b.permanentAddress).trim();
-  if (b.bloodGroup !== undefined) updates.bloodGroup = String(b.bloodGroup).trim();
-  if (b.nationalId !== undefined) updates.nationalId = String(b.nationalId).trim();
-
-  if (b.photo !== undefined) {
-    const photoStr = String(b.photo).trim();
-    if (photoStr && photoStr.startsWith('data:image')) {
-      const opt = await optimizeImageForStorage(photoStr, false);
-      if (!opt.isValid || opt.sizeBytes > 200 * 1024) {
-        res.status(400).json({
-          error: 'Employee photo size exceeds 200 KB limit. Please upload a compressed photo.',
-        });
-        return;
-      }
-      updates.photo = opt.dataUrl;
-    } else {
-      updates.photo = photoStr;
-    }
-  }
-
-  if (b.signature !== undefined) {
-    const sigStr = String(b.signature).trim();
-    if (sigStr && sigStr.startsWith('data:image')) {
-      const opt = await optimizeImageForStorage(sigStr, true);
-      if (!opt.isValid || opt.sizeBytes > 200 * 1024) {
-        res.status(400).json({
-          error: 'Employee signature size exceeds 200 KB limit. Please upload a compressed signature.',
-        });
-        return;
-      }
-      updates.signature = opt.dataUrl;
-    } else {
-      updates.signature = sigStr;
-    }
-  }
-
-  const updated = await updateMasterEmployeeRecord(enrollId, updates);
-
-  res.json({
-    success: true,
-    message: `Employee ${enrollId} updated successfully.`,
-    employee: updated,
-  });
-});
-
-app.delete('/api/master-employees/:enrollId', authenticateToken, requireAdminRole, async (req: Request, res: Response) => {
-  const { enrollId } = req.params;
-  const existing = await getMasterEmployeeRecord(enrollId);
-
-  if (!existing) {
-    res.status(404).json({ error: `Employee with Enrollment ID "${enrollId}" not found.` });
-    return;
-  }
-
-  await deleteMasterEmployeeRecord(enrollId);
+  delete master[enrollId];
+  writeJsonFile(MASTER_FILE, master);
   res.json({ success: true, message: `Employee ${enrollId} deleted from master database.` });
 });
 
-app.delete('/api/master-employees', authenticateToken, requireAdminRole, async (_req: Request, res: Response) => {
-  await clearAllMasterEmployeesRecords();
+app.delete('/api/master-employees', authenticateToken, requireAdminRole, (_req: Request, res: Response) => {
+  writeJsonFile(MASTER_FILE, {});
   res.json({ success: true, message: 'All master employee records have been cleared.' });
 });
 
-// --- SEARCH MASTER EMPLOYEES (AUTHENTICATED SUPERVISOR, DATA ENTRY & ADMIN) ---
-app.get('/api/master-employees/search', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
-  // Reject employee searches from supervisor if form is in maintenance mode
-  if (req.user?.role === 'supervisor') {
-    const settings = await getApplicationSettings();
-    if (settings.supervisorFormEnabled === false) {
-      res.status(403).json({
-        error:
-          settings.supervisorFormDisabledMessage ||
-          'সাময়িক রক্ষণাবেক্ষণের জন্য আইডি কার্ড আবেদন কার্যক্রম বন্ধ রয়েছে। অনুগ্রহ করে কিছুক্ষণ পর আবার চেষ্টা করুন।',
-        formDisabled: true,
-      });
-      return;
-    }
-  }
-
-  const query = String(req.query.q || req.query.query || '').trim().toLowerCase();
-  if (!query) {
-    res.json({ results: [] });
-    return;
-  }
-
-  const allEmployees = await getAllMasterEmployeesList();
-  const allSubmissions = await getAllSubmissionsList();
-  const submissionSet = new Set(allSubmissions.map((s) => String(s.enrollId).trim()));
-
-  const matches = allEmployees.filter((emp) => {
-    const id = String(emp.enrollId || '').toLowerCase();
-    const name = String(emp.name || '').toLowerCase();
-    const nid = String(emp.nationalId || '').toLowerCase();
-    return id.includes(query) || name.includes(query) || (nid && nid.includes(query));
-  });
-
-  const limited = matches.slice(0, 10).map((emp) => ({
-    enrollId: emp.enrollId,
-    name: emp.name,
-    designation: emp.designation,
-    department: emp.department,
-    bloodGroup: emp.bloodGroup,
-    alreadySubmitted: submissionSet.has(String(emp.enrollId).trim()),
-  }));
-
-  res.json({ results: limited });
-});
-
-// Alias for search
-app.get('/api/employees/search', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
-  if (req.user?.role === 'supervisor') {
-    const settings = await getApplicationSettings();
-    if (settings.supervisorFormEnabled === false) {
-      res.status(403).json({
-        error:
-          settings.supervisorFormDisabledMessage ||
-          'সাময়িক রক্ষণাবেক্ষণের জন্য আইডি কার্ড আবেদন কার্যক্রম বন্ধ রয়েছে। অনুগ্রহ করে কিছুক্ষণ পর আবার চেষ্টা করুন।',
-        formDisabled: true,
-      });
-      return;
-    }
-  }
-
-  const query = String(req.query.q || '').trim().toLowerCase();
-  if (!query) {
-    res.json({ results: [] });
-    return;
-  }
-
-  const allEmployees = await getAllMasterEmployeesList();
-  const allSubmissions = await getAllSubmissionsList();
-  const submissionSet = new Set(allSubmissions.map((s) => String(s.enrollId).trim()));
-
-  const matches = allEmployees.filter((emp) => {
-    const id = String(emp.enrollId || '').toLowerCase();
-    const name = String(emp.name || '').toLowerCase();
-    const nid = String(emp.nationalId || '').toLowerCase();
-    return id.includes(query) || name.includes(query) || (nid && nid.includes(query));
-  });
-
-  const limited = matches.slice(0, 10).map((emp) => ({
-    enrollId: emp.enrollId,
-    name: emp.name,
-    designation: emp.designation,
-    department: emp.department,
-    bloodGroup: emp.bloodGroup,
-    alreadySubmitted: submissionSet.has(String(emp.enrollId).trim()),
-  }));
-
-  res.json({ results: limited });
-});
-
-// --- LOOKUP EMPLOYEE (AUTHENTICATED SUPERVISOR, DATA ENTRY & ADMIN) ---
-app.get('/api/lookup-employee/:enrollId', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
-  // Reject lookup from supervisor if form is in maintenance mode
-  if (req.user?.role === 'supervisor') {
-    const settings = await getApplicationSettings();
-    if (settings.supervisorFormEnabled === false) {
-      res.status(403).json({
-        error:
-          settings.supervisorFormDisabledMessage ||
-          'সাময়িক রক্ষণাবেক্ষণের জন্য আইডি কার্ড আবেদন কার্যক্রম বন্ধ রয়েছে। অনুগ্রহ করে কিছুক্ষণ পর আবার চেষ্টা করুন।',
-        formDisabled: true,
-      });
-      return;
-    }
-  }
-
+// --- LOOKUP EMPLOYEE (AUTHENTICATED DATA ENTRY & ADMIN) ---
+// Retrieves employee read-only info, checks if already submitted
+app.get('/api/lookup-employee/:enrollId', authenticateToken, (req: Request, res: Response) => {
   const enrollId = req.params.enrollId.trim();
-  const employee = await getMasterEmployeeRecord(enrollId);
-  const submission = await getSubmissionRecord(enrollId);
+  const master = readJsonFile<Record<string, any>>(MASTER_FILE, {});
+  const submissions = readJsonFile<Record<string, any>>(SUBMISSIONS_FILE, {});
+
+  const employee = master[enrollId];
+  const submission = submissions[enrollId];
 
   if (!employee) {
     res.status(404).json({
@@ -1744,23 +588,10 @@ app.get('/api/lookup-employee/:enrollId', authenticateToken, async (req: Authent
   });
 });
 
-// --- SUBMISSIONS (SUPERVISOR, DATA ENTRY & ADMIN) ---
+// --- SUBMISSIONS (DATA ENTRY & ADMIN) ---
 
-app.post('/api/submissions', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
-  // SERVER-SIDE SUPERVISOR FORM ON/OFF CONTROL
-  if (req.user?.role === 'supervisor') {
-    const settings = await getApplicationSettings();
-    if (settings.supervisorFormEnabled === false) {
-      res.status(403).json({
-        error:
-          settings.supervisorFormDisabledMessage ||
-          'Employee ID Card submission is temporarily closed by the administrator. Please check back later.',
-        formDisabled: true,
-      });
-      return;
-    }
-  }
-
+// Server-side duplicate protection & saving
+app.post('/api/submissions', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
   const { enrollId, nationalId, photoUrl, signatureUrl } = req.body;
 
   if (!enrollId || !String(enrollId).trim()) {
@@ -1771,7 +602,9 @@ app.post('/api/submissions', authenticateToken, async (req: AuthenticatedRequest
   const cleanEnrollId = String(enrollId).trim();
 
   // Validate in Master Database
-  const masterEmp = await getMasterEmployeeRecord(cleanEnrollId);
+  const master = readJsonFile<Record<string, any>>(MASTER_FILE, {});
+  const masterEmp = master[cleanEnrollId];
+
   if (!masterEmp) {
     res.status(404).json({
       error: `Cannot submit: Enrollment ID "${cleanEnrollId}" does not exist in the Master Employee Database.`,
@@ -1780,16 +613,17 @@ app.post('/api/submissions', authenticateToken, async (req: AuthenticatedRequest
   }
 
   // SERVER-SIDE DUPLICATE PROTECTION: Block if already submitted
-  const existingSub = await getSubmissionRecord(cleanEnrollId);
-  if (existingSub) {
+  const submissions = readJsonFile<Record<string, any>>(SUBMISSIONS_FILE, {});
+  if (submissions[cleanEnrollId]) {
+    const existing = submissions[cleanEnrollId];
     res.status(409).json({
       error: `Already submitted for Enrollment ID "${cleanEnrollId}". This record was submitted on ${new Date(
-        existingSub.submittedAt
-      ).toLocaleDateString()} by ${existingSub.submittedBy?.name || 'Operator'}. Duplicate submissions are strictly blocked.`,
+        existing.submittedAt
+      ).toLocaleDateString()} by ${existing.submittedBy?.name || 'Operator'}. Duplicate submissions are strictly blocked.`,
       alreadySubmitted: true,
       submission: {
-        submittedAt: existingSub.submittedAt,
-        submittedBy: existingSub.submittedBy?.name,
+        submittedAt: existing.submittedAt,
+        submittedBy: existing.submittedBy?.name,
       },
     });
     return;
@@ -1811,24 +645,12 @@ app.post('/api/submissions', authenticateToken, async (req: AuthenticatedRequest
     return;
   }
 
-  // Automatic server-side compression & resizing targeting <= 200 KB
-  const optPhoto = await optimizeImageForStorage(String(photoUrl).trim(), false);
-  const optSig = await optimizeImageForStorage(String(signatureUrl).trim(), true);
-
-  if (!optPhoto.isValid || !optSig.isValid || optPhoto.sizeBytes > 200 * 1024 || optSig.sizeBytes > 200 * 1024) {
-    res.status(400).json({
-      error: 'ছবি বা সিগনেচারের সাইজ অনেক বেশি বড়! অনুগ্রহ করে ২০০ কিলোবাইটের (200 KB) নিচের ছবি বা সিগনেচার আপলোড করুন।',
-      sizeExceeded: true,
-    });
-    return;
-  }
-
-  const newSubmission: ISubmission = {
+  const newSubmission = {
     id: `sub-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
     enrollId: cleanEnrollId,
     nationalId: String(nationalId).trim(),
-    photoUrl: optPhoto.dataUrl,
-    signatureUrl: optSig.dataUrl,
+    photoUrl: String(photoUrl).trim(),
+    signatureUrl: String(signatureUrl).trim(),
     employee: masterEmp,
     submittedBy: {
       id: req.user.id,
@@ -1844,9 +666,11 @@ app.post('/api/submissions', authenticateToken, async (req: AuthenticatedRequest
     reprintHistory: [],
   };
 
-  await createSubmissionRecord(newSubmission);
+  submissions[cleanEnrollId] = newSubmission;
+  writeJsonFile(SUBMISSIONS_FILE, submissions);
 
-  const currentSettings = await getApplicationSettings();
+  // Retrieve current configured success message from settings
+  const currentSettings = readJsonFile<AppSettings>(SETTINGS_FILE, DEFAULT_SETTINGS);
 
   res.status(201).json({
     success: true,
@@ -1861,9 +685,9 @@ app.post('/api/submissions', authenticateToken, async (req: AuthenticatedRequest
 });
 
 // Admin-only: list all submissions with normalized print status
-app.get('/api/submissions', authenticateToken, requireAdminRole, async (_req: Request, res: Response) => {
-  const submissions = await getAllSubmissionsList();
-  const normalized = submissions.map((sub: any) => ({
+app.get('/api/submissions', authenticateToken, requireAdminRole, (_req: Request, res: Response) => {
+  const submissions = readJsonFile<Record<string, any>>(SUBMISSIONS_FILE, {});
+  const normalized = Object.values(submissions).map((sub: any) => ({
     ...sub,
     printStatus: sub.printStatus === 'printed' ? 'printed' : 'pending',
     printCount: typeof sub.printCount === 'number' ? sub.printCount : sub.printStatus === 'printed' ? 1 : 0,
@@ -1873,9 +697,10 @@ app.get('/api/submissions', authenticateToken, requireAdminRole, async (_req: Re
 });
 
 // Admin-only: mark single submission as printed
-app.post('/api/submissions/:enrollId/mark-printed', authenticateToken, requireAdminRole, async (req: AuthenticatedRequest, res: Response) => {
+app.post('/api/submissions/:enrollId/mark-printed', authenticateToken, requireAdminRole, (req: AuthenticatedRequest, res: Response) => {
   const { enrollId } = req.params;
-  const record = await getSubmissionRecord(enrollId);
+  const submissions = readJsonFile<Record<string, any>>(SUBMISSIONS_FILE, {});
+  const record = submissions[enrollId];
 
   if (!record) {
     res.status(404).json({ error: `Submission for Enrollment ID "${enrollId}" not found.` });
@@ -1884,34 +709,33 @@ app.post('/api/submissions/:enrollId/mark-printed', authenticateToken, requireAd
 
   const now = new Date().toISOString();
   const isFirstPrint = record.printStatus !== 'printed';
-  const newPrintCount = (record.printCount || 0) + 1;
-  const reprintHistory = Array.isArray(record.reprintHistory) ? [...record.reprintHistory] : [];
+  record.printStatus = 'printed';
+  record.printedAt = now;
+  record.printCount = (record.printCount || 0) + 1;
+  if (!Array.isArray(record.reprintHistory)) record.reprintHistory = [];
 
-  reprintHistory.push({
+  record.reprintHistory.push({
     printedAt: now,
     printedBy: req.user.name || req.user.username,
     action: isFirstPrint ? 'initial_print' : 'reprint',
     note: req.body?.note || (isFirstPrint ? 'Initial ID card printed' : 'Card reprint completed'),
   });
 
-  const updated = await updateSubmissionRecord(enrollId, {
-    printStatus: 'printed',
-    printedAt: now,
-    printCount: newPrintCount,
-    reprintHistory,
-  });
+  submissions[enrollId] = record;
+  writeJsonFile(SUBMISSIONS_FILE, submissions);
 
   res.json({
     success: true,
     message: `Card for ${enrollId} marked as printed.`,
-    record: updated,
+    record,
   });
 });
 
 // Admin-only: log a reprint action
-app.post('/api/submissions/:enrollId/reprint', authenticateToken, requireAdminRole, async (req: AuthenticatedRequest, res: Response) => {
+app.post('/api/submissions/:enrollId/reprint', authenticateToken, requireAdminRole, (req: AuthenticatedRequest, res: Response) => {
   const { enrollId } = req.params;
-  const record = await getSubmissionRecord(enrollId);
+  const submissions = readJsonFile<Record<string, any>>(SUBMISSIONS_FILE, {});
+  const record = submissions[enrollId];
 
   if (!record) {
     res.status(404).json({ error: `Submission for Enrollment ID "${enrollId}" not found.` });
@@ -1919,66 +743,62 @@ app.post('/api/submissions/:enrollId/reprint', authenticateToken, requireAdminRo
   }
 
   const now = new Date().toISOString();
-  const newPrintCount = (record.printCount || 1) + 1;
-  const reprintHistory = Array.isArray(record.reprintHistory) ? [...record.reprintHistory] : [];
+  record.printStatus = 'printed';
+  record.printedAt = now;
+  record.printCount = (record.printCount || 1) + 1;
+  if (!Array.isArray(record.reprintHistory)) record.reprintHistory = [];
 
-  reprintHistory.push({
+  record.reprintHistory.push({
     printedAt: now,
     printedBy: req.user.name || req.user.username,
     action: 'reprint',
     note: req.body?.note || 'Reprint issued by administrator',
   });
 
-  const updated = await updateSubmissionRecord(enrollId, {
-    printStatus: 'printed',
-    printedAt: now,
-    printCount: newPrintCount,
-    reprintHistory,
-  });
+  submissions[enrollId] = record;
+  writeJsonFile(SUBMISSIONS_FILE, submissions);
 
   res.json({
     success: true,
-    message: `Card for ${enrollId} marked as reprinted (Print #${newPrintCount}).`,
-    record: updated,
+    message: `Card for ${enrollId} marked as reprinted (Print #${record.printCount}).`,
+    record,
   });
 });
 
 // Admin-only: bulk mark multiple submissions as printed
-app.post('/api/submissions/bulk-mark-printed', authenticateToken, requireAdminRole, async (req: AuthenticatedRequest, res: Response) => {
+app.post('/api/submissions/bulk-mark-printed', authenticateToken, requireAdminRole, (req: AuthenticatedRequest, res: Response) => {
   const { enrollIds, note } = req.body;
   if (!Array.isArray(enrollIds) || enrollIds.length === 0) {
     res.status(400).json({ error: 'Expected non-empty array of enrollIds.' });
     return;
   }
 
+  const submissions = readJsonFile<Record<string, any>>(SUBMISSIONS_FILE, {});
   const now = new Date().toISOString();
   let updatedCount = 0;
 
   for (const enrollId of enrollIds) {
-    const record = await getSubmissionRecord(enrollId);
+    const record = submissions[enrollId];
     if (record) {
       const isFirstPrint = record.printStatus !== 'printed';
-      const newPrintCount = (record.printCount || 0) + 1;
-      const reprintHistory = Array.isArray(record.reprintHistory) ? [...record.reprintHistory] : [];
+      record.printStatus = 'printed';
+      record.printedAt = now;
+      record.printCount = (record.printCount || 0) + 1;
+      if (!Array.isArray(record.reprintHistory)) record.reprintHistory = [];
 
-      reprintHistory.push({
+      record.reprintHistory.push({
         printedAt: now,
         printedBy: req.user.name || req.user.username,
         action: isFirstPrint ? 'initial_print' : 'reprint',
         note: note || (isFirstPrint ? 'Batch print output' : 'Batch reprint output'),
       });
 
-      await updateSubmissionRecord(enrollId, {
-        printStatus: 'printed',
-        printedAt: now,
-        printCount: newPrintCount,
-        reprintHistory,
-      });
-
+      submissions[enrollId] = record;
       updatedCount++;
     }
   }
 
+  writeJsonFile(SUBMISSIONS_FILE, submissions);
   res.json({
     success: true,
     message: `Successfully marked ${updatedCount} submissions as printed.`,
@@ -1987,88 +807,45 @@ app.post('/api/submissions/bulk-mark-printed', authenticateToken, requireAdminRo
 });
 
 // Admin-only: delete submission to allow resubmission if needed
-app.delete('/api/submissions/:enrollId', authenticateToken, requireAdminRole, async (req: Request, res: Response) => {
+app.delete('/api/submissions/:enrollId', authenticateToken, requireAdminRole, (req: Request, res: Response) => {
   const { enrollId } = req.params;
-  const existing = await getSubmissionRecord(enrollId);
+  const submissions = readJsonFile<Record<string, any>>(SUBMISSIONS_FILE, {});
 
-  if (!existing) {
+  if (!submissions[enrollId]) {
     res.status(404).json({ error: `Submission for Enrollment ID "${enrollId}" not found.` });
     return;
   }
 
-  await deleteSubmissionRecord(enrollId);
+  delete submissions[enrollId];
+  writeJsonFile(SUBMISSIONS_FILE, submissions);
   res.json({ success: true, message: `Submission for ${enrollId} deleted.` });
 });
 
 // --- SETTINGS (ADMIN CONFIGURABLE & PUBLIC CONFIRMATION MESSAGE) ---
 
-// Public settings endpoint: get public confirmation message & form status without requiring authentication
-app.get('/api/settings/public', async (_req: Request, res: Response) => {
-  const settings = await getApplicationSettings();
-  res.json({
-    supervisorSuccessMessage: settings.supervisorSuccessMessage,
-    supervisorFormEnabled: settings.supervisorFormEnabled !== false,
-    supervisorFormDisabledMessage: settings.supervisorFormDisabledMessage,
-    pdfPrintLayout: settings.pdfPrintLayout,
-    loginBackgroundImage: settings.loginBackgroundImage || '/assets/default_login_bg.jpg',
-    paperSize: settings.paperSize || 'a4',
-    cardsPerPage: settings.cardsPerPage || 9,
-  });
+// Authenticated users (including supervisors): get public confirmation message
+app.get('/api/settings/public', authenticateToken, (_req: Request, res: Response) => {
+  const settings = readJsonFile<AppSettings>(SETTINGS_FILE, DEFAULT_SETTINGS);
+  res.json({ supervisorSuccessMessage: settings.supervisorSuccessMessage || DEFAULT_SETTINGS.supervisorSuccessMessage });
 });
 
 // Admin-only: get full application settings
-app.get('/api/settings', authenticateToken, requireAdminRole, async (_req: Request, res: Response) => {
-  const settings = await getApplicationSettings();
+app.get('/api/settings', authenticateToken, requireAdminRole, (_req: Request, res: Response) => {
+  const settings = readJsonFile<AppSettings>(SETTINGS_FILE, DEFAULT_SETTINGS);
   res.json(settings);
 });
 
 // Admin-only: update application settings
-app.put('/api/settings', authenticateToken, requireAdminRole, async (req: Request, res: Response) => {
-  const updated = await updateApplicationSettings({
-    supervisorSuccessMessage: req.body.supervisorSuccessMessage,
-    supervisorFormEnabled: req.body.supervisorFormEnabled,
-    supervisorFormDisabledMessage: req.body.supervisorFormDisabledMessage,
-    pdfPrintLayout: req.body.pdfPrintLayout,
-    loginBackgroundImage: req.body.loginBackgroundImage,
-    paperSize: req.body.paperSize,
-    cardsPerPage: req.body.cardsPerPage,
-  });
+app.put('/api/settings', authenticateToken, requireAdminRole, (req: Request, res: Response) => {
+  const current = readJsonFile<AppSettings>(SETTINGS_FILE, DEFAULT_SETTINGS);
+  const updated: AppSettings = {
+    ...current,
+    supervisorSuccessMessage: req.body.supervisorSuccessMessage !== undefined
+      ? String(req.body.supervisorSuccessMessage).trim()
+      : current.supervisorSuccessMessage,
+  };
+  writeJsonFile(SETTINGS_FILE, updated);
   res.json(updated);
-});
-
-// Database status endpoint (Admin view)
-app.get('/api/system/db-status', authenticateToken, requireAdminRole, (_req: Request, res: Response) => {
-  res.json({
-    databaseType: isMongoConnected ? 'MongoDB Atlas' : 'Local Persistent Storage (Fallback)',
-    isMongoConnected,
-    hasMongoUriConfigured: Boolean(process.env.MONGODB_URI),
-    connectionStatus: isMongoConnected
-      ? 'connected'
-      : mongoConnectionFailed
-      ? 'connection_failed'
-      : 'local_storage',
-    error: mongoErrorMessage || null,
-    storagePath: DATA_DIR,
-  });
-});
-
-// Database offline / connection error middleware for graceful resilience
-app.use((err: any, req: Request, res: Response, next: NextFunction) => {
-  if (err && (err instanceof DatabaseConnectionError || err.name === 'DatabaseConnectionError')) {
-    console.warn('[AI Studio] Database connection error (preventing silent empty fallback):', err.message);
-    return res.status(503).json({
-      error: 'Production database is temporarily unavailable. Local fallback storage has no records.',
-      code: 'DATABASE_UNAVAILABLE',
-    });
-  }
-  if (err && (err.name === 'MongooseError' || err.name === 'MongoNetworkError' || (typeof err.message === 'string' && err.message.includes('buffering timed out')))) {
-    console.warn('[AI Studio] Database offline or buffering error — returning graceful response');
-    if (req.method === 'GET') {
-      return res.json(req.path.endsWith('s') || req.path.endsWith('s/') ? [] : {});
-    }
-    return res.status(503).json({ error: 'Service temporarily unavailable (database offline)' });
-  }
-  next(err);
 });
 
 // =========================================================================
@@ -2076,9 +853,6 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
 // =========================================================================
 
 async function startServer() {
-  // Asynchronously connect to MongoDB Atlas on startup
-  await connectMongoDB();
-
   const isProduction = process.env.NODE_ENV === 'production';
   const distPath = path.resolve(__dirname, 'dist');
 
@@ -2088,7 +862,7 @@ async function startServer() {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   } else {
-    // Mount Vite middleware in development (HMR WebSocket disabled to prevent port collisions)
+    // Mount Vite middleware in development (HMR WebSocket disabled to prevent port 24678 collisions)
     const vite = await createViteServer({
       server: {
         middlewareMode: true,
@@ -2101,11 +875,6 @@ async function startServer() {
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server is running at http://0.0.0.0:${PORT}`);
-    if (isMongoConnected) {
-      console.log(`Connected to MongoDB Atlas using collections: users, master_employees, submissions, settings`);
-    } else {
-      console.log(`Running with local storage. Set MONGODB_URI in environment to connect to MongoDB Atlas.`);
-    }
   });
 }
 

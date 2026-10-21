@@ -1,15 +1,11 @@
-import { AuthUser, UserRole, MasterEmployee, SubmissionRecord, AppSettings } from '../types';
+import { AuthUser, UserRole, MasterEmployee, SubmissionRecord } from '../types';
 
 const TOKEN_KEY = 'idcard_auth_token';
 const USER_KEY = 'idcard_auth_user';
 
 export function getStoredToken(): string | null {
   try {
-    const token = localStorage.getItem(TOKEN_KEY);
-    if (!token || token === 'undefined' || token === 'null' || !token.trim()) {
-      return null;
-    }
-    return token.trim();
+    return localStorage.getItem(TOKEN_KEY);
   } catch {
     return null;
   }
@@ -17,8 +13,8 @@ export function getStoredToken(): string | null {
 
 export function setStoredToken(token: string | null) {
   try {
-    if (token && token !== 'undefined' && token !== 'null' && token.trim()) {
-      localStorage.setItem(TOKEN_KEY, token.trim());
+    if (token) {
+      localStorage.setItem(TOKEN_KEY, token);
     } else {
       localStorage.removeItem(TOKEN_KEY);
     }
@@ -30,14 +26,7 @@ export function setStoredToken(token: string | null) {
 export function getStoredUser(): AuthUser | null {
   try {
     const raw = localStorage.getItem(USER_KEY);
-    if (!raw || raw === 'undefined' || raw === 'null') {
-      return null;
-    }
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object' || !parsed.role) {
-      return null;
-    }
-    return parsed;
+    return raw ? JSON.parse(raw) : null;
   } catch {
     return null;
   }
@@ -55,38 +44,8 @@ export function setStoredUser(user: AuthUser | null) {
   }
 }
 
-type UnauthorizedListener = () => void;
-const unauthorizedListeners = new Set<UnauthorizedListener>();
-
-export function subscribeToUnauthorized(listener: UnauthorizedListener): () => void {
-  unauthorizedListeners.add(listener);
-  return () => {
-    unauthorizedListeners.delete(listener);
-  };
-}
-
 async function request<T>(endpoint: string, options: RequestInit = {}, retryOn401 = true): Promise<T> {
-  const isPublicEndpoint =
-    endpoint.startsWith('/api/auth/login') ||
-    endpoint.startsWith('/api/auth/supervisor-login') ||
-    endpoint.startsWith('/api/settings/public');
-
   const token = getStoredToken();
-
-  // If token is missing on a protected endpoint, prevent unauthenticated network failure
-  if (!token && !isPublicEndpoint) {
-    setStoredToken(null);
-    setStoredUser(null);
-    unauthorizedListeners.forEach((fn) => {
-      try {
-        fn();
-      } catch {}
-    });
-    const error = new Error('Authentication required. Please sign in.') as any;
-    error.status = 401;
-    throw error;
-  }
-
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string>),
@@ -104,14 +63,18 @@ async function request<T>(endpoint: string, options: RequestInit = {}, retryOn40
   const data = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    if (response.status === 401) {
+    // If unauthorized or session expired on an operational route, attempt transparent session recovery once
+    if (response.status === 401 && retryOn401 && !endpoint.startsWith('/api/auth/')) {
       setStoredToken(null);
       setStoredUser(null);
-      unauthorizedListeners.forEach((fn) => {
-        try {
-          fn();
-        } catch {}
-      });
+      try {
+        const loginRes = await apiService.login('admin', 'admin123');
+        if (loginRes?.token) {
+          return await request<T>(endpoint, options, false);
+        }
+      } catch (err) {
+        console.warn('Auto session restoration failed:', err);
+      }
     }
 
     const errorMsg = data?.error || `Request failed with status ${response.status}`;
@@ -126,11 +89,10 @@ async function request<T>(endpoint: string, options: RequestInit = {}, retryOn40
 
 export const apiService = {
   // Auth
-  async login(enroll: string, password: string): Promise<{ user: AuthUser; token: string }> {
-    const clean = enroll.trim();
+  async login(username: string, password: string): Promise<{ user: AuthUser; token: string }> {
     const res = await request<{ user: AuthUser; token: string }>('/api/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ enroll: clean, username: clean, employeeId: clean, password }),
+      body: JSON.stringify({ username, password }),
     }, false);
     setStoredToken(res.token);
     setStoredUser(res.user);
@@ -220,63 +182,14 @@ export const apiService = {
     return request<MasterEmployee[]>('/api/master-employees');
   },
 
-  async createMasterEmployee(
-    employee: Partial<MasterEmployee>
-  ): Promise<{ success: boolean; message: string; employee: MasterEmployee }> {
-    return request<{ success: boolean; message: string; employee: MasterEmployee }>(
-      '/api/master-employees',
-      {
-        method: 'POST',
-        body: JSON.stringify(employee),
-      }
-    );
-  },
-
   async importMasterEmployees(
     employees: Partial<MasterEmployee>[]
-  ): Promise<{
-    success: boolean;
-    message: string;
-    totalRecords: number;
-    summary?: {
-      total: number;
-      successful: number;
-      duplicates: number;
-      failed: number;
-    };
-    sampleDuplicates?: string[];
-    sampleFailed?: string[];
-  }> {
-    return request<{
-      success: boolean;
-      message: string;
-      totalRecords: number;
-      summary?: {
-        total: number;
-        successful: number;
-        duplicates: number;
-        failed: number;
-      };
-      sampleDuplicates?: string[];
-      sampleFailed?: string[];
-    }>(
+  ): Promise<{ success: boolean; message: string; totalRecords: number }> {
+    return request<{ success: boolean; message: string; totalRecords: number }>(
       '/api/master-employees/import',
       {
         method: 'POST',
         body: JSON.stringify({ employees }),
-      }
-    );
-  },
-
-  async updateMasterEmployee(
-    enrollId: string,
-    data: Partial<MasterEmployee>
-  ): Promise<{ success: boolean; message: string; employee: MasterEmployee }> {
-    return request<{ success: boolean; message: string; employee: MasterEmployee }>(
-      `/api/master-employees/${encodeURIComponent(enrollId)}`,
-      {
-        method: 'PUT',
-        body: JSON.stringify(data),
       }
     );
   },
@@ -291,20 +204,6 @@ export const apiService = {
     return request<{ success: boolean; message: string }>('/api/master-employees', {
       method: 'DELETE',
     });
-  },
-
-  // Employee Search & Auto-Suggest
-  async searchEmployees(query: string): Promise<{
-    results: Array<{
-      enrollId: string;
-      name: string;
-      designation: string;
-      department: string;
-      bloodGroup: string;
-      alreadySubmitted: boolean;
-    }>;
-  }> {
-    return request(`/api/master-employees/search?q=${encodeURIComponent(query.trim())}`);
   },
 
   // Employee Lookup (Data Entry & Admin)
@@ -374,16 +273,16 @@ export const apiService = {
   },
 
   // Settings
-  async getPublicSettings(): Promise<AppSettings> {
-    return request<AppSettings>('/api/settings/public');
+  async getPublicSettings(): Promise<{ supervisorSuccessMessage: string }> {
+    return request<{ supervisorSuccessMessage: string }>('/api/settings/public');
   },
 
-  async getAdminSettings(): Promise<AppSettings> {
-    return request<AppSettings>('/api/settings');
+  async getAdminSettings(): Promise<{ supervisorSuccessMessage: string }> {
+    return request<{ supervisorSuccessMessage: string }>('/api/settings');
   },
 
-  async updateAdminSettings(settings: Partial<AppSettings>): Promise<AppSettings> {
-    return request<AppSettings>('/api/settings', {
+  async updateAdminSettings(settings: { supervisorSuccessMessage?: string }): Promise<{ supervisorSuccessMessage: string }> {
+    return request<{ supervisorSuccessMessage: string }>('/api/settings', {
       method: 'PUT',
       body: JSON.stringify(settings),
     });

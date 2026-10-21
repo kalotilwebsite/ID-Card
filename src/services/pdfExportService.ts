@@ -8,37 +8,16 @@ export interface ExportProgressCallback {
 
 export const PAPER_DIMENSIONS_MM: Record<string, { width: number; height: number }> = {
   a4: { width: 210, height: 297 },
-  a5: { width: 148, height: 210 },
-  a3: { width: 297, height: 420 },
   letter: { width: 215.9, height: 279.4 },
-  legal: { width: 215.9, height: 355.6 },
 };
 
-export interface CalculatedPrintGeometry {
-  pageWidthMm: number;
-  pageHeightMm: number;
-  cardWidthMm: number;
-  cardHeightMm: number;
-  gapX: number;
-  gapY: number;
-  startX: number;
-  startY: number;
-  scaleFactor: number;
-  cols: number;
-  rows: number;
-  cardsPerPage: number;
-  pairsPerPage: number;
-  colsOfPairs: number;
-  rowsOfPairs: number;
-}
-
-/**
- * Calculates print geometry strictly guaranteeing that every card, crop mark,
- * and text element stays completely inside the page boundaries.
- * If requested configuration exceeds page printable area, proportionally scales cards
- * while strictly preserving the aspect ratio.
- */
-export function calculatePrintGeometry(settings: PrintSettings): CalculatedPrintGeometry {
+export const exportCardsToPdf = async (
+  employees: EmployeeCardData[],
+  settings: PrintSettings,
+  companyConfig: CompanyTemplateConfig,
+  renderElementGetter: (empId: string, side: 'front' | 'back') => HTMLElement | null,
+  onProgress?: ExportProgressCallback
+): Promise<Blob> => {
   const isLandscape = settings.orientation === 'landscape';
   const paper =
     settings.paperSize === 'custom'
@@ -48,247 +27,86 @@ export function calculatePrintGeometry(settings: PrintSettings): CalculatedPrint
         }
       : PAPER_DIMENSIONS_MM[settings.paperSize] || { width: 210, height: 297 };
 
-  // Page dimensions in mm
-  const pageWidthMm = isLandscape ? Math.max(paper.width, paper.height) : Math.min(paper.width, paper.height);
-  const pageHeightMm = isLandscape ? Math.min(paper.width, paper.height) : Math.max(paper.width, paper.height);
-
-  // Preserve badge aspect ratio (default 54 x 85.6 mm -> 85.6 / 54 = ~1.585185)
-  const nominalW = Math.max(10, Number(settings.cardWidthMm) || 54);
-  const nominalH = Math.max(10, Number(settings.cardHeightMm) || 85.6);
-  const badgeAspectRatio = nominalH / nominalW;
-
-  const cols = Math.max(1, Number(settings.columnsPerPage) || 1);
-  const rows = Math.max(1, Number(settings.rowsPerPage) || 1);
-
-  // Margin safety minimum to avoid cutting off edge or crop marks
-  const minSafeMargin = settings.showCutMarks ? 4.5 : 2.5;
-  const userMarginL = Math.max(minSafeMargin, Number(settings.marginsMm?.left) || 10);
-  const userMarginR = Math.max(minSafeMargin, Number(settings.marginsMm?.right) || 10);
-  const userMarginT = Math.max(minSafeMargin, Number(settings.marginsMm?.top) || 10);
-  const userMarginB = Math.max(minSafeMargin, Number(settings.marginsMm?.bottom) || 10);
-
-  // Available printable area
-  let availW = pageWidthMm - userMarginL - userMarginR;
-  let availH = pageHeightMm - userMarginT - userMarginB;
-  if (availW < 20 || availH < 20) {
-    availW = Math.max(15, pageWidthMm - minSafeMargin * 2);
-    availH = Math.max(15, pageHeightMm - minSafeMargin * 2);
-  }
-
-  const baseGapX = Math.max(0.5, Number(settings.spacingMm?.horizontal) ?? 5);
-  const baseGapY = Math.max(0.5, Number(settings.spacingMm?.vertical) ?? 5);
-
-  let colsOfPairs = 1;
-  let rowsOfPairs = 1;
-  let unitsAcross = cols;
-  let unitsDown = rows;
-  let cardsPerPage = cols * rows;
-  let pairsPerPage = cardsPerPage;
-
-  if (settings.layoutMode === 'side-by-side') {
-    colsOfPairs = Math.max(1, Math.floor(cols / 2));
-    unitsAcross = colsOfPairs * 2;
-    unitsDown = rows;
-    pairsPerPage = colsOfPairs * rows;
-    cardsPerPage = pairsPerPage;
-  } else if (settings.layoutMode === 'top-and-bottom') {
-    rowsOfPairs = Math.max(1, Math.floor(rows / 2));
-    unitsAcross = cols;
-    unitsDown = rowsOfPairs * 2;
-    pairsPerPage = cols * rowsOfPairs;
-    cardsPerPage = pairsPerPage;
-  }
-
-  // Calculate maximum card width that fits horizontally & vertically
-  const maxWByWidth = (availW - (unitsAcross - 1) * baseGapX) / unitsAcross;
-  const maxWByHeight = (availH - (unitsDown - 1) * baseGapY) / (unitsDown * badgeAspectRatio);
-
-  let targetCardW = Math.min(nominalW, maxWByWidth, maxWByHeight);
-  let scaleFactor = targetCardW / nominalW;
-
-  let gapX = baseGapX;
-  let gapY = baseGapY;
-
-  // If cards need to scale down to fit the page, scale gaps proportionally as well
-  if (scaleFactor < 1.0) {
-    scaleFactor = Math.max(0.15, scaleFactor);
-    gapX = Math.max(0.5, baseGapX * scaleFactor);
-    gapY = Math.max(0.5, baseGapY * scaleFactor);
-
-    // Recompute target width with scaled gaps
-    const refinedMaxWByWidth = (availW - (unitsAcross - 1) * gapX) / unitsAcross;
-    const refinedMaxWByHeight = (availH - (unitsDown - 1) * gapY) / (unitsDown * badgeAspectRatio);
-    targetCardW = Math.max(10, Math.min(nominalW, refinedMaxWByWidth, refinedMaxWByHeight));
-    scaleFactor = targetCardW / nominalW;
-  }
-
-  const targetCardH = targetCardW * badgeAspectRatio;
-
-  // Calculate total grid extent
-  const gridW = unitsAcross * targetCardW + (unitsAcross - 1) * gapX;
-  const gridH = unitsDown * targetCardH + (unitsDown - 1) * gapY;
-
-  // Center grid on page within safe bounds
-  const startX = Math.max(minSafeMargin, (pageWidthMm - gridW) / 2);
-  const startY = Math.max(minSafeMargin, (pageHeightMm - gridH) / 2);
-
-  return {
-    pageWidthMm,
-    pageHeightMm,
-    cardWidthMm: targetCardW,
-    cardHeightMm: targetCardH,
-    gapX,
-    gapY,
-    startX,
-    startY,
-    scaleFactor,
-    cols,
-    rows,
-    cardsPerPage,
-    pairsPerPage,
-    colsOfPairs,
-    rowsOfPairs,
-  };
-}
-
-/**
- * Ensures all images inside an element are fully decoded into memory before canvas snapshot.
- */
-export async function ensureElementImagesLoaded(element: HTMLElement): Promise<void> {
-  const images = Array.from(element.querySelectorAll('img'));
-  await Promise.all(
-    images.map((img) => {
-      if (img.complete && img.naturalWidth !== 0) {
-        return Promise.resolve();
-      }
-      return new Promise<void>((resolve) => {
-        const timer = setTimeout(() => resolve(), 2500);
-        img.onload = () => {
-          clearTimeout(timer);
-          resolve();
-        };
-        img.onerror = () => {
-          clearTimeout(timer);
-          resolve();
-        };
-      });
-    })
-  );
-}
-
-/**
- * Capture card element to crisp, high-resolution PNG data URL.
- */
-export async function captureCardToPng(element: HTMLElement): Promise<string> {
-  await ensureElementImagesLoaded(element);
-
-  const canvas = await html2canvas(element, {
-    scale: 3, // 3x scale renders 300 DPI print quality
-    useCORS: true,
-    allowTaint: true,
-    backgroundColor: '#ffffff',
-    logging: false,
-    scrollX: 0,
-    scrollY: 0,
-  });
-
-  return canvas.toDataURL('image/png');
-}
-
-export const exportCardsToPdf = async (
-  employees: EmployeeCardData[],
-  settings: PrintSettings,
-  companyConfig: CompanyTemplateConfig,
-  renderElementGetter: (empId: string, side: 'front' | 'back') => HTMLElement | null,
-  onProgress?: ExportProgressCallback
-): Promise<Blob> => {
-  const geom = calculatePrintGeometry(settings);
-  const {
-    pageWidthMm,
-    pageHeightMm,
-    cardWidthMm: cardW,
-    cardHeightMm: cardH,
-    gapX,
-    gapY,
-    startX,
-    startY,
-    scaleFactor,
-    cols,
-    cardsPerPage,
-    pairsPerPage,
-    colsOfPairs,
-  } = geom;
+  const pageWidthMm = isLandscape ? paper.height : paper.width;
+  const pageHeightMm = isLandscape ? paper.width : paper.height;
 
   const pdf = new jsPDF({
     orientation: settings.orientation,
     unit: 'mm',
     format: [pageWidthMm, pageHeightMm],
-    compress: true,
   });
 
-  // Pre-render card images using html2canvas with lossless PNG
+  const cardW = settings.cardWidthMm; // e.g. 54mm
+  const cardH = settings.cardHeightMm; // e.g. 85.6mm
+  const cols = settings.columnsPerPage;
+  const rows = settings.rowsPerPage;
+  const cardsPerPage = cols * rows;
+
+  const marginLeft = settings.marginsMm.left;
+  const marginTop = settings.marginsMm.top;
+  const gapX = settings.spacingMm.horizontal;
+  const gapY = settings.spacingMm.vertical;
+
+  // Pre-render card images using html2canvas
   const totalCards = employees.length;
   const renderedImages: Record<string, { front?: string; back?: string }> = {};
 
   for (let i = 0; i < employees.length; i++) {
     const emp = employees[i];
     if (onProgress) {
-      onProgress(i + 1, totalCards, `Rendering card graphics (${i + 1}/${totalCards})...`);
+      onProgress(i + 1, totalCards, `Rendering card images (${i + 1}/${totalCards})...`);
     }
 
     renderedImages[emp.id] = {};
 
     const frontEl = renderElementGetter(emp.id, 'front');
     if (frontEl) {
-      try {
-        renderedImages[emp.id].front = await captureCardToPng(frontEl);
-      } catch (err) {
-        console.warn(`Failed to capture front for ${emp.id}:`, err);
-      }
+      const canvas = await html2canvas(frontEl, {
+        scale: 2.5,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+      });
+      renderedImages[emp.id].front = canvas.toDataURL('image/jpeg', 0.95);
     }
 
     const backEl = renderElementGetter(emp.id, 'back');
     if (backEl) {
-      try {
-        renderedImages[emp.id].back = await captureCardToPng(backEl);
-      } catch (err) {
-        console.warn(`Failed to capture back for ${emp.id}:`, err);
-      }
+      const canvas = await html2canvas(backEl, {
+        scale: 2.5,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+      });
+      renderedImages[emp.id].back = canvas.toDataURL('image/jpeg', 0.95);
     }
   }
 
-  // Draw crop marks function strictly clamped within page boundary
+  // Draw crop marks function
   const drawCropMarks = (x: number, y: number, w: number, h: number) => {
     if (!settings.showCutMarks) return;
-    const len = Math.min(3, Math.max(1.2, 3 * scaleFactor));
-    const offset = Math.min(1.5, Math.max(0.6, 1.5 * scaleFactor));
+    const len = 3; // mm
+    const offset = 1.5; // mm
     pdf.setDrawColor(180, 180, 180);
-    pdf.setLineWidth(0.12);
+    pdf.setLineWidth(0.15);
 
     // Top-left
-    const x1 = Math.max(0.5, x - offset - len);
-    const x2 = Math.max(0.5, x - offset);
-    if (x2 > x1) pdf.line(x1, y, x2, y);
-
-    const y1 = Math.max(0.5, y - offset - len);
-    const y2 = Math.max(0.5, y - offset);
-    if (y2 > y1) pdf.line(x, y1, x, y2);
+    pdf.line(x - offset - len, y, x - offset, y);
+    pdf.line(x, y - offset - len, x, y - offset);
 
     // Top-right
-    const x3 = Math.min(pageWidthMm - 0.5, x + w + offset);
-    const x4 = Math.min(pageWidthMm - 0.5, x + w + offset + len);
-    if (x4 > x3) pdf.line(x3, y, x4, y);
-    if (y2 > y1) pdf.line(x + w, y1, x + w, y2);
+    pdf.line(x + w + offset, y, x + w + offset + len, y);
+    pdf.line(x + w, y - offset - len, x + w, y - offset);
 
     // Bottom-left
-    if (x2 > x1) pdf.line(x1, y + h, x2, y + h);
-    const y3 = Math.min(pageHeightMm - 0.5, y + h + offset);
-    const y4 = Math.min(pageHeightMm - 0.5, y + h + offset + len);
-    if (y4 > y3) pdf.line(x, y3, x, y4);
+    pdf.line(x - offset - len, y + h, x - offset, y + h);
+    pdf.line(x, y + h + offset, x, y + h + offset + len);
 
     // Bottom-right
-    if (x4 > x3) pdf.line(x3, y + h, x4, y + h);
-    if (y4 > y3) pdf.line(x + w, y3, x + w, y4);
+    pdf.line(x + w + offset, y + h, x + w + offset + len, y + h);
+    pdf.line(x + w, y + h + offset, x + w, y + h + offset + len);
   };
 
   // Generate PDF Pages based on layoutMode
@@ -305,12 +123,12 @@ export const exportCardsToPdf = async (
       batchEmployees.forEach((emp, slotIdx) => {
         const col = slotIdx % cols;
         const row = Math.floor(slotIdx / cols);
-        const x = startX + col * (cardW + gapX);
-        const y = startY + row * (cardH + gapY);
+        const x = marginLeft + col * (cardW + gapX);
+        const y = marginTop + row * (cardH + gapY);
 
         const imgData = renderedImages[emp.id]?.front;
         if (imgData) {
-          pdf.addImage(imgData, 'PNG', x, y, cardW, cardH, undefined, 'FAST');
+          pdf.addImage(imgData, 'JPEG', x, y, cardW, cardH);
           drawCropMarks(x, y, cardW, cardH);
         }
       });
@@ -323,18 +141,20 @@ export const exportCardsToPdf = async (
         const row = Math.floor(slotIdx / cols);
         // Mirrored column position
         const mirroredCol = cols - 1 - originalCol;
-        const x = startX + mirroredCol * (cardW + gapX);
-        const y = startY + row * (cardH + gapY);
+        const x = marginLeft + mirroredCol * (cardW + gapX);
+        const y = marginTop + row * (cardH + gapY);
 
         const imgData = renderedImages[emp.id]?.back;
         if (imgData) {
-          pdf.addImage(imgData, 'PNG', x, y, cardW, cardH, undefined, 'FAST');
+          pdf.addImage(imgData, 'JPEG', x, y, cardW, cardH);
           drawCropMarks(x, y, cardW, cardH);
         }
       });
     }
   } else if (settings.layoutMode === 'side-by-side') {
-    // Side by side: Front on left, Back on right for each card
+    // Side by side: Front and Back adjacent on the same page
+    // Each pair takes 2 slots
+    const pairsPerPage = Math.floor(cardsPerPage / 2) || 1;
     const totalBatches = Math.ceil(employees.length / pairsPerPage);
 
     for (let batchIdx = 0; batchIdx < totalBatches; batchIdx++) {
@@ -343,60 +163,30 @@ export const exportCardsToPdf = async (
       const batch = employees.slice(batchIdx * pairsPerPage, (batchIdx + 1) * pairsPerPage);
 
       batch.forEach((emp, pairIdx) => {
-        const colPair = pairIdx % colsOfPairs;
-        const row = Math.floor(pairIdx / colsOfPairs);
+        const slotFront = pairIdx * 2;
+        const slotBack = pairIdx * 2 + 1;
 
-        // Front (Left)
-        const xF = startX + colPair * (cardW * 2 + gapX * 2);
-        const yF = startY + row * (cardH + gapY);
+        // Front
+        const colF = slotFront % cols;
+        const rowF = Math.floor(slotFront / cols);
+        const xF = marginLeft + colF * (cardW + gapX);
+        const yF = marginTop + rowF * (cardH + gapY);
 
-        // Back (Right)
-        const xB = xF + cardW + gapX;
-        const yB = yF;
+        // Back
+        const colB = slotBack % cols;
+        const rowB = Math.floor(slotBack / cols);
+        const xB = marginLeft + colB * (cardW + gapX);
+        const yB = marginTop + rowB * (cardH + gapY);
 
         const imgFront = renderedImages[emp.id]?.front;
         if (imgFront) {
-          pdf.addImage(imgFront, 'PNG', xF, yF, cardW, cardH, undefined, 'FAST');
+          pdf.addImage(imgFront, 'JPEG', xF, yF, cardW, cardH);
           drawCropMarks(xF, yF, cardW, cardH);
         }
 
         const imgBack = renderedImages[emp.id]?.back;
         if (imgBack) {
-          pdf.addImage(imgBack, 'PNG', xB, yB, cardW, cardH, undefined, 'FAST');
-          drawCropMarks(xB, yB, cardW, cardH);
-        }
-      });
-    }
-  } else if (settings.layoutMode === 'top-and-bottom') {
-    // Top and Bottom: Front at top, Back at bottom for each card
-    const totalBatches = Math.ceil(employees.length / pairsPerPage);
-
-    for (let batchIdx = 0; batchIdx < totalBatches; batchIdx++) {
-      if (batchIdx > 0) pdf.addPage([pageWidthMm, pageHeightMm], settings.orientation);
-
-      const batch = employees.slice(batchIdx * pairsPerPage, (batchIdx + 1) * pairsPerPage);
-
-      batch.forEach((emp, pairIdx) => {
-        const col = pairIdx % cols;
-        const rowPair = Math.floor(pairIdx / cols);
-
-        // Front (Top)
-        const xF = startX + col * (cardW + gapX);
-        const yF = startY + rowPair * (cardH * 2 + gapY * 2);
-
-        // Back (Bottom)
-        const xB = xF;
-        const yB = yF + cardH + gapY;
-
-        const imgFront = renderedImages[emp.id]?.front;
-        if (imgFront) {
-          pdf.addImage(imgFront, 'PNG', xF, yF, cardW, cardH, undefined, 'FAST');
-          drawCropMarks(xF, yF, cardW, cardH);
-        }
-
-        const imgBack = renderedImages[emp.id]?.back;
-        if (imgBack) {
-          pdf.addImage(imgBack, 'PNG', xB, yB, cardW, cardH, undefined, 'FAST');
+          pdf.addImage(imgBack, 'JPEG', xB, yB, cardW, cardH);
           drawCropMarks(xB, yB, cardW, cardH);
         }
       });
@@ -414,12 +204,12 @@ export const exportCardsToPdf = async (
       batch.forEach((emp, slotIdx) => {
         const col = slotIdx % cols;
         const row = Math.floor(slotIdx / cols);
-        const x = startX + col * (cardW + gapX);
-        const y = startY + row * (cardH + gapY);
+        const x = marginLeft + col * (cardW + gapX);
+        const y = marginTop + row * (cardH + gapY);
 
         const imgData = renderedImages[emp.id]?.[side];
         if (imgData) {
-          pdf.addImage(imgData, 'PNG', x, y, cardW, cardH, undefined, 'FAST');
+          pdf.addImage(imgData, 'JPEG', x, y, cardW, cardH);
           drawCropMarks(x, y, cardW, cardH);
         }
       });

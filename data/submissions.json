@@ -56,7 +56,7 @@
     "submittedAt": "2026-10-20T07:48:13.086Z"
   },
   "586667": {
-    "id": "sub-1792487373991-318",
+    "id": "sub-1792485306504-853",
     "enrollId": "586667",
     "nationalId": "19952692018000456",
     "photoUrl": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
@@ -82,71 +82,22 @@
       "employeeId": "SUP-2026-01",
       "role": "supervisor"
     },
-    "submittedAt": "2026-10-20T09:09:33.991Z",
+    "submittedAt": "2026-10-20T08:35:06.504Z",
     "printStatus": "printed",
     "printCount": 2,
-    "printedAt": "2026-10-20T09:09:34.002Z",
+    "printedAt": "2026-10-20T08:35:06.527Z",
     "reprintHistory": [
       {
-        "printedAt": "2026-10-20T09:09:34.001Z",
+        "printedAt": "2026-10-20T08:35:06.524Z",
         "printedBy": "System Administrator",
         "action": "initial_print",
         "note": "Test initial print verification"
       },
       {
-        "printedAt": "2026-10-20T09:09:34.002Z",
+        "printedAt": "2026-10-20T08:35:06.527Z",
         "printedBy": "System Administrator",
         "action": "reprint",
         "note": "Card damaged in packaging; reprint requested"
-      }
-    ]
-  },
-  "BULK-TEST-001": {
-    "id": "sub-1792569707450-575",
-    "enrollId": "BULK-TEST-001",
-    "nationalId": "1998543210123",
-    "photoUrl": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
-    "signatureUrl": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
-    "employee": {
-      "enrollId": "BULK-TEST-001",
-      "name": "Bulk Worker One",
-      "designation": "Senior Lead Technician",
-      "department": "Maintenance",
-      "jobType": "Permanent",
-      "joiningDate": "01/03/2026",
-      "cardIssue": "19/10/2026",
-      "emergencyContact": "01700-112233",
-      "permanentAddress": "",
-      "bloodGroup": "AB+",
-      "nationalId": "1998543210123",
-      "photo": "",
-      "signature": "",
-      "importedAt": "2026-10-21T08:01:47.417Z",
-      "updatedAt": "2026-10-21T08:01:47.421Z"
-    },
-    "submittedBy": {
-      "id": "user-supervisor-1",
-      "name": "Production Shift Supervisor",
-      "username": "supervisor1",
-      "employeeId": "SUP-2026-01",
-      "role": "supervisor"
-    },
-    "submittedAt": "2026-10-21T08:01:47.450Z",
-    "printStatus": "printed",
-    "printCount": 2,
-    "printedAt": "2026-10-21T08:01:47.539Z",
-    "reprintHistory": [
-      {
-        "printedAt": "2026-10-21T08:01:47.537Z",
-        "printedBy": "System Administrator",
-        "action": "initial_print",
-        "note": "Test initial print"
-      },
-      {
-        "printedAt": "2026-10-21T08:01:47.539Z",
-        "printedBy": "System Administrator",
-        "action": "reprint",
-        "note": "Reprint verification test"
       }
     ]
   }

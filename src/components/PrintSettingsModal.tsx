@@ -26,6 +26,8 @@ import {
   X,
   AlertCircle,
   Eye,
+  Copy,
+  ChevronDown,
 } from 'lucide-react';
 import {
   calculatePrintGeometry,
@@ -37,6 +39,12 @@ import { exportCardsToExcel } from '../services/excelService';
 import { CardFront } from './CardFront';
 import { CardBack } from './CardBack';
 import { FRONT_TEMPLATE_SVG, BACK_TEMPLATE_SVG } from '../data/cardTemplates';
+import { CopyCardsModal } from './CopyCardsModal';
+import {
+  captureCardElementToBlob,
+  captureCardPairToBlob,
+  copyBlobToClipboard,
+} from '../services/cardImageCopyService';
 import confetti from 'canvas-confetti';
 
 interface PrintSettingsModalProps {
@@ -96,11 +104,142 @@ export const PrintSettingsModal: React.FC<PrintSettingsModalProps> = ({
   const [exportProgressMsg, setExportProgressMsg] = useState('');
   const [exportError, setExportError] = useState<string | null>(null);
 
+  // Card Selection & Copying State
+  const [selectedEmpIds, setSelectedEmpIds] = useState<Set<string>>(
+    () => new Set(employees.map((e) => e.id))
+  );
+  const [isCopyModalOpen, setIsCopyModalOpen] = useState(false);
+  const [copyNotification, setCopyNotification] = useState<string | null>(null);
+  const [isQuickCopying, setIsQuickCopying] = useState(false);
+
+  // Synchronize selection whenever the incoming employees list updates
+  React.useEffect(() => {
+    setSelectedEmpIds(new Set(employees.map((e) => e.id)));
+  }, [employees]);
+
   // Hidden print container ref
   const printSheetRef = useRef<HTMLDivElement>(null);
 
   const effectiveEmployees = employees;
   const cardsCount = effectiveEmployees.length > 0 ? effectiveEmployees.length : (totalCardsCount || 1);
+
+  const selectedEmployees = useMemo(
+    () => effectiveEmployees.filter((e) => selectedEmpIds.has(e.id)),
+    [effectiveEmployees, selectedEmpIds]
+  );
+  const selectedCount = selectedEmployees.length;
+
+  const toggleEmployeeSelection = (id: string) => {
+    setSelectedEmpIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const selectAllEmployees = () => {
+    setSelectedEmpIds(new Set(effectiveEmployees.map((e) => e.id)));
+  };
+
+  const deselectAllEmployees = () => {
+    setSelectedEmpIds(new Set());
+  };
+
+  const getCardDomElement = (empId: string, side: 'front' | 'back'): HTMLElement | null => {
+    const previewEl = document.getElementById(`preview-card-${side}-${empId}`);
+    if (previewEl) return previewEl;
+    if (getCardElement) {
+      const el = getCardElement(empId, side);
+      if (el) return el;
+    }
+    return document.getElementById(`export-${side}-${empId}`);
+  };
+
+  // Quick 1-click copy for an individual card slot
+  const handleQuickCopySlot = async (emp: EmployeeCardData, side: 'front' | 'back') => {
+    setIsQuickCopying(true);
+    setCopyNotification(`Rendering ${side} card for ${emp.name}...`);
+    try {
+      const el = getCardDomElement(emp.id, side);
+      if (!el) throw new Error(`Preview element for ${side} card not found.`);
+      const blob = await captureCardElementToBlob(el, { scale: 3 });
+      const res = await copyBlobToClipboard(blob);
+      if (res.success) {
+        try {
+          confetti({ particleCount: 35, spread: 50, origin: { y: 0.8 } });
+        } catch (e) {}
+        setCopyNotification(
+          `Copied ${side.toUpperCase()} for ${emp.name} to clipboard! Paste into Microsoft Word with Ctrl+V.`
+        );
+        setTimeout(() => setCopyNotification(null), 4500);
+      } else {
+        setIsCopyModalOpen(true);
+      }
+    } catch (err: any) {
+      console.error('Quick copy slot error:', err);
+      setIsCopyModalOpen(true);
+    } finally {
+      setIsQuickCopying(false);
+    }
+  };
+
+  // Main header "Copy Selected Cards" action handler
+  const handleCopySelectedCardsClick = async () => {
+    if (selectedCount === 0) {
+      setCopyNotification('Please select at least one card in the preview.');
+      setTimeout(() => setCopyNotification(null), 3000);
+      return;
+    }
+
+    // Exactly 1 card selected: capture and copy immediately to clipboard as high-res image
+    if (selectedCount === 1) {
+      const emp = selectedEmployees[0];
+      setIsQuickCopying(true);
+      setCopyNotification(`Rendering high-res card image for ${emp.name}...`);
+      try {
+        const f = getCardDomElement(emp.id, 'front');
+        const b = getCardDomElement(emp.id, 'back');
+
+        let blob: Blob;
+        if (settings.layoutMode === 'front-only' || !b) {
+          if (!f) throw new Error('Card front element not found in preview.');
+          blob = await captureCardElementToBlob(f, { scale: 3 });
+        } else if (settings.layoutMode === 'back-only') {
+          if (!b) throw new Error('Card back element not found in preview.');
+          blob = await captureCardElementToBlob(b, { scale: 3 });
+        } else {
+          // side-by-side or top-and-bottom
+          if (!f || !b) throw new Error('Card elements not found in preview.');
+          const arrangement =
+            settings.layoutMode === 'top-and-bottom' ? 'top-and-bottom' : 'side-by-side';
+          blob = await captureCardPairToBlob(f, b, arrangement, 3);
+        }
+
+        const res = await copyBlobToClipboard(blob);
+        if (res.success) {
+          try {
+            confetti({ particleCount: 45, spread: 60, origin: { y: 0.75 } });
+          } catch (e) {}
+          setCopyNotification(
+            `Copied ${emp.name}'s ID card image to clipboard! Ready to paste into Microsoft Word (Ctrl+V).`
+          );
+          setTimeout(() => setCopyNotification(null), 5000);
+        } else {
+          setIsCopyModalOpen(true);
+        }
+      } catch (err: any) {
+        console.error('Single card copy error:', err);
+        setIsCopyModalOpen(true);
+      } finally {
+        setIsQuickCopying(false);
+      }
+    } else {
+      // 2, 3, 5, or more cards selected: open the CopyCardsModal to choose
+      // Combined Layout Image vs Separate Cards Step-by-Step vs ZIP download
+      setIsCopyModalOpen(true);
+    }
+  };
 
   const update = (partial: Partial<PrintSettings>) => {
     onChangeSettings({ ...settings, ...partial });
@@ -457,8 +596,8 @@ export const PrintSettingsModal: React.FC<PrintSettingsModalProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-base font-bold tracking-tight">Print & Page Layout Preview Studio</h2>
-                <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-rose-600/30 text-rose-300 border border-rose-500/40">
-                  {cardsCount} {cardsCount === 1 ? 'Card' : 'Cards'} Selected
+                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-600/30 text-emerald-300 border border-emerald-500/40">
+                  {selectedCount} of {cardsCount} {cardsCount === 1 ? 'Card' : 'Cards'} Selected
                 </span>
               </div>
               <p className="text-xs text-slate-300">
@@ -469,11 +608,40 @@ export const PrintSettingsModal: React.FC<PrintSettingsModalProps> = ({
 
           {/* Quick Actions */}
           <div className="flex items-center gap-2">
+            {/* Copy Selected Cards as Image for Word Button (PROMINENT & HIGHEST PRIORITY) */}
+            <div className="flex items-center shadow-md rounded-xl overflow-hidden ring-1 ring-emerald-400/50">
+              <button
+                onClick={handleCopySelectedCardsClick}
+                disabled={isExporting || selectedCount === 0 || isQuickCopying}
+                className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:from-emerald-700 active:to-teal-700 text-white text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                title="Copy rendered card preview directly to clipboard as high-res PNG for Microsoft Word (Ctrl+V)"
+              >
+                {isQuickCopying ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-emerald-200" />
+                ) : (
+                  <Copy className="w-4 h-4 text-emerald-100" />
+                )}
+                <span>
+                  {selectedCount === 1
+                    ? 'Copy Selected Card (1)'
+                    : `Copy Selected Cards (${selectedCount})`}
+                </span>
+              </button>
+              <button
+                onClick={() => setIsCopyModalOpen(true)}
+                disabled={isExporting || selectedCount === 0}
+                className="px-2 py-2 bg-teal-700 hover:bg-teal-600 active:bg-teal-800 text-teal-100 text-xs font-bold transition-colors border-l border-teal-500/50 cursor-pointer disabled:opacity-50"
+                title="View copy options (Separate Cards, Combined Layout, or ZIP download)"
+              >
+                <ChevronDown className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
             {/* Direct Print Button (Requires NO PDF download) */}
             <button
               onClick={handleDirectPrint}
               disabled={isExporting || effectiveEmployees.length === 0}
-              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-md hover:shadow-lg transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-xl text-xs font-bold border border-slate-700 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
               title="Print directly to connected printer or system print dialog"
             >
               <Printer className="w-4 h-4" />
@@ -484,7 +652,7 @@ export const PrintSettingsModal: React.FC<PrintSettingsModalProps> = ({
             <button
               onClick={handleDownloadPdf}
               disabled={isExporting || effectiveEmployees.length === 0}
-              className="px-4 py-2 bg-rose-600 hover:bg-rose-500 active:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-md hover:shadow-lg transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              className="px-3.5 py-2 bg-rose-600 hover:bg-rose-500 active:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-md hover:shadow-lg transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
               title="Download high-resolution print-ready PDF"
             >
               <Download className="w-4 h-4" />
@@ -526,6 +694,21 @@ export const PrintSettingsModal: React.FC<PrintSettingsModalProps> = ({
         </div>
 
         {/* Progress Bar / Notification Banner */}
+        {copyNotification && (
+          <div className="bg-emerald-600 text-white px-5 py-2.5 flex items-center justify-between text-xs font-bold shadow-sm animate-in fade-in z-20">
+            <div className="flex items-center gap-2">
+              <Check className="w-4 h-4 text-emerald-200" />
+              <span>{copyNotification}</span>
+            </div>
+            <button
+              onClick={() => setCopyNotification(null)}
+              className="text-emerald-200 hover:text-white cursor-pointer px-1.5 py-0.5 rounded"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
         {isExporting && (
           <div className="bg-amber-500/10 border-b border-amber-500/20 px-5 py-2 flex items-center gap-2 text-xs font-semibold text-amber-800 animate-pulse">
             <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-600" />
@@ -879,47 +1062,93 @@ export const PrintSettingsModal: React.FC<PrintSettingsModalProps> = ({
 
           {/* Right Panel: Scrollable Visual Sheet Preview of ALL Selected Cards */}
           <div className="flex-1 bg-slate-200/60 flex flex-col overflow-hidden">
-            {/* Zoom & Sheets Status Bar */}
-            <div className="px-5 py-2.5 bg-white border-b border-slate-200 flex items-center justify-between flex-shrink-0">
-              <div className="flex items-center gap-2 text-xs text-slate-700">
+            {/* Zoom & Sheets Status Bar with Selection Controls */}
+            <div className="px-5 py-2.5 bg-white border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 flex-shrink-0">
+              <div className="flex items-center gap-3 text-xs text-slate-700">
                 <span className="font-bold flex items-center gap-1.5 text-slate-900">
                   <Eye className="w-4 h-4 text-rose-600" />
                   Live Print Sheets Preview
                 </span>
-                <span className="text-slate-400">•</span>
-                <span>
-                  Showing <strong>{pages.length}</strong> {pages.length === 1 ? 'Sheet' : 'Sheets'} ({effectiveEmployees.length} total selected records)
-                </span>
+                <span className="text-slate-300">|</span>
+                <div className="flex items-center gap-2">
+                  <label className="flex items-center gap-1.5 cursor-pointer font-bold text-slate-800">
+                    <input
+                      type="checkbox"
+                      checked={selectedCount === effectiveEmployees.length && effectiveEmployees.length > 0}
+                      onChange={(e) => {
+                        if (e.target.checked) selectAllEmployees();
+                        else deselectAllEmployees();
+                      }}
+                      className="rounded text-emerald-600 focus:ring-0 w-3.5 h-3.5 cursor-pointer"
+                    />
+                    <span>Select All</span>
+                  </label>
+                  <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                    {selectedCount} of {effectiveEmployees.length} Selected
+                  </span>
+                  {selectedCount < effectiveEmployees.length && (
+                    <button
+                      onClick={selectAllEmployees}
+                      className="text-[11px] text-emerald-700 hover:underline font-semibold cursor-pointer"
+                    >
+                      Select All
+                    </button>
+                  )}
+                  {selectedCount > 0 && (
+                    <button
+                      onClick={deselectAllEmployees}
+                      className="text-[11px] text-slate-500 hover:text-rose-600 hover:underline font-semibold cursor-pointer"
+                    >
+                      Deselect All
+                    </button>
+                  )}
+                </div>
               </div>
 
-              {/* Zoom Buttons */}
-              <div className="flex items-center gap-1.5">
+              {/* Action Buttons & Zoom */}
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => setPreviewZoom((z) => Math.max(0.35, z - 0.1))}
-                  className="p-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-600"
-                  title="Zoom Out"
+                  onClick={handleCopySelectedCardsClick}
+                  disabled={selectedCount === 0 || isQuickCopying}
+                  className="px-3 py-1 bg-emerald-50 hover:bg-emerald-100 active:bg-emerald-200 text-emerald-700 border border-emerald-300 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer disabled:opacity-40"
+                  title="Copy selected cards to clipboard for Word"
                 >
-                  <ZoomOut className="w-3.5 h-3.5" />
+                  <Copy className="w-3.5 h-3.5" />
+                  <span>Copy Selected ({selectedCount})</span>
                 </button>
-                <span className="text-xs font-mono font-bold text-slate-700 w-12 text-center">
-                  {Math.round(previewZoom * 100)}%
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setPreviewZoom((z) => Math.min(1.2, z + 0.1))}
-                  className="p-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-600"
-                  title="Zoom In"
-                >
-                  <ZoomIn className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPreviewZoom(0.65)}
-                  className="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-[10px] font-bold text-slate-600 ml-1"
-                >
-                  Fit
-                </button>
+
+                <div className="h-4 w-px bg-slate-300 mx-1" />
+
+                {/* Zoom Buttons */}
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setPreviewZoom((z) => Math.max(0.35, z - 0.1))}
+                    className="p-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-600 cursor-pointer"
+                    title="Zoom Out"
+                  >
+                    <ZoomOut className="w-3.5 h-3.5" />
+                  </button>
+                  <span className="text-xs font-mono font-bold text-slate-700 w-11 text-center">
+                    {Math.round(previewZoom * 100)}%
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setPreviewZoom((z) => Math.min(1.2, z + 0.1))}
+                    className="p-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-600 cursor-pointer"
+                    title="Zoom In"
+                  >
+                    <ZoomIn className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPreviewZoom(0.65)}
+                    className="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-[10px] font-bold text-slate-600 ml-0.5 cursor-pointer"
+                  >
+                    Fit
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -984,6 +1213,7 @@ export const PrintSettingsModal: React.FC<PrintSettingsModalProps> = ({
                             const topPx = card.yMm * DPI_FACTOR;
                             const widthPx = cardWidthMm * DPI_FACTOR;
                             const heightPx = cardHeightMm * DPI_FACTOR;
+                            const isSelected = selectedEmpIds.has(card.employee.id);
 
                             // Scale card component from nominal 284x500 to physical printed box widthPx x heightPx
                             const cardScale = widthPx / 284;
@@ -997,10 +1227,45 @@ export const PrintSettingsModal: React.FC<PrintSettingsModalProps> = ({
                                   top: topPx,
                                   width: widthPx,
                                   height: heightPx,
-                                  overflow: 'hidden',
+                                  overflow: 'visible',
                                 }}
-                                className="print-card-slot"
+                                className={`print-card-slot transition-all ${
+                                  isSelected
+                                    ? 'opacity-100 ring-2 ring-emerald-500/80 shadow-sm'
+                                    : 'opacity-40 ring-1 ring-slate-300'
+                                }`}
                               >
+                                {/* Screen-only overlay controls for Card Selection & 1-Click Copy */}
+                                <div className="screen-only-guide absolute -top-5 left-0 right-0 h-4.5 flex items-center justify-between px-1.5 text-[9px] bg-slate-900/90 text-white rounded-t-md z-20 backdrop-blur-xs select-none shadow-xs">
+                                  <label
+                                    className="flex items-center gap-1 cursor-pointer truncate max-w-[130px]"
+                                    onClick={(e) => e.stopPropagation()}
+                                    title={`Click to ${isSelected ? 'deselect' : 'select'} ${card.employee.name}`}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={isSelected}
+                                      onChange={() => toggleEmployeeSelection(card.employee.id)}
+                                      className="rounded text-emerald-500 focus:ring-0 w-2.5 h-2.5 cursor-pointer"
+                                    />
+                                    <span className="font-bold truncate text-[8.5px]">{card.employee.name}</span>
+                                  </label>
+
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleQuickCopySlot(card.employee, card.side);
+                                    }}
+                                    disabled={isQuickCopying}
+                                    className="px-1.5 py-0.2 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-[8px] font-bold transition-all flex items-center gap-0.5 cursor-pointer shadow-xs disabled:opacity-50"
+                                    title={`Copy this ${card.side} card as high-res PNG to clipboard for Word`}
+                                  >
+                                    <Copy className="w-2.5 h-2.5" />
+                                    <span>Copy</span>
+                                  </button>
+                                </div>
+
                                 <div
                                   style={{
                                     width: 284,
@@ -1008,6 +1273,8 @@ export const PrintSettingsModal: React.FC<PrintSettingsModalProps> = ({
                                     transform: `scale(${cardScale})`,
                                     transformOrigin: 'top left',
                                   }}
+                                  onClick={() => toggleEmployeeSelection(card.employee.id)}
+                                  className="cursor-pointer"
                                 >
                                   {card.side === 'front' ? (
                                     <CardFront
@@ -1040,6 +1307,19 @@ export const PrintSettingsModal: React.FC<PrintSettingsModalProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Copy Selected Cards Modal */}
+      <CopyCardsModal
+        isOpen={isCopyModalOpen}
+        onClose={() => setIsCopyModalOpen(false)}
+        selectedEmployees={selectedEmployees}
+        settings={settings}
+        getCardElement={getCardDomElement}
+        onSuccessNotification={(msg) => {
+          setCopyNotification(msg);
+          setTimeout(() => setCopyNotification(null), 5000);
+        }}
+      />
     </div>
   );
 };

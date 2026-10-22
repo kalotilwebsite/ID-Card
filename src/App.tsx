@@ -100,7 +100,30 @@ export default function App() {
   // Main Card Studio data state
   const [employees, setEmployees] = useState<EmployeeCardData[]>(SAMPLE_EMPLOYEES);
   const [selectedEmpIndex, setSelectedEmpIndex] = useState(0);
-  const [printSettings, setPrintSettings] = useState<PrintSettings>(DEFAULT_PRINT_SETTINGS);
+  const [printSettings, setPrintSettings] = useState<PrintSettings>(() => {
+    try {
+      const saved = localStorage.getItem('id_card_print_settings');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return {
+          ...DEFAULT_PRINT_SETTINGS,
+          ...parsed,
+          marginsMm: {
+            ...DEFAULT_PRINT_SETTINGS.marginsMm,
+            ...(parsed.marginsMm || {}),
+          },
+        };
+      }
+    } catch (e) {}
+    return DEFAULT_PRINT_SETTINGS;
+  });
+
+  const handleUpdatePrintSettings = (newSettings: PrintSettings) => {
+    setPrintSettings(newSettings);
+    try {
+      localStorage.setItem('id_card_print_settings', JSON.stringify(newSettings));
+    } catch (e) {}
+  };
   const [companyConfig, setCompanyConfig] = useState<CompanyTemplateConfig>(DEFAULT_COMPANY_CONFIG);
 
   // Template images
@@ -562,7 +585,8 @@ export default function App() {
         getCardElement,
         (current, total, msg) => {
           setBulkPdfProgress({ current, total });
-        }
+        },
+        { marginsMm: printSettings.marginsMm }
       );
 
       downloadBlob(result.blob, result.filename);
@@ -1039,9 +1063,10 @@ export default function App() {
                 <button
                   onClick={() => setIsPrintModalOpen(true)}
                   className="px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-semibold transition-all border border-slate-200 flex items-center gap-1.5"
+                  title={`Configure print page margins (currently Left: ${printSettings.marginsMm.left}mm, Top: ${printSettings.marginsMm.top}mm), paper size, and CR80 dimensions`}
                 >
-                  <Printer className="w-3.5 h-3.5" />
-                  <span>Print Layout</span>
+                  <Printer className="w-3.5 h-3.5 text-rose-600" />
+                  <span>Print &amp; Margins ({printSettings.marginsMm.left}mm L)</span>
                 </button>
 
                 <button
@@ -1678,7 +1703,7 @@ export default function App() {
         isOpen={isPrintModalOpen}
         onClose={() => setIsPrintModalOpen(false)}
         settings={printSettings}
-        onChangeSettings={setPrintSettings}
+        onChangeSettings={handleUpdatePrintSettings}
         totalCardsCount={employees.length}
         onConfirmPrintOk={async () => {
           const validIds = employees.map((e) => e.enrollId).filter(Boolean);
@@ -1701,6 +1726,7 @@ export default function App() {
         companyConfig={companyConfig}
         getCardElement={getCardElement}
         onCardsPrinted={handleCardsMarkedPrinted}
+        onUpdateSettings={handleUpdatePrintSettings}
       />
 
       {/* Admin Settings Modal (Configures supervisor submission confirmation message & settings) */}

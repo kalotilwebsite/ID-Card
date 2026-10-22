@@ -24,7 +24,15 @@ export interface BulkPdfResult {
 export async function generateBulkCardsPdf(
   selectedEmployees: EmployeeCardData[],
   getCardElement: (empId: string, side: 'front' | 'back') => HTMLElement | null,
-  onProgress?: BulkPdfProgressCallback
+  onProgress?: BulkPdfProgressCallback,
+  options?: {
+    marginsMm?: {
+      top?: number;
+      bottom?: number;
+      left?: number;
+      right?: number;
+    };
+  }
 ): Promise<BulkPdfResult> {
   const count = selectedEmployees.length;
 
@@ -140,11 +148,15 @@ export async function generateBulkCardsPdf(
 
   // Total width of 3 card pairs: 3 * (44 + 2 + 44) + 2 * 4 = 3 * 90 + 8 = 278mm
   const totalRowWidthMm = 3 * (cardWidthMm * 2 + pairGapMm) + 2 * cardGapXMm;
-  const marginLeft = Math.max(5, (pageWidthMm - totalRowWidthMm) / 2); // ~9.5mm centered
+  const marginLeft = options?.marginsMm?.left !== undefined
+    ? Number(options.marginsMm.left)
+    : Math.max(5, (pageWidthMm - totalRowWidthMm) / 2); // ~9.5mm centered default
 
   // Total height of 2 rows: 2 * 77.465 + 12 = 166.93mm
   const totalGridHeightMm = 2 * cardHeightMm + rowGapYMm;
-  const marginTop = Math.max(5, (pageHeightMm - totalGridHeightMm) / 2); // ~21.5mm centered
+  const marginTop = options?.marginsMm?.top !== undefined
+    ? Number(options.marginsMm.top)
+    : Math.max(5, (pageHeightMm - totalGridHeightMm) / 2); // ~21.5mm centered default
 
   const totalPages = Math.ceil(capturedCards.length / 6);
 

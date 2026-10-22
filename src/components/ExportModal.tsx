@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   FileText,
   Download,
@@ -10,6 +10,7 @@ import {
   Printer,
   FileSpreadsheet,
   Check,
+  Sliders,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { EmployeeCardData, PrintSettings, CompanyTemplateConfig } from '../types';
@@ -26,6 +27,7 @@ interface ExportModalProps {
   companyConfig: CompanyTemplateConfig;
   getCardElement: (empId: string, side: 'front' | 'back') => HTMLElement | null;
   onCardsPrinted?: (enrollIds: string[]) => void;
+  onUpdateSettings?: (settings: PrintSettings) => void;
 }
 
 export const ExportModal: React.FC<ExportModalProps> = ({
@@ -36,6 +38,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   companyConfig,
   getCardElement,
   onCardsPrinted,
+  onUpdateSettings,
 }) => {
   const [isExporting, setIsExporting] = useState(false);
   const [exportType, setExportType] = useState<'pdf' | 'docx' | 'excel' | null>(null);
@@ -46,6 +49,40 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   const [pendingPrintConfirm, setPendingPrintConfirm] = useState(false);
   const [isMarkingPrint, setIsMarkingPrint] = useState(false);
   const [markedSuccess, setMarkedSuccess] = useState(false);
+
+  // Editable PDF Print Margins state
+  const [margins, setMargins] = useState<PrintSettings['marginsMm']>({
+    top: settings.marginsMm?.top ?? 10,
+    bottom: settings.marginsMm?.bottom ?? 10,
+    left: settings.marginsMm?.left ?? 10,
+    right: settings.marginsMm?.right ?? 10,
+  });
+
+  useEffect(() => {
+    if (settings.marginsMm) {
+      setMargins({
+        top: settings.marginsMm.top ?? 10,
+        bottom: settings.marginsMm.bottom ?? 10,
+        left: settings.marginsMm.left ?? 10,
+        right: settings.marginsMm.right ?? 10,
+      });
+    }
+  }, [settings.marginsMm]);
+
+  const handleMarginChange = (side: keyof PrintSettings['marginsMm'], val: number) => {
+    const validVal = Math.max(0, val);
+    const updatedMargins = {
+      ...margins,
+      [side]: validVal,
+    };
+    setMargins(updatedMargins);
+    if (onUpdateSettings) {
+      onUpdateSettings({
+        ...settings,
+        marginsMm: updatedMargins,
+      });
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -70,9 +107,14 @@ export const ExportModal: React.FC<ExportModalProps> = ({
     setProgressMsg('Initializing PDF document renderer...');
 
     try {
+      const activePrintSettings: PrintSettings = {
+        ...settings,
+        marginsMm: margins,
+      };
+
       const blob = await exportCardsToPdf(
         employees,
-        settings,
+        activePrintSettings,
         companyConfig,
         getCardElement,
         (current, total, msg) => {
@@ -265,6 +307,211 @@ export const ExportModal: React.FC<ExportModalProps> = ({
               </div>
               <FileDown className="w-5 h-5 text-rose-600 group-hover:translate-y-0.5 transition-transform" />
             </button>
+
+            {/* Editable PDF Page Margins Configuration */}
+            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                  <Sliders className="w-3.5 h-3.5 text-rose-600" />
+                  PDF Page Print Margins (mm)
+                </span>
+                <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded bg-rose-100/80 text-rose-800">
+                  Left: {margins.left}mm | Top: {margins.top}mm
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500 leading-tight">
+                Increase the <strong>Left margin</strong> (e.g., <strong>18 mm</strong> or <strong>20 mm</strong>) to prevent cards from clipping on the left edge and perfectly center them on paper.
+              </p>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-0.5">
+                {/* Left Margin */}
+                <div className="bg-white p-2 rounded-lg border border-rose-300 ring-1 ring-rose-100">
+                  <label className="block text-[10px] font-bold text-rose-900 mb-0.5">
+                    Left Margin (mm)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="60"
+                    step="1"
+                    value={margins.left}
+                    onChange={(e) => handleMarginChange('left', Number(e.target.value) || 0)}
+                    style={{ color: '#0f172a', backgroundColor: '#ffffff', colorScheme: 'light' }}
+                    className="w-full bg-white border border-rose-300 rounded px-2 py-1 text-xs font-mono font-bold text-slate-900 focus:ring-1 focus:ring-rose-500"
+                  />
+                  <div className="flex items-center gap-1 mt-1.5">
+                    <button
+                      type="button"
+                      onClick={() => handleMarginChange('left', 10)}
+                      className={`px-1 py-0.5 text-[9px] rounded font-bold border transition-colors ${
+                        margins.left === 10
+                          ? 'bg-rose-600 text-white border-rose-600'
+                          : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      10
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleMarginChange('left', 15)}
+                      className={`px-1 py-0.5 text-[9px] rounded font-bold border transition-colors ${
+                        margins.left === 15
+                          ? 'bg-rose-600 text-white border-rose-600'
+                          : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      15
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleMarginChange('left', 18)}
+                      title="Recommended for centered landscape PDF print"
+                      className={`px-1 py-0.5 text-[9px] rounded font-bold border transition-colors ${
+                        margins.left === 18
+                          ? 'bg-rose-600 text-white border-rose-600'
+                          : 'bg-rose-50 text-rose-700 border-rose-300 hover:bg-rose-100'
+                      }`}
+                    >
+                      18★
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleMarginChange('left', 20)}
+                      className={`px-1 py-0.5 text-[9px] rounded font-bold border transition-colors ${
+                        margins.left === 20
+                          ? 'bg-rose-600 text-white border-rose-600'
+                          : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      20
+                    </button>
+                  </div>
+                </div>
+
+                {/* Top Margin */}
+                <div className="bg-white p-2 rounded-lg border border-slate-200">
+                  <label className="block text-[10px] font-bold text-slate-700 mb-0.5">
+                    Top Margin (mm)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="60"
+                    step="1"
+                    value={margins.top}
+                    onChange={(e) => handleMarginChange('top', Number(e.target.value) || 0)}
+                    style={{ color: '#0f172a', backgroundColor: '#ffffff', colorScheme: 'light' }}
+                    className="w-full bg-white border border-slate-300 rounded px-2 py-1 text-xs font-mono font-bold text-slate-900 focus:ring-1 focus:ring-rose-500"
+                  />
+                  <div className="flex items-center gap-1 mt-1.5">
+                    <button
+                      type="button"
+                      onClick={() => handleMarginChange('top', 10)}
+                      className={`px-1.5 py-0.5 text-[9px] rounded font-semibold border ${
+                        margins.top === 10
+                          ? 'bg-slate-800 text-white border-slate-800'
+                          : 'bg-slate-50 text-slate-600 border-slate-200'
+                      }`}
+                    >
+                      10
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleMarginChange('top', 15)}
+                      className={`px-1.5 py-0.5 text-[9px] rounded font-semibold border ${
+                        margins.top === 15
+                          ? 'bg-slate-800 text-white border-slate-800'
+                          : 'bg-slate-50 text-slate-600 border-slate-200'
+                      }`}
+                    >
+                      15
+                    </button>
+                  </div>
+                </div>
+
+                {/* Right Margin */}
+                <div className="bg-white p-2 rounded-lg border border-slate-200">
+                  <label className="block text-[10px] font-bold text-slate-700 mb-0.5">
+                    Right Margin (mm)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="60"
+                    step="1"
+                    value={margins.right}
+                    onChange={(e) => handleMarginChange('right', Number(e.target.value) || 0)}
+                    style={{ color: '#0f172a', backgroundColor: '#ffffff', colorScheme: 'light' }}
+                    className="w-full bg-white border border-slate-300 rounded px-2 py-1 text-xs font-mono font-bold text-slate-900 focus:ring-1 focus:ring-rose-500"
+                  />
+                  <div className="flex items-center gap-1 mt-1.5">
+                    <button
+                      type="button"
+                      onClick={() => handleMarginChange('right', 10)}
+                      className={`px-1.5 py-0.5 text-[9px] rounded font-semibold border ${
+                        margins.right === 10
+                          ? 'bg-slate-800 text-white border-slate-800'
+                          : 'bg-slate-50 text-slate-600 border-slate-200'
+                      }`}
+                    >
+                      10
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleMarginChange('right', 15)}
+                      className={`px-1.5 py-0.5 text-[9px] rounded font-semibold border ${
+                        margins.right === 15
+                          ? 'bg-slate-800 text-white border-slate-800'
+                          : 'bg-slate-50 text-slate-600 border-slate-200'
+                      }`}
+                    >
+                      15
+                    </button>
+                  </div>
+                </div>
+
+                {/* Bottom Margin */}
+                <div className="bg-white p-2 rounded-lg border border-slate-200">
+                  <label className="block text-[10px] font-bold text-slate-700 mb-0.5">
+                    Bottom Margin (mm)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="60"
+                    step="1"
+                    value={margins.bottom}
+                    onChange={(e) => handleMarginChange('bottom', Number(e.target.value) || 0)}
+                    style={{ color: '#0f172a', backgroundColor: '#ffffff', colorScheme: 'light' }}
+                    className="w-full bg-white border border-slate-300 rounded px-2 py-1 text-xs font-mono font-bold text-slate-900 focus:ring-1 focus:ring-rose-500"
+                  />
+                  <div className="flex items-center gap-1 mt-1.5">
+                    <button
+                      type="button"
+                      onClick={() => handleMarginChange('bottom', 10)}
+                      className={`px-1.5 py-0.5 text-[9px] rounded font-semibold border ${
+                        margins.bottom === 10
+                          ? 'bg-slate-800 text-white border-slate-800'
+                          : 'bg-slate-50 text-slate-600 border-slate-200'
+                      }`}
+                    >
+                      10
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleMarginChange('bottom', 15)}
+                      className={`px-1.5 py-0.5 text-[9px] rounded font-semibold border ${
+                        margins.bottom === 15
+                          ? 'bg-slate-800 text-white border-slate-800'
+                          : 'bg-slate-50 text-slate-600 border-slate-200'
+                      }`}
+                    >
+                      15
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
 
             {/* Word .docx Button */}
             <button

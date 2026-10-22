@@ -425,70 +425,208 @@ export const PrintSettingsModal: React.FC<PrintSettingsModalProps> = ({
               </div>
             </div>
 
-            {/* Margins and Spacing */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
-              <div>
-                <label className="block text-[11px] text-gray-700 font-bold mb-1">
-                  Page Margin X (mm):
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  value={settings.marginsMm.left}
-                  onChange={(e) => {
-                    const val = Number(e.target.value) || 0;
-                    updateMargin('left', val);
-                    updateMargin('right', val);
-                  }}
-                  style={{ color: '#0f172a', backgroundColor: '#ffffff', colorScheme: 'light' }}
-                  className="w-full bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-slate-900 focus:ring-2 focus:ring-rose-500"
-                />
+            {/* Dynamic Editable Page Margins and Card Spacing */}
+            <div className="pt-2 space-y-3">
+              <div className="flex items-center justify-between border-b border-gray-100 pb-1.5">
+                <span className="text-xs font-bold text-gray-900 uppercase tracking-wider flex items-center gap-1.5">
+                  <Sliders className="w-3.5 h-3.5 text-rose-600" />
+                  PDF &amp; Page Margins (mm)
+                </span>
+                <span className="text-[10px] text-gray-500 font-medium">
+                  Increase Left margin (e.g. 18-20mm) to prevent printer clipping
+                </span>
               </div>
 
-              <div>
-                <label className="block text-[11px] text-gray-700 font-bold mb-1">
-                  Page Margin Y (mm):
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  value={settings.marginsMm.top}
-                  onChange={(e) => {
-                    const val = Number(e.target.value) || 0;
-                    updateMargin('top', val);
-                    updateMargin('bottom', val);
-                  }}
-                  style={{ color: '#0f172a', backgroundColor: '#ffffff', colorScheme: 'light' }}
-                  className="w-full bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-slate-900 focus:ring-2 focus:ring-rose-500"
-                />
+              {/* 4 Independent Margin Inputs */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {/* Left Margin */}
+                <div className="p-2.5 rounded-xl border border-rose-200 bg-rose-50/30">
+                  <label className="block text-[11px] text-rose-900 font-bold mb-1">
+                    Left Margin (mm):
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="60"
+                    step="1"
+                    value={settings.marginsMm.left}
+                    onChange={(e) => updateMargin('left', Math.max(0, Number(e.target.value) || 0))}
+                    style={{ color: '#0f172a', backgroundColor: '#ffffff', colorScheme: 'light' }}
+                    className="w-full bg-white border border-rose-300 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-slate-900 focus:ring-2 focus:ring-rose-500"
+                  />
+                  {/* Quick Presets */}
+                  <div className="flex items-center gap-1 mt-1.5">
+                    <button
+                      type="button"
+                      onClick={() => updateMargin('left', 10)}
+                      className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-white hover:bg-rose-100 border border-rose-200 text-rose-700"
+                      title="Set to 10mm"
+                    >
+                      10
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => updateMargin('left', 15)}
+                      className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-white hover:bg-rose-100 border border-rose-200 text-rose-700"
+                      title="Set to 15mm"
+                    >
+                      15
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => updateMargin('left', 18)}
+                      className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-600 hover:bg-rose-700 text-white shadow-2xs"
+                      title="Recommended 18mm"
+                    >
+                      18
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => updateMargin('left', 20)}
+                      className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-white hover:bg-rose-100 border border-rose-200 text-rose-700"
+                      title="Set to 20mm"
+                    >
+                      20
+                    </button>
+                  </div>
+                </div>
+
+                {/* Right Margin */}
+                <div className="p-2.5 rounded-xl border border-gray-200 bg-gray-50/50">
+                  <label className="block text-[11px] text-gray-700 font-bold mb-1">
+                    Right Margin (mm):
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="60"
+                    step="1"
+                    value={settings.marginsMm.right}
+                    onChange={(e) => updateMargin('right', Math.max(0, Number(e.target.value) || 0))}
+                    style={{ color: '#0f172a', backgroundColor: '#ffffff', colorScheme: 'light' }}
+                    className="w-full bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-slate-900 focus:ring-2 focus:ring-rose-500"
+                  />
+                  <div className="flex items-center gap-1 mt-1.5">
+                    <button
+                      type="button"
+                      onClick={() => updateMargin('right', 10)}
+                      className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-white hover:bg-gray-100 border border-gray-200 text-gray-700"
+                    >
+                      10
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => updateMargin('right', 15)}
+                      className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-white hover:bg-gray-100 border border-gray-200 text-gray-700"
+                    >
+                      15
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => updateMargin('right', 20)}
+                      className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-white hover:bg-gray-100 border border-gray-200 text-gray-700"
+                    >
+                      20
+                    </button>
+                  </div>
+                </div>
+
+                {/* Top Margin */}
+                <div className="p-2.5 rounded-xl border border-gray-200 bg-gray-50/50">
+                  <label className="block text-[11px] text-gray-700 font-bold mb-1">
+                    Top Margin (mm):
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="60"
+                    step="1"
+                    value={settings.marginsMm.top}
+                    onChange={(e) => updateMargin('top', Math.max(0, Number(e.target.value) || 0))}
+                    style={{ color: '#0f172a', backgroundColor: '#ffffff', colorScheme: 'light' }}
+                    className="w-full bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-slate-900 focus:ring-2 focus:ring-rose-500"
+                  />
+                  <div className="flex items-center gap-1 mt-1.5">
+                    <button
+                      type="button"
+                      onClick={() => updateMargin('top', 10)}
+                      className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-white hover:bg-gray-100 border border-gray-200 text-gray-700"
+                    >
+                      10
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => updateMargin('top', 15)}
+                      className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-white hover:bg-gray-100 border border-gray-200 text-gray-700"
+                    >
+                      15
+                    </button>
+                  </div>
+                </div>
+
+                {/* Bottom Margin */}
+                <div className="p-2.5 rounded-xl border border-gray-200 bg-gray-50/50">
+                  <label className="block text-[11px] text-gray-700 font-bold mb-1">
+                    Bottom Margin (mm):
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="60"
+                    step="1"
+                    value={settings.marginsMm.bottom}
+                    onChange={(e) => updateMargin('bottom', Math.max(0, Number(e.target.value) || 0))}
+                    style={{ color: '#0f172a', backgroundColor: '#ffffff', colorScheme: 'light' }}
+                    className="w-full bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-slate-900 focus:ring-2 focus:ring-rose-500"
+                  />
+                  <div className="flex items-center gap-1 mt-1.5">
+                    <button
+                      type="button"
+                      onClick={() => updateMargin('bottom', 10)}
+                      className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-white hover:bg-gray-100 border border-gray-200 text-gray-700"
+                    >
+                      10
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => updateMargin('bottom', 15)}
+                      className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-white hover:bg-gray-100 border border-gray-200 text-gray-700"
+                    >
+                      15
+                    </button>
+                  </div>
+                </div>
               </div>
 
-              <div>
-                <label className="block text-[11px] text-gray-700 font-bold mb-1">
-                  Card Spacing X (mm):
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  value={settings.spacingMm.horizontal}
-                  onChange={(e) => updateSpacing('horizontal', Number(e.target.value) || 0)}
-                  style={{ color: '#0f172a', backgroundColor: '#ffffff', colorScheme: 'light' }}
-                  className="w-full bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-slate-900 focus:ring-2 focus:ring-rose-500"
-                />
-              </div>
+              {/* Card Spacing Horizontal and Vertical */}
+              <div className="grid grid-cols-2 gap-3 pt-1">
+                <div>
+                  <label className="block text-[11px] text-gray-700 font-bold mb-1">
+                    Card Spacing Horizontal (mm):
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={settings.spacingMm.horizontal}
+                    onChange={(e) => updateSpacing('horizontal', Number(e.target.value) || 0)}
+                    style={{ color: '#0f172a', backgroundColor: '#ffffff', colorScheme: 'light' }}
+                    className="w-full bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-slate-900 focus:ring-2 focus:ring-rose-500"
+                  />
+                </div>
 
-              <div>
-                <label className="block text-[11px] text-gray-700 font-bold mb-1">
-                  Card Spacing Y (mm):
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  value={settings.spacingMm.vertical}
-                  onChange={(e) => updateSpacing('vertical', Number(e.target.value) || 0)}
-                  style={{ color: '#0f172a', backgroundColor: '#ffffff', colorScheme: 'light' }}
-                  className="w-full bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-slate-900 focus:ring-2 focus:ring-rose-500"
-                />
+                <div>
+                  <label className="block text-[11px] text-gray-700 font-bold mb-1">
+                    Card Spacing Vertical (mm):
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={settings.spacingMm.vertical}
+                    onChange={(e) => updateSpacing('vertical', Number(e.target.value) || 0)}
+                    style={{ color: '#0f172a', backgroundColor: '#ffffff', colorScheme: 'light' }}
+                    className="w-full bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-slate-900 focus:ring-2 focus:ring-rose-500"
+                  />
+                </div>
               </div>
             </div>
 

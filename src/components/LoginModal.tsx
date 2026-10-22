@@ -72,7 +72,11 @@ export function LoginModal({
 
     try {
       const res = await apiService.login(cleanId, password);
-      onLoginSuccess(res.user);
+      const user = res?.user || ((res as any)?.role ? (res as any) : null);
+      if (!user || !user.role) {
+        throw new Error('Authentication response did not contain a valid user profile or role.');
+      }
+      onLoginSuccess(user);
       if (onClose) onClose();
     } catch (err: any) {
       setError(err.message || 'Authentication failed. Please check your Enrollment ID and password.');

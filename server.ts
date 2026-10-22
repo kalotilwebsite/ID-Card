@@ -380,28 +380,13 @@ app.post('/api/auth/login', (req: Request, res: Response) => {
 
   const cleanInput = rawId.toLowerCase();
   const users = readJsonFile<any[]>(USERS_FILE, []);
-  let user = users.find(
+  const user = users.find(
     (u) =>
       (u.username.toLowerCase() === cleanInput ||
         (u.email && u.email.toLowerCase() === cleanInput) ||
         (u.employeeId && u.employeeId.toLowerCase() === cleanInput)) &&
       u.passwordHash === hashPassword(password)
   );
-
-  // If logging in with default initial Admin credentials (Enrollment ID: Admin, Password: 466035)
-  // and the Admin account was still on initial default seed, authenticate and sync
-  if (!user && cleanInput === 'admin' && password === '466035') {
-    const adminUser = users.find(
-      (u) => u.role === 'admin' && (u.username.toLowerCase() === 'admin' || (u.employeeId && u.employeeId.toLowerCase() === 'admin'))
-    );
-    if (adminUser && (adminUser.passwordHash === hashPassword('admin123') || adminUser.passwordHash === hashPassword('466035'))) {
-      adminUser.passwordHash = hashPassword('466035');
-      adminUser.employeeId = 'Admin';
-      adminUser.username = 'Admin';
-      writeJsonFile(USERS_FILE, users);
-      user = adminUser;
-    }
-  }
 
   if (!user) {
     res.status(401).json({ error: 'Invalid Enrollment ID or password.' });
@@ -413,20 +398,29 @@ app.post('/api/auth/login', (req: Request, res: Response) => {
     return;
   }
 
+  // Ensure role is valid and non-empty
+  const resolvedRole = (user.role || (user.username?.toLowerCase() === 'admin' ? 'admin' : 'data_entry')) as
+    | 'admin'
+    | 'supervisor'
+    | 'data_entry';
+
+  const safeUser = {
+    id: user.id,
+    username: user.username,
+    employeeId: user.employeeId || user.username,
+    name: user.name || user.username,
+    email: user.email || '',
+    role: resolvedRole,
+    status: user.status || 'active',
+    allowedTabs: getEffectiveAllowedTabs({ ...user, role: resolvedRole }),
+  };
+
   const token = createToken(user.id);
 
   res.json({
     token,
-    user: {
-      id: user.id,
-      username: user.username,
-      employeeId: user.employeeId || user.username,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      status: user.status,
-      allowedTabs: getEffectiveAllowedTabs(user),
-    },
+    user: safeUser,
+    ...safeUser,
   });
 });
 
@@ -475,29 +469,40 @@ app.post('/api/auth/supervisor-login', (req: Request, res: Response) => {
   }
 
   const token = createToken(supervisor.id);
+  const supervisorRole = (supervisor.role || 'supervisor') as 'admin' | 'supervisor' | 'data_entry';
+  const safeSupervisor = {
+    id: supervisor.id,
+    username: supervisor.username,
+    employeeId: supervisor.employeeId || supervisor.username,
+    name: supervisor.name || supervisor.username,
+    email: supervisor.email || '',
+    role: supervisorRole,
+    status: supervisor.status || 'active',
+    allowedTabs: getEffectiveAllowedTabs({ ...supervisor, role: supervisorRole }),
+  };
 
   res.json({
     token,
-    user: {
-      id: supervisor.id,
-      username: supervisor.username,
-      employeeId: supervisor.employeeId || supervisor.username,
-      name: supervisor.name,
-      email: supervisor.email,
-      role: supervisor.role,
-      status: supervisor.status,
-      allowedTabs: getEffectiveAllowedTabs(supervisor),
-    },
+    user: safeSupervisor,
+    ...safeSupervisor,
   });
 });
 
 app.get('/api/auth/me', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
-  const { passwordHash, ...safeUser } = req.user;
+  const { passwordHash, ...rawSafeUser } = req.user;
+  const resolvedRole = (rawSafeUser.role ||
+    (rawSafeUser.username?.toLowerCase() === 'admin' ? 'admin' : 'data_entry')) as
+    | 'admin'
+    | 'supervisor'
+    | 'data_entry';
+  const safeUser = {
+    ...rawSafeUser,
+    role: resolvedRole,
+    allowedTabs: getEffectiveAllowedTabs({ ...rawSafeUser, role: resolvedRole }),
+  };
   res.json({
-    user: {
-      ...safeUser,
-      allowedTabs: getEffectiveAllowedTabs(req.user),
-    },
+    user: safeUser,
+    ...safeUser,
   });
 });
 

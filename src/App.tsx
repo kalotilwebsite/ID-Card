@@ -184,7 +184,7 @@ export default function App() {
       const token = getStoredToken();
       if (token) {
         const user = await apiService.getCurrentUser();
-        if (user) {
+        if (user && user.role) {
           setCurrentUser(user);
           if (user.role === 'supervisor') {
             setActiveNavTab('supervisor_submission');
@@ -202,11 +202,15 @@ export default function App() {
       // Default quick auto-login as admin for instant ready-to-test experience
       try {
         const loginRes = await apiService.login('Admin', '466035');
-        setCurrentUser(loginRes.user);
+        if (loginRes?.user && loginRes.user.role) {
+          setCurrentUser(loginRes.user);
+        }
       } catch (err) {
         try {
           const fallbackRes = await apiService.login('admin', 'admin123');
-          setCurrentUser(fallbackRes.user);
+          if (fallbackRes?.user && fallbackRes.user.role) {
+            setCurrentUser(fallbackRes.user);
+          }
         } catch {
           console.error('Initial auto-login error:', err);
         }
@@ -241,7 +245,7 @@ export default function App() {
 
   // Helper to verify if current authenticated user has access to a specific tab
   const canAccessTab = (tabId: MainNavTab): boolean => {
-    if (!currentUser) return false;
+    if (!currentUser || !currentUser.role) return false;
     if (currentUser.role === 'admin') return true;
     if (currentUser.role === 'supervisor') return tabId === 'supervisor_submission';
     if (currentUser.role === 'data_entry') {
@@ -253,11 +257,39 @@ export default function App() {
     return false;
   };
 
+  const getAccessibleTabs = (): MainNavTab[] => {
+    if (!currentUser || !currentUser.role) return [];
+    if (currentUser.role === 'supervisor') {
+      return ['supervisor_submission'];
+    } else if (currentUser.role === 'data_entry') {
+      const validTabs: MainNavTab[] = [
+        'submissions',
+        'supervisor_submission',
+        'data_entry_form',
+        'employee_data',
+        'user_management',
+        'card_studio',
+      ];
+      const allowed = Array.isArray(currentUser.allowedTabs) && currentUser.allowedTabs.length > 0
+        ? (currentUser.allowedTabs.filter((t): t is MainNavTab => validTabs.includes(t as MainNavTab)))
+        : (['data_entry_form'] as MainNavTab[]);
+      return allowed.length > 0 ? allowed : (['data_entry_form'] as MainNavTab[]);
+    }
+    return [
+      'submissions',
+      'supervisor_submission',
+      'data_entry_form',
+      'employee_data',
+      'user_management',
+      'card_studio',
+    ];
+  };
+
   // Enforce role-based tab restrictions:
   // Data Entry users can access only their explicitly allowed tabs
   // Supervisors can strictly access only supervisor_submission
   useEffect(() => {
-    if (!currentUser) return;
+    if (!currentUser || !currentUser.role) return;
     if (currentUser.role === 'supervisor') {
       if (activeNavTab !== 'supervisor_submission') {
         setActiveNavTab('supervisor_submission');
@@ -1451,11 +1483,18 @@ export default function App() {
         onClose={() => setIsLoginModalOpen(false)}
         backgroundImageUrl={loginBackgroundImage}
         onLoginSuccess={(user) => {
+          if (!user || !user.role) {
+            console.error('Login callback received invalid or missing user:', user);
+            return;
+          }
           setCurrentUser(user);
           if (user.role === 'supervisor') {
             setActiveNavTab('supervisor_submission');
           } else if (user.role === 'data_entry') {
-            setActiveNavTab('data_entry_form');
+            const allowed = Array.isArray(user.allowedTabs) && user.allowedTabs.length > 0
+              ? (user.allowedTabs as MainNavTab[])
+              : ['data_entry_form'];
+            setActiveNavTab((allowed[0] || 'data_entry_form') as MainNavTab);
           } else {
             setActiveNavTab('submissions');
           }

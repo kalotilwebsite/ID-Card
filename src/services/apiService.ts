@@ -95,30 +95,80 @@ async function request<T>(endpoint: string, options: RequestInit = {}, retryOn40
 export const apiService = {
   // Auth
   async login(username: string, password: string): Promise<{ user: AuthUser; token: string }> {
-    const res = await request<{ user: AuthUser; token: string }>('/api/auth/login', {
+    const res = await request<any>('/api/auth/login', {
       method: 'POST',
       body: JSON.stringify({ username, password }),
     }, false);
-    setStoredToken(res.token);
-    setStoredUser(res.user);
-    return res;
+
+    const rawUser = res?.user || (res?.id && res?.role ? res : null);
+    if (!rawUser || !rawUser.role) {
+      throw new Error('Authentication succeeded but received invalid or missing user role.');
+    }
+    const user: AuthUser = {
+      id: rawUser.id,
+      username: rawUser.username,
+      employeeId: rawUser.employeeId || rawUser.username,
+      name: rawUser.name || rawUser.username,
+      email: rawUser.email || '',
+      role: rawUser.role,
+      status: rawUser.status || 'active',
+      allowedTabs: Array.isArray(rawUser.allowedTabs) ? rawUser.allowedTabs : [],
+    };
+    const token: string = res?.token || '';
+
+    setStoredToken(token);
+    setStoredUser(user);
+    return { user, token };
   },
 
   async supervisorLogin(employeeId: string, password: string): Promise<{ user: AuthUser; token: string }> {
-    const res = await request<{ user: AuthUser; token: string }>('/api/auth/supervisor-login', {
+    const res = await request<any>('/api/auth/supervisor-login', {
       method: 'POST',
       body: JSON.stringify({ employeeId, password }),
     }, false);
-    setStoredToken(res.token);
-    setStoredUser(res.user);
-    return res;
+
+    const rawUser = res?.user || (res?.id && res?.role ? res : null);
+    if (!rawUser || !rawUser.role) {
+      throw new Error('Supervisor authentication succeeded but received invalid profile data.');
+    }
+    const user: AuthUser = {
+      id: rawUser.id,
+      username: rawUser.username,
+      employeeId: rawUser.employeeId || rawUser.username,
+      name: rawUser.name || rawUser.username,
+      email: rawUser.email || '',
+      role: rawUser.role,
+      status: rawUser.status || 'active',
+      allowedTabs: Array.isArray(rawUser.allowedTabs) ? rawUser.allowedTabs : ['supervisor_submission'],
+    };
+    const token: string = res?.token || '';
+
+    setStoredToken(token);
+    setStoredUser(user);
+    return { user, token };
   },
 
   async getCurrentUser(): Promise<AuthUser | null> {
     try {
-      const res = await request<{ user: AuthUser }>('/api/auth/me', {}, false);
-      setStoredUser(res.user);
-      return res.user;
+      const res = await request<any>('/api/auth/me', {}, false);
+      const rawUser = res?.user || (res?.id && res?.role ? res : null);
+      if (rawUser && rawUser.role) {
+        const user: AuthUser = {
+          id: rawUser.id,
+          username: rawUser.username,
+          employeeId: rawUser.employeeId || rawUser.username,
+          name: rawUser.name || rawUser.username,
+          email: rawUser.email || '',
+          role: rawUser.role,
+          status: rawUser.status || 'active',
+          allowedTabs: Array.isArray(rawUser.allowedTabs) ? rawUser.allowedTabs : [],
+        };
+        setStoredUser(user);
+        return user;
+      }
+      setStoredToken(null);
+      setStoredUser(null);
+      return null;
     } catch {
       setStoredToken(null);
       setStoredUser(null);

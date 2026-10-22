@@ -21,20 +21,6 @@ export const FRONT_TEMPLATE_SVG = `data:image/svg+xml;utf8,${encodeURIComponent(
     
     <!-- Top Pink Header -->
     <rect x="0" y="0" width="284" height="112" fill="#FCD0CC"/>
-    
-    <!-- Fixed 2x2 Grid Labels on White Body -->
-    <text x="18" y="248" font-family="'Arial Black', Arial, sans-serif" font-weight="900" font-size="9" fill="#000000" letter-spacing="0.4">JOB TYPE</text>
-    <text x="152" y="248" font-family="'Arial Black', Arial, sans-serif" font-weight="900" font-size="9" fill="#000000" letter-spacing="0.4">JOINING DATE</text>
-    
-    <text x="18" y="300" font-family="'Arial Black', Arial, sans-serif" font-weight="900" font-size="9" fill="#000000" letter-spacing="0.4">ENROLL ID</text>
-    <text x="152" y="300" font-family="'Arial Black', Arial, sans-serif" font-weight="900" font-size="9" fill="#000000" letter-spacing="0.4">CARD ISSUE</text>
-    
-    <!-- Issuing Authority Signature & Line (Exact reference asset embedded as Base64) -->
-    <image href="${ISSUING_AUTHORITY_SIG_BASE64}" x="92" y="365" width="70" height="50" preserveAspectRatio="xMidYMid meet"/>
-    
-    <!-- Employee Signature Caption (Area above it is reserved for signature overlay, no box) -->
-    <line x1="16" y1="398" x2="84" y2="398" stroke="#94A3B8" stroke-width="0.8"/>
-    <text x="50" y="408" font-family="Arial, Helvetica, sans-serif" font-size="7.5" fill="#334155" text-anchor="middle">employee</text>
 
     <!-- Bottom Red Banner -->
     <rect x="0" y="438" width="284" height="62" fill="#E31B23"/>

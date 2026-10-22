@@ -370,5 +370,37 @@
   "7b614448dceb4f5fff10c8f63f841f98d75927b3fa2e56842f4829edf93c13b5": {
     "userId": "user-dataentry-1",
     "expiresAt": 1795227699236
+  },
+  "927afae3a6e2218b5b144636a6ebc0814c8e2cda736d5609b1f42a74727f8398": {
+    "userId": "user-admin-1",
+    "expiresAt": 1795229195368
+  },
+  "e31ed1cb591b18830abe871d6caf064b1e5e45892ec2ca5a7dde6bfd80457908": {
+    "userId": "user-supervisor-1",
+    "expiresAt": 1795229195447
+  },
+  "39c00f087f35286faad17336d850609a73615378ae451ce4ce9fdd016b336fa9": {
+    "userId": "user-admin-1",
+    "expiresAt": 1795229199570
+  },
+  "52a74c9e37699e462bb4f05f314c3767c011a3ec565f8a8f86addf2ab8b83858": {
+    "userId": "user-admin-1",
+    "expiresAt": 1795229199626
+  },
+  "f0379d3ccc9f45d8987788bf26ddace93f2fa8378b8af3f30439caf0912290ee": {
+    "userId": "user-supervisor-1",
+    "expiresAt": 1795229199725
+  },
+  "e127d17797589ec3505968537de7a16976b8907f5a15fda8448a0174cf64ab80": {
+    "userId": "user-dataentry-1",
+    "expiresAt": 1795229199776
+  },
+  "1e36cf896b58344cffe8087bee7cc363c2a710785f833c80bcec52cc8302da95": {
+    "userId": "user-admin-1",
+    "expiresAt": 1795229228182
+  },
+  "08e5f2cc0c6f7025e27966285e83044915dfe878e803a192e8fe9cb91aba3ef6": {
+    "userId": "user-supervisor-1",
+    "expiresAt": 1795229228243
   }
 }

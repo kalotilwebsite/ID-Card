@@ -10,8 +10,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-// Dynamic port binding for Render/Cloud platforms (fallback to 3000 locally)
-const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+// Dynamic port binding for Render/Cloud platforms (process.env.PORT || 10000)
+const PORT = Number(process.env.PORT || 10000);
 const DATA_DIR = path.resolve(__dirname, 'data');
 
 // Ensure data directory exists
@@ -485,10 +485,10 @@ app.post('/api/auth/login', (req: Request, res: Response) => {
   const resolvedRole = normalizeRole(user.role, user.username, user.employeeId);
 
   const safeUser = {
-    id: user.id,
-    username: user.username,
-    employeeId: user.employeeId || user.username,
-    name: user.name || user.username,
+    id: user.id || `user-${Date.now()}`,
+    username: user.username || rawId,
+    employeeId: user.employeeId || user.username || rawId,
+    name: user.name || user.username || rawId,
     email: user.email || '',
     role: resolvedRole,
     status: user.status || 'active',
@@ -498,9 +498,17 @@ app.post('/api/auth/login', (req: Request, res: Response) => {
   const token = createToken(user.id);
 
   res.json({
+    success: true,
     token,
     user: safeUser,
-    ...safeUser,
+    id: safeUser.id,
+    username: safeUser.username,
+    employeeId: safeUser.employeeId,
+    name: safeUser.name,
+    email: safeUser.email,
+    role: safeUser.role,
+    status: safeUser.status,
+    allowedTabs: safeUser.allowedTabs,
   });
 });
 
@@ -552,10 +560,10 @@ app.post('/api/auth/supervisor-login', (req: Request, res: Response) => {
   const token = createToken(supervisor.id);
   const supervisorRole = normalizeRole(supervisor.role, supervisor.username, supervisor.employeeId);
   const safeSupervisor = {
-    id: supervisor.id,
-    username: supervisor.username,
-    employeeId: supervisor.employeeId || supervisor.username,
-    name: supervisor.name || supervisor.username,
+    id: supervisor.id || `sup-${Date.now()}`,
+    username: supervisor.username || employeeId,
+    employeeId: supervisor.employeeId || employeeId,
+    name: supervisor.name || supervisor.username || employeeId,
     email: supervisor.email || '',
     role: supervisorRole,
     status: supervisor.status || 'active',
@@ -563,9 +571,17 @@ app.post('/api/auth/supervisor-login', (req: Request, res: Response) => {
   };
 
   res.json({
+    success: true,
     token,
     user: safeSupervisor,
-    ...safeSupervisor,
+    id: safeSupervisor.id,
+    username: safeSupervisor.username,
+    employeeId: safeSupervisor.employeeId,
+    name: safeSupervisor.name,
+    email: safeSupervisor.email,
+    role: safeSupervisor.role,
+    status: safeSupervisor.status,
+    allowedTabs: safeSupervisor.allowedTabs,
   });
 });
 
@@ -573,13 +589,26 @@ app.get('/api/auth/me', authenticateToken, (req: AuthenticatedRequest, res: Resp
   const { passwordHash, ...rawSafeUser } = req.user;
   const resolvedRole = normalizeRole(rawSafeUser.role, rawSafeUser.username, rawSafeUser.employeeId);
   const safeUser = {
-    ...rawSafeUser,
+    id: rawSafeUser.id,
+    username: rawSafeUser.username,
+    employeeId: rawSafeUser.employeeId || rawSafeUser.username,
+    name: rawSafeUser.name || rawSafeUser.username,
+    email: rawSafeUser.email || '',
     role: resolvedRole,
+    status: rawSafeUser.status || 'active',
     allowedTabs: getEffectiveAllowedTabs({ ...rawSafeUser, role: resolvedRole }),
   };
   res.json({
+    success: true,
     user: safeUser,
-    ...safeUser,
+    id: safeUser.id,
+    username: safeUser.username,
+    employeeId: safeUser.employeeId,
+    name: safeUser.name,
+    email: safeUser.email,
+    role: safeUser.role,
+    status: safeUser.status,
+    allowedTabs: safeUser.allowedTabs,
   });
 });
 
@@ -1288,8 +1317,9 @@ async function startServer() {
     app.use(vite.middlewares);
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server is running at http://0.0.0.0:${PORT}`);
+  const PORT_BIND = Number(process.env.PORT || 10000);
+  app.listen(PORT_BIND, '0.0.0.0', () => {
+    console.log(`Server is running at http://0.0.0.0:${PORT_BIND}`);
   });
 }
 
@@ -1297,8 +1327,13 @@ const isDirectRun =
   Boolean(process.argv[1]) &&
   (fileURLToPath(import.meta.url) === path.resolve(process.argv[1]) ||
     process.argv[1].endsWith('/server.ts') ||
-    process.argv[1].endsWith('/server.js'));
+    process.argv[1].endsWith('/server.js') ||
+    process.argv[1].endsWith('/index.ts') ||
+    process.argv[1].endsWith('/index.js'));
 
 if (isDirectRun) {
   startServer();
 }
+
+export { app, startServer, PORT };
+

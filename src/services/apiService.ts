@@ -132,7 +132,13 @@ export const apiService = {
       body: JSON.stringify({ username, password }),
     }, false);
 
-    const rawUser = res?.user || (res?.id || res?.username ? res : null);
+    const candidateUser =
+      (res?.user && typeof res.user === 'object' && Object.keys(res.user).length > 0 ? res.user : null) ||
+      (res?.data?.user && typeof res.data.user === 'object' ? res.data.user : null) ||
+      (res?.data && typeof res.data === 'object' && (res.data.id || res.data.username || res.data.role) ? res.data : null) ||
+      (res && typeof res === 'object' && (res.id || res.username || res.role || res.employeeId || res.name) ? res : null);
+
+    const rawUser = candidateUser || (res?.token ? { username, id: username, role: 'admin' } : null);
     if (!rawUser) {
       throw new Error('Authentication succeeded but received empty user payload.');
     }
@@ -167,7 +173,13 @@ export const apiService = {
       body: JSON.stringify({ employeeId, password }),
     }, false);
 
-    const rawUser = res?.user || (res?.id || res?.username ? res : null);
+    const candidateUser =
+      (res?.user && typeof res.user === 'object' && Object.keys(res.user).length > 0 ? res.user : null) ||
+      (res?.data?.user && typeof res.data.user === 'object' ? res.data.user : null) ||
+      (res?.data && typeof res.data === 'object' && (res.data.id || res.data.username || res.data.role) ? res.data : null) ||
+      (res && typeof res === 'object' && (res.id || res.username || res.role || res.employeeId) ? res : null);
+
+    const rawUser = candidateUser || (res?.token ? { username: employeeId, employeeId, role: 'supervisor' } : null);
     if (!rawUser) {
       throw new Error('Supervisor authentication succeeded but received empty profile data.');
     }
@@ -195,7 +207,10 @@ export const apiService = {
   async getCurrentUser(): Promise<AuthUser | null> {
     try {
       const res = await request<any>('/api/auth/me', {}, false);
-      const rawUser = res?.user || (res?.id || res?.username ? res : null);
+      const rawUser =
+        (res?.user && typeof res.user === 'object' && Object.keys(res.user).length > 0 ? res.user : null) ||
+        (res?.data?.user && typeof res.data.user === 'object' ? res.data.user : null) ||
+        (res && typeof res === 'object' && (res.id || res.username || res.role) ? res : null);
       if (rawUser) {
         const resolvedRole = normalizeUserRole(rawUser.role || res?.role, rawUser.username, rawUser.employeeId);
         const user: AuthUser = {

@@ -84,7 +84,9 @@ async function runRenderAuthTests() {
   testAssert(res.statusCode === 200, 'Login status is 200');
   testAssert(res.data.token && typeof res.data.token === 'string', 'Token is present');
   testAssert(res.data.role === 'admin', 'Top-level role is "admin"');
+  testAssert(Boolean(res.data.id && res.data.username && res.data.employeeId && res.data.name), 'Top-level user properties (id, username, employeeId, name) are non-empty');
   testAssert(res.data.user && res.data.user.role === 'admin', 'res.data.user.role is "admin"');
+  testAssert(Boolean(res.data.user.id && res.data.user.username && res.data.user.name), 'Nested user properties are non-empty');
   testAssert(Array.isArray(res.data.user.allowedTabs), 'allowedTabs is an array');
 
   // 4. Test /api/auth/me Response Payload
@@ -99,6 +101,7 @@ async function runRenderAuthTests() {
 
   testAssert(meRes.statusCode === 200, '/api/auth/me status is 200');
   testAssert(meRes.data.role === 'admin', '/api/auth/me top-level role is "admin"');
+  testAssert(Boolean(meRes.data.username && meRes.data.name), '/api/auth/me top-level properties are non-empty');
   testAssert(meRes.data.user && meRes.data.user.role === 'admin', '/api/auth/me nested user.role is "admin"');
 
   // 5. Check Supervisor Login Response Payload

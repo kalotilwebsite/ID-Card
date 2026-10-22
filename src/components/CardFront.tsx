@@ -517,36 +517,53 @@ export const CardFront: React.FC<CardFrontProps> = ({
           LAYER 6: SIGNATURES & PHOTO (Clean spacing, zero overlap with red banner)
           ========================================================================= */}
 
-      {/* 6a. Employee Signature Area (Blank with no border if absent) */}
+      {/* 6a. Employee Signature Area (Fixed horizontal banner bounding box: low height, wide width) */}
       <div
         style={{
           position: 'absolute',
-          left: activeCalibration.signature.x,
-          top: activeCalibration.signature.y,
-          width: activeCalibration.signature.width || 68,
+          left: activeCalibration.signature.x ?? 16,
+          top: activeCalibration.signature.y ?? 370,
+          width: activeCalibration.signature.width || 72,
           height: activeCalibration.signature.height || 26,
+          maxWidth: 74,
+          maxHeight: 28,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          overflow: 'hidden',
+          boxSizing: 'border-box',
           backgroundColor: '#FFFFFF',
           zIndex: 10,
         }}
-        className="flex items-center justify-center overflow-hidden"
       >
         {employee.signatureUrl ? (
           <img
             src={employee.signatureUrl}
             alt={`${employee.name} Signature`}
-            className="w-full h-full object-contain pointer-events-none select-none"
+            style={{
+              width: '100%',
+              height: '100%',
+              maxWidth: '100%',
+              maxHeight: '100%',
+              objectFit: 'contain',
+              objectPosition: 'center',
+              display: 'block',
+              margin: 'auto',
+            }}
+            className="pointer-events-none select-none"
             referrerPolicy="no-referrer"
           />
         ) : null}
       </div>
 
-      {/* Employee signature caption & line */}
+      {/* Employee signature caption & line strictly positioned under the fixed signature box */}
       <div
         style={{
           position: 'absolute',
-          left: activeCalibration.signature.x,
-          top: activeCalibration.signature.y + (activeCalibration.signature.height || 26) + 1,
-          width: activeCalibration.signature.width || 68,
+          left: activeCalibration.signature.x ?? 16,
+          top: (activeCalibration.signature.y ?? 370) + (activeCalibration.signature.height || 26) + 1,
+          width: activeCalibration.signature.width || 72,
+          maxWidth: 74,
           zIndex: 10,
         }}
         className="text-center"
@@ -560,6 +577,7 @@ export const CardFront: React.FC<CardFrontProps> = ({
             color: '#334155',
             marginTop: '2px',
             display: 'block',
+            textAlign: 'center',
           }}
         >
           Employee
@@ -574,9 +592,14 @@ export const CardFront: React.FC<CardFrontProps> = ({
           top: 365,
           width: 70,
           height: 50,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          overflow: 'hidden',
+          boxSizing: 'border-box',
           zIndex: 10,
         }}
-        className="flex items-center justify-center pointer-events-none select-none"
+        className="pointer-events-none select-none"
       >
         <img
           src={ISSUING_AUTHORITY_SIG_BASE64}
@@ -584,8 +607,12 @@ export const CardFront: React.FC<CardFrontProps> = ({
           style={{
             width: '100%',
             height: '100%',
+            maxWidth: '100%',
+            maxHeight: '100%',
             objectFit: 'contain',
+            objectPosition: 'center',
             display: 'block',
+            margin: 'auto',
           }}
           className="pointer-events-none select-none"
         />

@@ -1122,77 +1122,107 @@ export default function App() {
               </div>
 
               {/* Right Section: Real-Time Precision Card Inspector & Preview */}
-              <div className="w-full lg:w-[480px] xl:w-[540px] bg-slate-50 border-l border-slate-200 p-4 flex flex-col justify-between overflow-y-auto">
+              <div className="w-full lg:w-[500px] xl:w-[560px] bg-slate-50 border-l border-slate-200 p-3.5 sm:p-4 flex flex-col justify-between overflow-y-auto">
                 <div className="space-y-4">
-                  {/* Card Navigation & Selection */}
-                  <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs font-bold uppercase tracking-wider text-slate-700">
-                        Card {selectedEmpIndex + 1} of {employees.length}
-                      </span>
+                  {/* Compact Single-Line Card Preview Toolbar */}
+                  <div className="border-b border-slate-200 pb-2.5 overflow-x-auto scrollbar-none">
+                    <div className="flex items-center gap-1.5 flex-nowrap min-w-max">
+                      {/* 1. Card Counter with compact inline navigation chevrons */}
+                      <div className="flex items-center gap-0.5 bg-white border border-slate-200/90 rounded-lg p-0.5 shadow-2xs shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedEmpIndex((prev) => Math.max(0, prev - 1))}
+                          disabled={selectedEmpIndex === 0}
+                          title="Previous Card"
+                          className="p-1 text-slate-500 hover:text-slate-900 hover:bg-slate-100 disabled:opacity-30 rounded transition-colors"
+                        >
+                          <ChevronLeft className="w-3.5 h-3.5" />
+                        </button>
+                        <span className="px-1 text-[11px] font-bold text-slate-800 tracking-tight whitespace-nowrap">
+                          Card {selectedEmpIndex + 1} of {employees.length}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setSelectedEmpIndex((prev) => Math.min(employees.length - 1, prev + 1))
+                          }
+                          disabled={selectedEmpIndex === employees.length - 1}
+                          title="Next Card"
+                          className="p-1 text-slate-500 hover:text-slate-900 hover:bg-slate-100 disabled:opacity-30 rounded transition-colors"
+                        >
+                          <ChevronRight className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
 
-                      {/* Print Status Badge & Action in Inspector Header */}
+                      {/* 2. Print Status Badge */}
                       {currentEmployee.printStatus === 'printed' ? (
-                        <div className="flex items-center gap-1">
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
-                            <CheckCircle className="w-3 h-3 text-emerald-600" />
-                            <span>Print OK</span>
-                            {currentEmployee.printCount && currentEmployee.printCount > 1 ? (
-                              <span className="text-[9px] opacity-80">({currentEmployee.printCount}x)</span>
-                            ) : null}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => handleToggleCardPrintStatus(currentEmployee)}
-                            title="Reset status back to Print Pending"
-                            className="px-1.5 py-0.5 rounded text-[10px] font-semibold text-slate-500 hover:text-amber-800 hover:bg-amber-50 border border-transparent hover:border-amber-200 transition-colors"
-                          >
-                            Reset
-                          </button>
-                        </div>
+                        <span
+                          className="px-2 py-1 rounded-lg text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1 whitespace-nowrap shrink-0 shadow-2xs"
+                          title={`Print Status: Printed OK${currentEmployee.printCount && currentEmployee.printCount > 1 ? ` (${currentEmployee.printCount}x)` : ''}`}
+                        >
+                          <CheckCircle className="w-3 h-3 text-emerald-600 shrink-0" />
+                          <span>Print OK</span>
+                          {currentEmployee.printCount && currentEmployee.printCount > 1 ? (
+                            <span className="text-[9px] opacity-80">({currentEmployee.printCount}x)</span>
+                          ) : null}
+                        </span>
                       ) : (
-                        <div className="flex items-center gap-1">
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 flex items-center gap-1">
-                            <Clock className="w-3 h-3 text-amber-600" />
-                            <span>Print Pending</span>
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => handleMarkSinglePrintOk(currentEmployee)}
-                            title="Mark this card as Print OK"
-                            className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs transition-colors flex items-center gap-1"
-                          >
-                            <Check className="w-3 h-3" />
-                            <span>Mark Print OK</span>
-                          </button>
-                        </div>
+                        <span
+                          className="px-2 py-1 rounded-lg text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 flex items-center gap-1 whitespace-nowrap shrink-0 shadow-2xs"
+                          title="Print Status: Pending"
+                        >
+                          <Clock className="w-3 h-3 text-amber-600 shrink-0" />
+                          <span>Print Pending</span>
+                        </span>
                       )}
 
-                      {/* Minimal Copy Icon Button */}
+                      {/* 3. Mark Print OK (or Reset) Action Button */}
+                      {currentEmployee.printStatus === 'printed' ? (
+                        <button
+                          type="button"
+                          onClick={() => handleToggleCardPrintStatus(currentEmployee)}
+                          title="Reset status back to Print Pending"
+                          className="px-2 py-1 rounded-lg text-[10px] font-semibold text-slate-600 hover:text-amber-800 hover:bg-amber-50 border border-slate-200 hover:border-amber-200 transition-colors whitespace-nowrap shrink-0 shadow-2xs"
+                        >
+                          Reset
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleMarkSinglePrintOk(currentEmployee)}
+                          title="Mark this card as Print OK"
+                          className="px-2 py-1 rounded-lg text-[10px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs transition-colors flex items-center gap-1 whitespace-nowrap shrink-0 active:scale-95"
+                        >
+                          <Check className="w-3 h-3 shrink-0" />
+                          <span>Mark Print OK</span>
+                        </button>
+                      )}
+
+                      {/* 4. Compact Copy Button */}
                       <button
                         type="button"
                         onClick={() => handleCopyCard(currentEmployee)}
                         disabled={copyingCardId === currentEmployee.id}
                         title="Copy Front & Back combined side-by-side to Clipboard (paste into Word with Ctrl+V)"
-                        className="px-2 py-1 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg text-slate-600 hover:text-slate-900 transition-all flex items-center gap-1.5 shadow-2xs active:scale-95 disabled:opacity-50"
+                        className="px-2 py-1 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg text-slate-700 hover:text-slate-900 transition-all flex items-center gap-1 shadow-2xs active:scale-95 disabled:opacity-50 whitespace-nowrap shrink-0 text-[10px] font-semibold"
                       >
                         {copyingCardId === currentEmployee.id ? (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin text-rose-600" />
+                          <Loader2 className="w-3 h-3 animate-spin text-rose-600 shrink-0" />
                         ) : copyFeedback?.id === currentEmployee.id ? (
-                          <Check className="w-3.5 h-3.5 text-emerald-600" />
+                          <Check className="w-3 h-3 text-emerald-600 shrink-0" />
                         ) : (
-                          <Copy className="w-3.5 h-3.5 text-slate-500 hover:text-slate-900" />
+                          <Copy className="w-3 h-3 text-slate-500 hover:text-slate-900 shrink-0" />
                         )}
-                        <span className="text-[10px] font-semibold">
+                        <span>
                           {copyingCardId === currentEmployee.id
-                            ? 'Combining...'
+                            ? 'Copying...'
                             : copyFeedback?.id === currentEmployee.id
-                            ? (copyFeedback.status === 'copied' ? 'Copied!' : 'Downloaded!')
+                            ? (copyFeedback.status === 'copied' ? 'Copied!' : 'Saved!')
                             : 'Copy'}
                         </span>
                       </button>
 
-                      {/* Bulk PDF Download Button (Clearly labeled near Copy option) */}
+                      {/* 5. Bulk PDF Download Button (with dynamic count) */}
                       <button
                         type="button"
                         onClick={handleTriggerBulkPdfDownload}
@@ -1204,41 +1234,22 @@ export default function App() {
                             ? 'Select cards from the table to download Bulk PDF'
                             : 'Download selected cards (up to 18) as a print-ready landscape PDF'
                         }
-                        className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all flex items-center gap-1.5 shadow-2xs active:scale-95 disabled:opacity-50 ${
+                        className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all flex items-center gap-1 shadow-2xs active:scale-95 disabled:opacity-50 whitespace-nowrap shrink-0 ${
                           selectedCardIds.size > 18
                             ? 'bg-amber-600 hover:bg-amber-700 text-white animate-pulse'
                             : 'bg-rose-600 hover:bg-rose-700 text-white'
                         }`}
                       >
                         {isBulkPdfGenerating ? (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
+                          <Loader2 className="w-3 h-3 animate-spin text-white shrink-0" />
                         ) : (
-                          <FileDown className="w-3.5 h-3.5 text-white" />
+                          <FileDown className="w-3 h-3 text-white shrink-0" />
                         )}
                         <span>
                           {isBulkPdfGenerating
-                            ? `Generating (${bulkPdfProgress.current}/${bulkPdfProgress.total})...`
-                            : `Bulk PDF Download${selectedCardIds.size > 0 ? ` (${selectedCardIds.size})` : ''}`}
+                            ? `PDF (${bulkPdfProgress.current}/${bulkPdfProgress.total})`
+                            : `Bulk PDF Download (${selectedCardIds.size})`}
                         </span>
-                      </button>
-                    </div>
-
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => setSelectedEmpIndex((prev) => Math.max(0, prev - 1))}
-                        disabled={selectedEmpIndex === 0}
-                        className="p-1.5 bg-white hover:bg-slate-100 border border-slate-200 disabled:opacity-40 rounded-lg text-slate-700 transition-colors"
-                      >
-                        <ChevronLeft className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() =>
-                          setSelectedEmpIndex((prev) => Math.min(employees.length - 1, prev + 1))
-                        }
-                        disabled={selectedEmpIndex === employees.length - 1}
-                        className="p-1.5 bg-white hover:bg-slate-100 border border-slate-200 disabled:opacity-40 rounded-lg text-slate-700 transition-colors"
-                      >
-                        <ChevronRight className="w-4 h-4" />
                       </button>
                     </div>
                   </div>

@@ -5,6 +5,7 @@ const USER_KEY = 'idcard_auth_user';
 
 export function getStoredToken(): string | null {
   try {
+    if (typeof window === 'undefined' || typeof localStorage === 'undefined') return null;
     return localStorage.getItem(TOKEN_KEY);
   } catch {
     return null;
@@ -13,6 +14,7 @@ export function getStoredToken(): string | null {
 
 export function setStoredToken(token: string | null) {
   try {
+    if (typeof window === 'undefined' || typeof localStorage === 'undefined') return;
     if (token) {
       localStorage.setItem(TOKEN_KEY, token);
     } else {
@@ -25,6 +27,7 @@ export function setStoredToken(token: string | null) {
 
 export function getStoredUser(): AuthUser | null {
   try {
+    if (typeof window === 'undefined' || typeof localStorage === 'undefined') return null;
     const raw = localStorage.getItem(USER_KEY);
     return raw ? JSON.parse(raw) : null;
   } catch {
@@ -34,6 +37,7 @@ export function getStoredUser(): AuthUser | null {
 
 export function setStoredUser(user: AuthUser | null) {
   try {
+    if (typeof window === 'undefined' || typeof localStorage === 'undefined') return;
     if (user) {
       localStorage.setItem(USER_KEY, JSON.stringify(user));
     } else {
@@ -44,7 +48,7 @@ export function setStoredUser(user: AuthUser | null) {
   }
 }
 
-async function request<T>(endpoint: string, options: RequestInit = {}, retryOn401 = true): Promise<T> {
+async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const token = getStoredToken();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -63,22 +67,12 @@ async function request<T>(endpoint: string, options: RequestInit = {}, retryOn40
   const data = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    // If unauthorized or session expired on an operational route, attempt transparent session recovery once
-    if (response.status === 401 && retryOn401 && !endpoint.startsWith('/api/auth/')) {
+    // If unauthorized (401), immediately clear stored session and notify app
+    if (response.status === 401) {
       setStoredToken(null);
       setStoredUser(null);
-      try {
-        let loginRes;
-        try {
-          loginRes = await apiService.login('Admin', '466035');
-        } catch {
-          loginRes = await apiService.login('admin', 'admin123').catch(() => null);
-        }
-        if (loginRes?.token) {
-          return await request<T>(endpoint, options, false);
-        }
-      } catch (err) {
-        console.warn('Auto session restoration failed:', err);
+      if (typeof window !== 'undefined' && !endpoint.includes('/api/auth/login')) {
+        window.dispatchEvent(new CustomEvent('auth:session-expired'));
       }
     }
 
@@ -130,7 +124,7 @@ export const apiService = {
     const res = await request<any>('/api/auth/login', {
       method: 'POST',
       body: JSON.stringify({ username, password }),
-    }, false);
+    });
 
     const candidateUser =
       (res?.user && typeof res.user === 'object' && Object.keys(res.user).length > 0 ? res.user : null) ||
@@ -171,7 +165,7 @@ export const apiService = {
     const res = await request<any>('/api/auth/supervisor-login', {
       method: 'POST',
       body: JSON.stringify({ employeeId, password }),
-    }, false);
+    });
 
     const candidateUser =
       (res?.user && typeof res.user === 'object' && Object.keys(res.user).length > 0 ? res.user : null) ||
@@ -206,7 +200,7 @@ export const apiService = {
 
   async getCurrentUser(): Promise<AuthUser | null> {
     try {
-      const res = await request<any>('/api/auth/me', {}, false);
+      const res = await request<any>('/api/auth/me');
       const rawUser =
         (res?.user && typeof res.user === 'object' && Object.keys(res.user).length > 0 ? res.user : null) ||
         (res?.data?.user && typeof res.data.user === 'object' ? res.data.user : null) ||

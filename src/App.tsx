@@ -64,7 +64,13 @@ import { UserManagementSection } from './components/UserManagementSection';
 import { SubmissionsSection } from './components/SubmissionsSection';
 import { LoginModal } from './components/LoginModal';
 import { AdminSettingsModal } from './components/AdminSettingsModal';
-import { apiService, getStoredUser, getStoredToken } from './services/apiService';
+import {
+  apiService,
+  getStoredUser,
+  getStoredToken,
+  setStoredToken,
+  setStoredUser,
+} from './services/apiService';
 
 type MainNavTab =
   | 'submissions'
@@ -75,8 +81,8 @@ type MainNavTab =
   | 'card_studio';
 
 export default function App() {
-  // Authentication State
-  const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => getStoredUser());
+  // Authentication State - strictly null on boot until verified with server
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isAdminSettingsOpen, setIsAdminSettingsOpen] = useState(false);
@@ -177,49 +183,57 @@ export default function App() {
   // Ref to hidden export container
   const exportRenderRef = useRef<HTMLDivElement>(null);
 
-  // Auto-authenticate on initial mount
+  // Verify authentication on initial mount
   useEffect(() => {
     const initAuth = async () => {
       setIsAuthLoading(true);
       const token = getStoredToken();
       if (token) {
-        const user = await apiService.getCurrentUser();
-        if (user && user.role) {
-          setCurrentUser(user);
-          if (user.role === 'supervisor') {
-            setActiveNavTab('supervisor_submission');
-          } else if (user.role === 'data_entry') {
-            const allowed = Array.isArray(user.allowedTabs) && user.allowedTabs.length > 0
-              ? (user.allowedTabs as MainNavTab[])
-              : ['data_entry_form'];
-            setActiveNavTab((allowed[0] || 'data_entry_form') as MainNavTab);
-          }
-          setIsAuthLoading(false);
-          return;
-        }
-      }
-
-      // Default quick auto-login as admin for instant ready-to-test experience
-      try {
-        const loginRes = await apiService.login('Admin', '466035');
-        if (loginRes?.user && loginRes.user.role) {
-          setCurrentUser(loginRes.user);
-        }
-      } catch (err) {
         try {
-          const fallbackRes = await apiService.login('admin', 'admin123');
-          if (fallbackRes?.user && fallbackRes.user.role) {
-            setCurrentUser(fallbackRes.user);
+          const user = await apiService.getCurrentUser();
+          if (user && user.role) {
+            setCurrentUser(user);
+            if (user.role === 'supervisor') {
+              setActiveNavTab('supervisor_submission');
+            } else if (user.role === 'data_entry') {
+              const allowed = Array.isArray(user.allowedTabs) && user.allowedTabs.length > 0
+                ? (user.allowedTabs as MainNavTab[])
+                : ['data_entry_form'];
+              setActiveNavTab((allowed[0] || 'data_entry_form') as MainNavTab);
+            }
+          } else {
+            // Invalid session payload returned
+            setStoredToken(null);
+            setStoredUser(null);
+            setCurrentUser(null);
           }
-        } catch {
-          console.error('Initial auto-login error:', err);
+        } catch (err) {
+          console.warn('Session verification failed:', err);
+          setStoredToken(null);
+          setStoredUser(null);
+          setCurrentUser(null);
         }
-      } finally {
-        setIsAuthLoading(false);
+      } else {
+        // No stored token - require login
+        setStoredToken(null);
+        setStoredUser(null);
+        setCurrentUser(null);
       }
+      setIsAuthLoading(false);
     };
 
     initAuth();
+  }, []);
+
+  // Listen for unauthorized/session-expired events to immediately kick back to login
+  useEffect(() => {
+    const handleSessionExpired = () => {
+      setStoredToken(null);
+      setStoredUser(null);
+      setCurrentUser(null);
+    };
+    window.addEventListener('auth:session-expired', handleSessionExpired);
+    return () => window.removeEventListener('auth:session-expired', handleSessionExpired);
   }, []);
 
   // Fetch public settings for login background image on boot
@@ -671,6 +685,50 @@ export default function App() {
   const isAdmin = currentUser?.role === 'admin';
   const isDataEntry = currentUser?.role === 'data_entry';
   const isSupervisor = currentUser?.role === 'supervisor';
+
+  // Strict route/view guard: unauthenticated users cannot access any dashboard routes
+  if (isAuthLoading) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
+        <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-rose-600 to-rose-500 flex items-center justify-center text-white shadow-xl mb-4 animate-pulse">
+          <Layers className="w-6 h-6" />
+        </div>
+        <div className="flex items-center gap-2.5 text-slate-300 text-sm font-semibold tracking-wide">
+          <Loader2 className="w-4 h-4 animate-spin text-rose-500" />
+          <span>Verifying secure session...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!currentUser) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col justify-center items-center">
+        <LoginModal
+          isOpen={true}
+          forced={true}
+          backgroundImageUrl={loginBackgroundImage}
+          onLoginSuccess={(user) => {
+            if (!user || !user.role) {
+              console.error('Login callback received invalid or missing user:', user);
+              return;
+            }
+            setCurrentUser(user);
+            if (user.role === 'supervisor') {
+              setActiveNavTab('supervisor_submission');
+            } else if (user.role === 'data_entry') {
+              const allowed = Array.isArray(user.allowedTabs) && user.allowedTabs.length > 0
+                ? (user.allowedTabs as MainNavTab[])
+                : ['data_entry_form'];
+              setActiveNavTab((allowed[0] || 'data_entry_form') as MainNavTab);
+            } else {
+              setActiveNavTab('submissions');
+            }
+          }}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900 flex flex-col font-sans">

@@ -26,7 +26,10 @@
     "email": "operator1@company.com",
     "role": "data_entry",
     "status": "active",
-    "createdAt": "2026-10-20T06:44:11.439Z"
+    "createdAt": "2026-10-20T06:44:11.439Z",
+    "allowedTabs": [
+      "data_entry_form"
+    ]
   },
   {
     "id": "user-supervisor-1",
@@ -37,7 +40,10 @@
     "email": "supervisor@company.com",
     "role": "supervisor",
     "status": "active",
-    "createdAt": "2026-10-20T07:41:01.791Z"
+    "createdAt": "2026-10-20T07:41:01.791Z",
+    "allowedTabs": [
+      "supervisor_submission"
+    ]
   },
   {
     "id": "user-1792482506735-971",
@@ -48,7 +54,10 @@
     "email": "qa.supervisor@company.com",
     "role": "supervisor",
     "status": "active",
-    "createdAt": "2026-10-20T07:48:26.783Z"
+    "createdAt": "2026-10-20T07:48:26.783Z",
+    "allowedTabs": [
+      "supervisor_submission"
+    ]
   },
   {
     "id": "user-1792482562645-4",
@@ -59,7 +68,10 @@
     "email": "line2.supervisor@company.com",
     "role": "supervisor",
     "status": "active",
-    "createdAt": "2026-10-20T07:49:22.696Z"
+    "createdAt": "2026-10-20T07:49:22.696Z",
+    "allowedTabs": [
+      "supervisor_submission"
+    ]
   },
   {
     "id": "user-1792482635329-437",
@@ -70,6 +82,9 @@
     "email": "line2.supervisor@company.com",
     "role": "supervisor",
     "status": "active",
-    "createdAt": "2026-10-20T07:50:35.382Z"
+    "createdAt": "2026-10-20T07:50:35.382Z",
+    "allowedTabs": [
+      "supervisor_submission"
+    ]
   }
 ]

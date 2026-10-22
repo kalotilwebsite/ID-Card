@@ -2,6 +2,11 @@ import React from 'react';
 import { EmployeeCardData, CardCalibrationSettings, CARD_WIDTH, CARD_HEIGHT } from '../types';
 import { FRONT_TEMPLATE_SVG } from '../data/cardTemplates';
 import { DEFAULT_CALIBRATION } from '../types';
+import {
+  ROSA_FRONT_LOGO_BASE64,
+  FRONT_FOOTER_LOGO_BASE64,
+  ISSUING_AUTHORITY_SIG_BASE64,
+} from '../data/cardAssets';
 
 interface CardFrontProps {
   employee: EmployeeCardData;
@@ -39,6 +44,9 @@ export const CardFront: React.FC<CardFrontProps> = ({
         transform: scale !== 1 ? `scale(${scale})` : undefined,
         transformOrigin: 'top left',
         boxSizing: 'border-box',
+        overflow: 'hidden',
+        isolation: 'isolate',
+        position: 'relative',
       }}
       className={`relative rounded-[14px] overflow-hidden select-none shadow-sm border border-slate-300 bg-white flex flex-col justify-between ${className}`}
     >
@@ -82,9 +90,9 @@ export const CardFront: React.FC<CardFrontProps> = ({
           }}
         />
 
-        {/* Exact replacement PNG logo and subtitle */}
+        {/* Exact replacement PNG logo and subtitle (embedded as Base64) */}
         <img
-          src="/assets/aistudio/Fornt_part_png_logo_fe48da95.png"
+          src={ROSA_FRONT_LOGO_BASE64}
           alt="ROSA Beyond Beauty"
           style={{
             position: 'absolute',
@@ -95,7 +103,6 @@ export const CardFront: React.FC<CardFrontProps> = ({
             objectFit: 'contain',
           }}
           className="pointer-events-none select-none"
-          referrerPolicy="no-referrer"
         />
       </div>
 
@@ -408,18 +415,19 @@ export const CardFront: React.FC<CardFrontProps> = ({
           className="flex items-center justify-center pointer-events-none select-none"
         >
           <img
-            src="/assets/issuing_authority_signature.png"
+            src={ISSUING_AUTHORITY_SIG_BASE64}
             alt="Issuing Authority Signature"
             style={{
               width: '100%',
               height: '100%',
               objectFit: 'contain',
+              display: 'block',
             }}
-            referrerPolicy="no-referrer"
+            className="pointer-events-none select-none"
           />
         </div>
 
-        {/* 3. EMPLOYEE PHOTO (Consistent, fixed photo frame with defined size and position) */}
+        {/* 3. EMPLOYEE PHOTO (Consistent, fixed photo frame with strict object-fit: cover and centering) */}
         <div
           style={{
             position: 'absolute',
@@ -429,6 +437,7 @@ export const CardFront: React.FC<CardFrontProps> = ({
             height: 104,
             backgroundColor: '#FFFFFF',
             boxSizing: 'border-box',
+            overflow: 'hidden',
           }}
           className="overflow-hidden flex items-center justify-center rounded-[2px] border border-gray-300 shadow-sm"
         >
@@ -437,8 +446,13 @@ export const CardFront: React.FC<CardFrontProps> = ({
               src={employee.photoUrl}
               alt={employee.name}
               className="w-full h-full object-cover object-top select-none pointer-events-none"
-              style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'top' }}
-              referrerPolicy="no-referrer"
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+                objectPosition: 'top center',
+                display: 'block',
+              }}
             />
           ) : (
             <div className="w-full h-full bg-gray-100 flex flex-col items-center justify-center text-gray-400">
@@ -466,15 +480,15 @@ export const CardFront: React.FC<CardFrontProps> = ({
           className="pointer-events-none select-none flex items-center justify-center"
         >
           <img
-            src="/assets/front_footer_logo_transparent.png"
+            src={FRONT_FOOTER_LOGO_BASE64}
             alt="Rosa Beyond Tomorrow Logo"
             style={{
               width: '100%',
               height: '100%',
               objectFit: 'contain',
+              display: 'block',
             }}
             className="pointer-events-none select-none"
-            referrerPolicy="no-referrer"
           />
         </div>
 

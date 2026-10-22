@@ -28,6 +28,10 @@ import { apiService } from '../services/apiService';
 import { AuthUser, MasterEmployee } from '../types';
 import { CameraCaptureModal } from './CameraCaptureModal';
 import { SignaturePadModal } from './SignaturePadModal';
+import {
+  normalizeEmployeePhoto,
+  normalizeEmployeeSignature,
+} from '../services/imageNormalizationService';
 
 interface SupervisorSubmissionFormProps {
   currentUser?: AuthUser | null;
@@ -92,6 +96,11 @@ export function SupervisorSubmissionForm({
     'Employee ID Card data has been submitted successfully and queued for administrative review and printing. Thank you!'
   );
 
+  // Capture method toggles
+  const [supervisorPhotoCameraEnabled, setSupervisorPhotoCameraEnabled] = useState(true);
+  const [supervisorSignatureCameraEnabled, setSupervisorSignatureCameraEnabled] = useState(true);
+  const [supervisorSignaturePadEnabled, setSupervisorSignaturePadEnabled] = useState(true);
+
   // Confirmation Popup Modal State (Strictly NO ID Card Preview)
   const [confirmationPopup, setConfirmationPopup] = useState<{
     isOpen: boolean;
@@ -124,6 +133,15 @@ export function SupervisorSubmissionForm({
           }
           if (settings.supervisorSuccessMessage) {
             setAdminConfiguredMessage(settings.supervisorSuccessMessage);
+          }
+          if (settings.supervisorPhotoCameraEnabled !== undefined) {
+            setSupervisorPhotoCameraEnabled(settings.supervisorPhotoCameraEnabled);
+          }
+          if (settings.supervisorSignatureCameraEnabled !== undefined) {
+            setSupervisorSignatureCameraEnabled(settings.supervisorSignatureCameraEnabled);
+          }
+          if (settings.supervisorSignaturePadEnabled !== undefined) {
+            setSupervisorSignaturePadEnabled(settings.supervisorSignaturePadEnabled);
           }
         }
       } catch (e) {
@@ -211,8 +229,8 @@ export function SupervisorSubmissionForm({
     }
   };
 
-  // Image Upload Handlers
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, target: 'photo' | 'sig') => {
+  // Image Upload Handlers with Automatic Canvas Normalization
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>, target: 'photo' | 'sig') => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -221,16 +239,19 @@ export function SupervisorSubmissionForm({
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const result = event.target?.result as string;
+    try {
       if (target === 'photo') {
-        setPhotoUrl(result);
+        const normalized = await normalizeEmployeePhoto(file);
+        setPhotoUrl(normalized);
       } else {
-        setSignatureUrl(result);
+        const normalized = await normalizeEmployeeSignature(file);
+        setSignatureUrl(normalized);
       }
-    };
-    reader.readAsDataURL(file);
+      setSubmitError(null);
+    } catch (normErr: any) {
+      console.error('Image normalization error:', normErr);
+      setSubmitError('ছবি প্রক্রিয়া করতে ত্রুটি হয়েছে। অনুগ্রহ করে অন্য ছবি নির্বাচন করুন।');
+    }
     e.target.value = '';
   };
 
@@ -239,11 +260,23 @@ export function SupervisorSubmissionForm({
     setIsCameraOpen(true);
   };
 
-  const handleCameraCapture = (dataUrl: string) => {
-    if (cameraType === 'photo') {
-      setPhotoUrl(dataUrl);
-    } else {
-      setSignatureUrl(dataUrl);
+  const handleCameraCapture = async (dataUrl: string) => {
+    try {
+      if (cameraType === 'photo') {
+        const normalized = await normalizeEmployeePhoto(dataUrl);
+        setPhotoUrl(normalized);
+      } else {
+        const normalized = await normalizeEmployeeSignature(dataUrl);
+        setSignatureUrl(normalized);
+      }
+      setSubmitError(null);
+    } catch (normErr: any) {
+      console.error('Camera normalization error:', normErr);
+      if (cameraType === 'photo') {
+        setPhotoUrl(dataUrl);
+      } else {
+        setSignatureUrl(dataUrl);
+      }
     }
   };
 
@@ -702,18 +735,25 @@ export function SupervisorSubmissionForm({
                 )}
               </CornerCropBox>
 
-              {/* Photo Action Buttons matching reference image */}
+              {/* Photo Action Buttons respecting supervisorPhotoCameraEnabled */}
               <div className="flex-1 space-y-2">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <button
-                    type="button"
-                    onClick={() => openCamera('photo')}
-                    disabled={isEntryDisabled || alreadySubmitted}
-                    className="px-3.5 py-2 bg-slate-600 hover:bg-slate-700 disabled:opacity-50 text-white rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5 shadow-2xs"
-                  >
-                    <Camera className="w-3.5 h-3.5" />
-                    <span>ক্যামেরা চালু করুন</span>
-                  </button>
+                  {supervisorPhotoCameraEnabled ? (
+                    <button
+                      type="button"
+                      onClick={() => openCamera('photo')}
+                      disabled={isEntryDisabled || alreadySubmitted}
+                      className="px-3.5 py-2 bg-slate-600 hover:bg-slate-700 disabled:opacity-50 text-white rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5 shadow-2xs"
+                    >
+                      <Camera className="w-3.5 h-3.5" />
+                      <span>ক্যামেরা চালু করুন</span>
+                    </button>
+                  ) : (
+                    <span className="px-2.5 py-1.5 bg-amber-50 text-amber-800 border border-amber-200 rounded-lg text-[11px] font-medium flex items-center gap-1">
+                      <Upload className="w-3 h-3 text-amber-600" />
+                      <span>শুধু ফাইল আপলোড (ক্যামেরা বন্ধ)</span>
+                    </span>
+                  )}
 
                   <button
                     type="button"
@@ -777,28 +817,32 @@ export function SupervisorSubmissionForm({
                 )}
               </CornerCropBox>
 
-              {/* Signature Action Buttons matching reference image */}
+              {/* Signature Action Buttons respecting toggles */}
               <div className="flex-1 space-y-2">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <button
-                    type="button"
-                    onClick={() => openCamera('signature')}
-                    disabled={isEntryDisabled || alreadySubmitted}
-                    className="px-3 py-2 bg-slate-600 hover:bg-slate-700 disabled:opacity-50 text-white rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5 shadow-2xs"
-                  >
-                    <Camera className="w-3.5 h-3.5" />
-                    <span>ক্যামেরা</span>
-                  </button>
+                  {supervisorSignatureCameraEnabled && (
+                    <button
+                      type="button"
+                      onClick={() => openCamera('signature')}
+                      disabled={isEntryDisabled || alreadySubmitted}
+                      className="px-3 py-2 bg-slate-600 hover:bg-slate-700 disabled:opacity-50 text-white rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5 shadow-2xs"
+                    >
+                      <Camera className="w-3.5 h-3.5" />
+                      <span>ক্যামেরা</span>
+                    </button>
+                  )}
 
-                  <button
-                    type="button"
-                    onClick={() => setIsSignaturePadOpen(true)}
-                    disabled={isEntryDisabled || alreadySubmitted}
-                    className="px-3 py-2 bg-white hover:bg-slate-50 disabled:opacity-50 text-slate-700 rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5 border border-slate-200 shadow-2xs"
-                  >
-                    <PenTool className="w-3.5 h-3.5 text-slate-500" />
-                    <span>হাতে আঁকুন</span>
-                  </button>
+                  {supervisorSignaturePadEnabled && (
+                    <button
+                      type="button"
+                      onClick={() => setIsSignaturePadOpen(true)}
+                      disabled={isEntryDisabled || alreadySubmitted}
+                      className="px-3 py-2 bg-white hover:bg-slate-50 disabled:opacity-50 text-slate-700 rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5 border border-slate-200 shadow-2xs"
+                    >
+                      <PenTool className="w-3.5 h-3.5 text-slate-500" />
+                      <span>হাতে আঁকুন</span>
+                    </button>
+                  )}
 
                   <button
                     type="button"
@@ -924,7 +968,14 @@ export function SupervisorSubmissionForm({
       <SignaturePadModal
         isOpen={isSignaturePadOpen}
         onClose={() => setIsSignaturePadOpen(false)}
-        onSave={(dataUrl) => setSignatureUrl(dataUrl)}
+        onSave={async (dataUrl) => {
+          try {
+            const normalized = await normalizeEmployeeSignature(dataUrl);
+            setSignatureUrl(normalized);
+          } catch {
+            setSignatureUrl(dataUrl);
+          }
+        }}
       />
     </div>
   );

@@ -1,6 +1,6 @@
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas-pro';
-import { EmployeeCardData, PrintSettings, CompanyTemplateConfig } from '../types';
+import { EmployeeCardData, PrintSettings, CompanyTemplateConfig, CARD_WIDTH, CARD_HEIGHT } from '../types';
 
 export interface ExportProgressCallback {
   (current: number, total: number, message: string): void;
@@ -67,6 +67,12 @@ export const exportCardsToPdf = async (
         allowTaint: true,
         backgroundColor: '#ffffff',
         logging: false,
+        width: CARD_WIDTH,
+        height: CARD_HEIGHT,
+        x: 0,
+        y: 0,
+        scrollX: 0,
+        scrollY: 0,
       });
       renderedImages[emp.id].front = canvas.toDataURL('image/jpeg', 0.95);
     }
@@ -79,6 +85,12 @@ export const exportCardsToPdf = async (
         allowTaint: true,
         backgroundColor: '#ffffff',
         logging: false,
+        width: CARD_WIDTH,
+        height: CARD_HEIGHT,
+        x: 0,
+        y: 0,
+        scrollX: 0,
+        scrollY: 0,
       });
       renderedImages[emp.id].back = canvas.toDataURL('image/jpeg', 0.95);
     }

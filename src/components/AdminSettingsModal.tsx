@@ -15,6 +15,8 @@ import {
   Info,
   CheckCircle2,
   FileCheck,
+  Camera,
+  PenTool,
 } from 'lucide-react';
 import { apiService } from '../services/apiService';
 import { AppSettings } from '../types';
@@ -50,6 +52,11 @@ export function AdminSettingsModal({
     DEFAULT_SUPERVISOR_DISABLED_MSG
   );
 
+  // Supervisor Form Input & Capture Toggles
+  const [supervisorPhotoCameraEnabled, setSupervisorPhotoCameraEnabled] = useState(true);
+  const [supervisorSignatureCameraEnabled, setSupervisorSignatureCameraEnabled] = useState(true);
+  const [supervisorSignaturePadEnabled, setSupervisorSignaturePadEnabled] = useState(true);
+
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -73,6 +80,9 @@ export function AdminSettingsModal({
         setSupervisorEntryDisabledMessage(
           res.supervisorEntryDisabledMessage || DEFAULT_SUPERVISOR_DISABLED_MSG
         );
+        setSupervisorPhotoCameraEnabled(res.supervisorPhotoCameraEnabled !== false);
+        setSupervisorSignatureCameraEnabled(res.supervisorSignatureCameraEnabled !== false);
+        setSupervisorSignaturePadEnabled(res.supervisorSignaturePadEnabled !== false);
       } catch (err: any) {
         console.warn('Failed to load settings, using defaults:', err);
       } finally {
@@ -129,6 +139,9 @@ export function AdminSettingsModal({
         loginNoticeMessage: loginNoticeMessage.trim(),
         supervisorEntryEnabled,
         supervisorEntryDisabledMessage: supervisorEntryDisabledMessage.trim(),
+        supervisorPhotoCameraEnabled,
+        supervisorSignatureCameraEnabled,
+        supervisorSignaturePadEnabled,
       });
 
       // Synchronize with client localStorage for instantaneous boot
@@ -270,12 +283,146 @@ export function AdminSettingsModal({
             )}
           </div>
 
-          {/* SECTION 2: SUCCESS MESSAGE SETTINGS */}
+          {/* SECTION 2: SUPERVISOR CAPTURE & INPUT CONTROLS */}
+          <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 sm:p-5 space-y-4 shadow-2xs">
+            <div>
+              <div className="flex items-center gap-2">
+                <Camera className="w-4 h-4 text-rose-600" />
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900">
+                  2. Supervisor Entry Capture &amp; Input Methods
+                </h4>
+              </div>
+              <p className="text-xs text-slate-600 mt-1">
+                Configure allowed input methods for supervisors on mobile and desktop devices.
+              </p>
+            </div>
+
+            <div className="space-y-3 pt-1">
+              {/* Toggle 1: Employee Photo Live Camera */}
+              <div className="bg-white border border-slate-200 rounded-xl p-3.5 flex items-center justify-between gap-3 shadow-2xs">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2">
+                    <Camera className="w-3.5 h-3.5 text-slate-700" />
+                    <span className="text-xs font-bold text-slate-900">
+                      Employee Photo Live Camera Capture
+                    </span>
+                    <span
+                      className={`px-1.5 py-0.5 rounded text-[9.5px] font-bold border ${
+                        supervisorPhotoCameraEnabled
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          : 'bg-amber-50 text-amber-800 border-amber-200'
+                      }`}
+                    >
+                      {supervisorPhotoCameraEnabled ? 'Camera Allowed' : 'Force File Upload Only'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-500">
+                    When turned OFF, the live camera button is disabled, forcing supervisors to upload normalized photos from device storage.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setSupervisorPhotoCameraEnabled((prev) => !prev)}
+                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                    supervisorPhotoCameraEnabled ? 'bg-emerald-600' : 'bg-slate-300'
+                  }`}
+                  title={supervisorPhotoCameraEnabled ? 'Turn OFF Photo Camera' : 'Turn ON Photo Camera'}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                      supervisorPhotoCameraEnabled ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {/* Toggle 2: Signature Live Camera */}
+              <div className="bg-white border border-slate-200 rounded-xl p-3.5 flex items-center justify-between gap-3 shadow-2xs">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2">
+                    <Camera className="w-3.5 h-3.5 text-slate-700" />
+                    <span className="text-xs font-bold text-slate-900">
+                      Signature Live Camera Capture
+                    </span>
+                    <span
+                      className={`px-1.5 py-0.5 rounded text-[9.5px] font-bold border ${
+                        supervisorSignatureCameraEnabled
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          : 'bg-slate-100 text-slate-600 border-slate-200'
+                      }`}
+                    >
+                      {supervisorSignatureCameraEnabled ? 'ON' : 'OFF'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-500">
+                    Allow or disallow supervisors from capturing paper signatures with the device live camera.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setSupervisorSignatureCameraEnabled((prev) => !prev)}
+                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                    supervisorSignatureCameraEnabled ? 'bg-emerald-600' : 'bg-slate-300'
+                  }`}
+                  title={supervisorSignatureCameraEnabled ? 'Turn OFF Signature Camera' : 'Turn ON Signature Camera'}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                      supervisorSignatureCameraEnabled ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {/* Toggle 3: Signature Drawing Pad Canvas */}
+              <div className="bg-white border border-slate-200 rounded-xl p-3.5 flex items-center justify-between gap-3 shadow-2xs">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2">
+                    <PenTool className="w-3.5 h-3.5 text-slate-700" />
+                    <span className="text-xs font-bold text-slate-900">
+                      Signature Drawing Pad Canvas
+                    </span>
+                    <span
+                      className={`px-1.5 py-0.5 rounded text-[9.5px] font-bold border ${
+                        supervisorSignaturePadEnabled
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          : 'bg-slate-100 text-slate-600 border-slate-200'
+                      }`}
+                    >
+                      {supervisorSignaturePadEnabled ? 'ON' : 'OFF'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-500">
+                    Allow or disallow touch/stylus hand-drawing signatures on the interactive digital canvas pad.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setSupervisorSignaturePadEnabled((prev) => !prev)}
+                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                    supervisorSignaturePadEnabled ? 'bg-emerald-600' : 'bg-slate-300'
+                  }`}
+                  title={supervisorSignaturePadEnabled ? 'Turn OFF Drawing Pad' : 'Turn ON Drawing Pad'}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                      supervisorSignaturePadEnabled ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* SECTION 3: SUCCESS MESSAGE SETTINGS */}
           <div className="space-y-4 pt-1">
             <div className="flex items-center gap-2">
               <MessageSquare className="w-4 h-4 text-rose-600" />
               <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900">
-                2. Operation Success Messages
+                3. Operation Success Messages
               </h4>
             </div>
 

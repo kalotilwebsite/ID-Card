@@ -28,6 +28,10 @@ import { CardBack } from './CardBack';
 import { FRONT_TEMPLATE_SVG, BACK_TEMPLATE_SVG } from '../data/cardTemplates';
 import { CameraCaptureModal } from './CameraCaptureModal';
 import { SignaturePadModal } from './SignaturePadModal';
+import {
+  normalizeEmployeePhoto,
+  normalizeEmployeeSignature,
+} from '../services/imageNormalizationService';
 
 interface DataEntryFormProps {
   frontTemplateUrl?: string;
@@ -123,8 +127,8 @@ export function DataEntryForm({
     }
   };
 
-  // Image Upload Handlers
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, target: 'photo' | 'sig') => {
+  // Image Upload Handlers with Automatic Canvas Normalization
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>, target: 'photo' | 'sig') => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -133,16 +137,19 @@ export function DataEntryForm({
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const result = event.target?.result as string;
+    try {
       if (target === 'photo') {
-        setPhotoUrl(result);
+        const normalized = await normalizeEmployeePhoto(file);
+        setPhotoUrl(normalized);
       } else {
-        setSignatureUrl(result);
+        const normalized = await normalizeEmployeeSignature(file);
+        setSignatureUrl(normalized);
       }
-    };
-    reader.readAsDataURL(file);
+      setSubmitError(null);
+    } catch (normErr: any) {
+      console.error('Normalization error:', normErr);
+      setSubmitError('Failed to process image file. Please try another image.');
+    }
     e.target.value = '';
   };
 
@@ -151,11 +158,23 @@ export function DataEntryForm({
     setIsCameraOpen(true);
   };
 
-  const handleCameraCapture = (dataUrl: string) => {
-    if (cameraType === 'photo') {
-      setPhotoUrl(dataUrl);
-    } else {
-      setSignatureUrl(dataUrl);
+  const handleCameraCapture = async (dataUrl: string) => {
+    try {
+      if (cameraType === 'photo') {
+        const normalized = await normalizeEmployeePhoto(dataUrl);
+        setPhotoUrl(normalized);
+      } else {
+        const normalized = await normalizeEmployeeSignature(dataUrl);
+        setSignatureUrl(normalized);
+      }
+      setSubmitError(null);
+    } catch (normErr: any) {
+      console.error('Camera normalization error:', normErr);
+      if (cameraType === 'photo') {
+        setPhotoUrl(dataUrl);
+      } else {
+        setSignatureUrl(dataUrl);
+      }
     }
   };
 
@@ -790,7 +809,14 @@ export function DataEntryForm({
       <SignaturePadModal
         isOpen={isSignaturePadOpen}
         onClose={() => setIsSignaturePadOpen(false)}
-        onSave={(dataUrl) => setSignatureUrl(dataUrl)}
+        onSave={async (dataUrl) => {
+          try {
+            const normalized = await normalizeEmployeeSignature(dataUrl);
+            setSignatureUrl(normalized);
+          } catch {
+            setSignatureUrl(dataUrl);
+          }
+        }}
       />
     </div>
   );

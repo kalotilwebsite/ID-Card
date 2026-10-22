@@ -10,8 +10,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-// Dynamic port binding for Render/Cloud platforms (process.env.PORT || 10000)
-const PORT = Number(process.env.PORT || 10000);
+// Dynamic port binding for Cloud/AI Studio (defaults to 3000)
+const PORT = Number(process.env.PORT || 3000);
 const DATA_DIR = path.resolve(__dirname, 'data');
 
 // Ensure data directory exists
@@ -33,6 +33,9 @@ interface AppSettings {
   loginNoticeMessage?: string;
   supervisorEntryEnabled?: boolean;
   supervisorEntryDisabledMessage?: string;
+  supervisorPhotoCameraEnabled?: boolean;
+  supervisorSignatureCameraEnabled?: boolean;
+  supervisorSignaturePadEnabled?: boolean;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -47,6 +50,9 @@ const DEFAULT_SETTINGS: AppSettings = {
   supervisorEntryEnabled: true,
   supervisorEntryDisabledMessage:
     'Supervisor data entry is temporarily closed by Administration. Please check back later or contact the admin office.',
+  supervisorPhotoCameraEnabled: true,
+  supervisorSignatureCameraEnabled: true,
+  supervisorSignaturePadEnabled: true,
 };
 
 // In-memory fallback store to ensure seamless persistence even on Render's ephemeral/read-only filesystems
@@ -1245,6 +1251,9 @@ app.get('/api/settings/public', (_req: Request, res: Response) => {
     supervisorEntryEnabled: settings.supervisorEntryEnabled !== false,
     supervisorEntryDisabledMessage:
       settings.supervisorEntryDisabledMessage || DEFAULT_SETTINGS.supervisorEntryDisabledMessage,
+    supervisorPhotoCameraEnabled: settings.supervisorPhotoCameraEnabled !== false,
+    supervisorSignatureCameraEnabled: settings.supervisorSignatureCameraEnabled !== false,
+    supervisorSignaturePadEnabled: settings.supervisorSignaturePadEnabled !== false,
   });
 });
 
@@ -1287,6 +1296,18 @@ app.put('/api/settings', authenticateToken, requireAdminRole, (req: Request, res
       req.body.supervisorEntryDisabledMessage !== undefined
         ? String(req.body.supervisorEntryDisabledMessage).trim()
         : current.supervisorEntryDisabledMessage,
+    supervisorPhotoCameraEnabled:
+      req.body.supervisorPhotoCameraEnabled !== undefined
+        ? Boolean(req.body.supervisorPhotoCameraEnabled)
+        : current.supervisorPhotoCameraEnabled !== false,
+    supervisorSignatureCameraEnabled:
+      req.body.supervisorSignatureCameraEnabled !== undefined
+        ? Boolean(req.body.supervisorSignatureCameraEnabled)
+        : current.supervisorSignatureCameraEnabled !== false,
+    supervisorSignaturePadEnabled:
+      req.body.supervisorSignaturePadEnabled !== undefined
+        ? Boolean(req.body.supervisorSignaturePadEnabled)
+        : current.supervisorSignaturePadEnabled !== false,
   };
   writeJsonFile(SETTINGS_FILE, updated);
   res.json(updated);
@@ -1317,7 +1338,7 @@ async function startServer() {
     app.use(vite.middlewares);
   }
 
-  const PORT_BIND = Number(process.env.PORT || 10000);
+  const PORT_BIND = Number(process.env.PORT || 3000);
   app.listen(PORT_BIND, '0.0.0.0', () => {
     console.log(`Server is running at http://0.0.0.0:${PORT_BIND}`);
   });

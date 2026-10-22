@@ -374,6 +374,9 @@ export interface AppSettings {
   loginNoticeMessage?: string;
   supervisorEntryEnabled?: boolean;
   supervisorEntryDisabledMessage?: string;
+  supervisorPhotoCameraEnabled?: boolean;
+  supervisorSignatureCameraEnabled?: boolean;
+  supervisorSignaturePadEnabled?: boolean;
 }
 
 

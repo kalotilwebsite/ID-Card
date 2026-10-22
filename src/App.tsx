@@ -1527,21 +1527,49 @@ export default function App() {
         aria-hidden="true"
       >
         {employees.map((emp) => (
-          <div key={emp.id} className="flex">
-            <CardFront
-              id={`export-front-${emp.id}`}
-              employee={emp}
-              templateUrl={frontTemplateUrl}
-              calibration={calibration.front}
-              scale={1}
-            />
-            <CardBack
-              id={`export-back-${emp.id}`}
-              employee={emp}
-              templateUrl={backTemplateUrl}
-              calibration={calibration.back}
-              scale={1}
-            />
+          <div
+            key={emp.id}
+            style={{
+              display: 'flex',
+              gap: '60px',
+              marginBottom: '60px',
+              isolation: 'isolate',
+            }}
+          >
+            <div
+              style={{
+                width: CARD_WIDTH,
+                height: CARD_HEIGHT,
+                overflow: 'hidden',
+                isolation: 'isolate',
+                position: 'relative',
+              }}
+            >
+              <CardFront
+                id={`export-front-${emp.id}`}
+                employee={emp}
+                templateUrl={frontTemplateUrl}
+                calibration={calibration.front}
+                scale={1}
+              />
+            </div>
+            <div
+              style={{
+                width: CARD_WIDTH,
+                height: CARD_HEIGHT,
+                overflow: 'hidden',
+                isolation: 'isolate',
+                position: 'relative',
+              }}
+            >
+              <CardBack
+                id={`export-back-${emp.id}`}
+                employee={emp}
+                templateUrl={backTemplateUrl}
+                calibration={calibration.back}
+                scale={1}
+              />
+            </div>
           </div>
         ))}
       </div>

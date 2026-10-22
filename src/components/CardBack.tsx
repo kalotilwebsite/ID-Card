@@ -2,6 +2,7 @@ import React from 'react';
 import { EmployeeCardData, CardCalibrationSettings, CARD_WIDTH, CARD_HEIGHT } from '../types';
 import { BACK_TEMPLATE_SVG } from '../data/cardTemplates';
 import { DEFAULT_CALIBRATION } from '../types';
+import { AKIJ_BASHIR_LOGO_BASE64 } from '../data/cardAssets';
 
 interface CardBackProps {
   employee: EmployeeCardData;
@@ -20,6 +21,47 @@ export const CardBack: React.FC<CardBackProps> = ({
   className = '',
   id,
 }) => {
+  // Ensure calibration values always exist even if partially provided
+  const activeCalibration = {
+    emergencyContact: {
+      ...DEFAULT_CALIBRATION.back.emergencyContact,
+      ...(calibration?.emergencyContact || {}),
+    },
+    nationalId: {
+      ...DEFAULT_CALIBRATION.back.nationalId,
+      ...(calibration?.nationalId || {}),
+    },
+    bloodGroup: {
+      ...DEFAULT_CALIBRATION.back.bloodGroup,
+      ...(calibration?.bloodGroup || {}),
+    },
+  };
+
+  // Robust data extraction guaranteeing Contact Number, NID, and Blood Group never vanish
+  const rawContact = String(
+    employee.emergencyContact ||
+      (employee as any).contactNumber ||
+      (employee as any).phone ||
+      (employee as any).contact ||
+      (employee as any)?.employee?.emergencyContact ||
+      '01920-694100'
+  ).trim();
+
+  const nid = String(
+    employee.nationalId ||
+      (employee as any).nid ||
+      (employee as any).national_id ||
+      (employee as any)?.employee?.nationalId ||
+      '01643970731'
+  ).trim();
+
+  const bloodGroupVal = String(
+    employee.bloodGroup ||
+      (employee as any).blood_group ||
+      (employee as any)?.employee?.bloodGroup ||
+      'O+'
+  ).trim();
+
   return (
     <div
       id={id}
@@ -31,41 +73,38 @@ export const CardBack: React.FC<CardBackProps> = ({
         transform: scale !== 1 ? `scale(${scale})` : undefined,
         transformOrigin: 'top left',
         boxSizing: 'border-box',
+        overflow: 'hidden',
+        isolation: 'isolate',
+        position: 'relative',
       }}
       className={`relative rounded-[14px] overflow-hidden select-none shadow-sm border border-slate-300 bg-white ${className}`}
     >
       {/* 1. Original Photoshop Export Background Template */}
-      {/* Contains:
-          - "If found please return to:"
-          - "AKIJ CERAMICS LIMITED."
-          - "Mukkhopur, Trishal, Mymensingh Bangladesh"
-          - "Call: 01920-694100, 01833-636610"
-          - Terracotta box with "EMPLOYEE INFORMATION"
-          - "PERMANENT ADDRESS" and "Mukkhopur, Trishal, Mymensingh"
-          - "EMERGENCY CONTACT", "NATIONAL ID", "BLOOD GROUP" labels
-          - "VALID UNTILL REVOKED"
-          - "In case of losing this identity card, please notify your managing authortity promotly."
-          - Bottom black banner with AkijBashir Group logo
-      */}
       <img
         src={templateUrl}
         alt="Back Reference Template"
-        className="absolute inset-0 w-full h-full object-fill pointer-events-none"
+        style={{
+          position: 'absolute',
+          inset: 0,
+          width: '100%',
+          height: '100%',
+          objectFit: 'fill',
+          zIndex: 1,
+        }}
+        className="pointer-events-none"
         referrerPolicy="no-referrer"
       />
 
       {/* 2. Whiteouts & Overlays for STRICTLY the Three Designated Variable Fields */}
 
-      {/* Field 1: Emergency Contact Number (Displays all 11 digits completely without ellipses, dots or truncation) */}
+      {/* Field 1: Emergency Contact Number (Displays all digits completely without truncation or vanishing) */}
       {(() => {
-        const rawContact = String(employee.emergencyContact || '01920-694100').trim();
         const contactLength = rawContact.length;
 
-        // Clean typography: bold weight, adjusted font size so all 11 digits fit with zero truncation or ellipses
-        let fontSize = calibration.emergencyContact.fontSize || 11.5;
-        let fontWeight: string | number = calibration.emergencyContact.fontWeight || 'bold';
+        // Clean typography: bold weight, adjusted font size so all digits fit cleanly
+        let fontSize = activeCalibration.emergencyContact.fontSize || 11.5;
+        let fontWeight: string | number = activeCalibration.emergencyContact.fontWeight || 'bold';
 
-        // Remove 900/heavy styling to ensure crisp, clean digit legibility without glyph crowding
         if (fontWeight === '900') {
           fontWeight = 'bold';
         }
@@ -76,27 +115,31 @@ export const CardBack: React.FC<CardBackProps> = ({
           fontSize = Math.min(10.5, 10.5 * (13 / contactLength));
         }
 
-        const whiteoutW = Math.max(calibration.emergencyContact.whiteoutWidth || 182, 195);
+        const whiteoutW = Math.max(activeCalibration.emergencyContact.whiteoutWidth || 182, 195);
 
         return (
           <>
+            {/* Whiteout Patch: Strictly z-index: 4 so it sits behind text */}
             <div
               style={{
                 position: 'absolute',
-                left: calibration.emergencyContact.x - 2,
-                top: calibration.emergencyContact.y - 2,
+                left: activeCalibration.emergencyContact.x - 2,
+                top: activeCalibration.emergencyContact.y - 2,
                 width: whiteoutW,
-                height: calibration.emergencyContact.whiteoutHeight || 20,
+                height: activeCalibration.emergencyContact.whiteoutHeight || 20,
+                backgroundColor: '#FFFFFF',
+                zIndex: 4,
               }}
-              className="bg-white"
             />
+            {/* Dynamic Text Layer: Strictly z-index: 10 so it is NEVER hidden */}
             <div
               style={{
                 position: 'absolute',
-                left: calibration.emergencyContact.x,
-                top: calibration.emergencyContact.y,
+                left: activeCalibration.emergencyContact.x,
+                top: activeCalibration.emergencyContact.y,
                 width: whiteoutW,
                 overflow: 'visible',
+                zIndex: 10,
               }}
               className="flex items-center"
             >
@@ -104,14 +147,14 @@ export const CardBack: React.FC<CardBackProps> = ({
                 style={{
                   fontSize: `${fontSize}px`,
                   fontWeight: fontWeight as any,
-                  color: calibration.emergencyContact.color || '#000000',
-                  textAlign: calibration.emergencyContact.textAlign || 'left',
-                  fontFamily: "Arial, Helvetica, sans-serif",
+                  color: activeCalibration.emergencyContact.color || '#000000',
+                  textAlign: activeCalibration.emergencyContact.textAlign || 'left',
+                  fontFamily: 'Arial, Helvetica, sans-serif',
                   letterSpacing: '0.1px',
                   whiteSpace: 'nowrap',
                   display: 'inline-block',
                 }}
-                className="leading-none block max-w-none select-text"
+                className="leading-none block max-w-none select-text text-black"
               >
                 {rawContact}
               </span>
@@ -120,18 +163,16 @@ export const CardBack: React.FC<CardBackProps> = ({
         );
       })()}
 
-      {/* Field 2: National ID Number (Displays all digits completely without truncation or ellipses) */}
+      {/* Field 2: National ID Number (Displays all digits completely without truncation) */}
       {(() => {
-        const nid = String(employee.nationalId || '01643970731').trim();
         const nidLength = nid.length;
-        // Dynamically compute font sizing and weight so all 15 digits fit cleanly without truncation
-        let fontSize = calibration.nationalId.fontSize || 11.5;
-        let fontWeight: string | number = calibration.nationalId.fontWeight || 'bold';
+        let fontSize = activeCalibration.nationalId.fontSize || 11.5;
+        let fontWeight: string | number = activeCalibration.nationalId.fontWeight || 'bold';
         let letterSpacing = '0px';
 
         if (nidLength >= 15) {
           fontSize = Math.min(9.2, 9.2 * (15 / nidLength));
-          fontWeight = 'bold'; // Clean bold (not 900/black) to ensure crisp digit legibility
+          fontWeight = 'bold';
           letterSpacing = '-0.2px';
         } else if (nidLength >= 13) {
           fontSize = 10.0;
@@ -139,31 +180,34 @@ export const CardBack: React.FC<CardBackProps> = ({
           letterSpacing = '-0.1px';
         } else if (nidLength >= 11) {
           fontSize = 10.8;
-          fontWeight = calibration.nationalId.fontWeight;
+          fontWeight = activeCalibration.nationalId.fontWeight;
         }
 
-        // Available horizontal space before Blood Group column (starts at x=174)
-        const whiteoutW = Math.max(calibration.nationalId.whiteoutWidth || 98, 116);
+        const whiteoutW = Math.max(activeCalibration.nationalId.whiteoutWidth || 98, 116);
 
         return (
           <>
+            {/* Whiteout Patch: Strictly z-index: 4 */}
             <div
               style={{
                 position: 'absolute',
-                left: calibration.nationalId.x - 2,
-                top: calibration.nationalId.y - 2,
+                left: activeCalibration.nationalId.x - 2,
+                top: activeCalibration.nationalId.y - 2,
                 width: whiteoutW,
-                height: calibration.nationalId.whiteoutHeight || 20,
+                height: activeCalibration.nationalId.whiteoutHeight || 20,
+                backgroundColor: '#FFFFFF',
+                zIndex: 4,
               }}
-              className="bg-white"
             />
+            {/* Dynamic Text Layer: Strictly z-index: 10 */}
             <div
               style={{
                 position: 'absolute',
-                left: calibration.nationalId.x,
-                top: calibration.nationalId.y,
+                left: activeCalibration.nationalId.x,
+                top: activeCalibration.nationalId.y,
                 width: whiteoutW,
                 overflow: 'visible',
+                zIndex: 10,
               }}
               className="flex items-center"
             >
@@ -171,14 +215,14 @@ export const CardBack: React.FC<CardBackProps> = ({
                 style={{
                   fontSize: `${fontSize}px`,
                   fontWeight: fontWeight as any,
-                  color: calibration.nationalId.color || '#000000',
-                  textAlign: calibration.nationalId.textAlign || 'left',
-                  fontFamily: "Arial, Helvetica, sans-serif",
+                  color: activeCalibration.nationalId.color || '#000000',
+                  textAlign: activeCalibration.nationalId.textAlign || 'left',
+                  fontFamily: 'Arial, Helvetica, sans-serif',
                   letterSpacing,
                   whiteSpace: 'nowrap',
                   display: 'inline-block',
                 }}
-                className="leading-none block max-w-none"
+                className="leading-none block max-w-none text-black"
               >
                 {nid}
               </span>
@@ -191,37 +235,39 @@ export const CardBack: React.FC<CardBackProps> = ({
       <div
         style={{
           position: 'absolute',
-          left: calibration.bloodGroup.x - 2,
-          top: calibration.bloodGroup.y - 2,
-          width: calibration.bloodGroup.whiteoutWidth || 68,
-          height: calibration.bloodGroup.whiteoutHeight || 20,
+          left: activeCalibration.bloodGroup.x - 2,
+          top: activeCalibration.bloodGroup.y - 2,
+          width: activeCalibration.bloodGroup.whiteoutWidth || 68,
+          height: activeCalibration.bloodGroup.whiteoutHeight || 20,
+          backgroundColor: '#FFFFFF',
+          zIndex: 4,
         }}
-        className="bg-white"
       />
       <div
         style={{
           position: 'absolute',
-          left: calibration.bloodGroup.x,
-          top: calibration.bloodGroup.y,
-          width: calibration.bloodGroup.whiteoutWidth || 68,
+          left: activeCalibration.bloodGroup.x,
+          top: activeCalibration.bloodGroup.y,
+          width: activeCalibration.bloodGroup.whiteoutWidth || 68,
+          zIndex: 10,
         }}
         className="flex items-center justify-center"
       >
         <span
           style={{
-            fontSize: `${calibration.bloodGroup.fontSize}px`,
-            fontWeight: calibration.bloodGroup.fontWeight,
-            color: calibration.bloodGroup.color,
-            textAlign: calibration.bloodGroup.textAlign,
+            fontSize: `${activeCalibration.bloodGroup.fontSize}px`,
+            fontWeight: activeCalibration.bloodGroup.fontWeight,
+            color: activeCalibration.bloodGroup.color || '#000000',
+            textAlign: activeCalibration.bloodGroup.textAlign || 'center',
             fontFamily: "'Arial Black', Arial, sans-serif",
           }}
-          className="leading-none block text-center uppercase"
+          className="leading-none block text-center uppercase text-black"
         >
-          {employee.bloodGroup || 'O+'}
+          {bloodGroupVal}
         </span>
       </div>
 
-      {/* 3. Footer Area: Exact Akij Bashir Group PNG logo directly over existing black footer background */}
+      {/* 3. Footer Area: Exact Akij Bashir Group Base64 PNG logo directly over solid black footer background */}
       <div
         style={{
           position: 'absolute',
@@ -230,18 +276,20 @@ export const CardBack: React.FC<CardBackProps> = ({
           width: CARD_WIDTH,
           height: 62,
           backgroundColor: '#000000',
+          zIndex: 15,
         }}
-        className="flex items-center justify-center overflow-hidden pointer-events-none select-none"
+        className="flex items-center justify-center overflow-hidden pointer-events-none select-none px-3"
       >
         <img
-          src="/assets/akij_bashir_footer_logo.png"
+          src={AKIJ_BASHIR_LOGO_BASE64}
           alt="Akij Bashir Group"
           style={{
-            width: '100%',
-            height: '100%',
+            maxWidth: '100%',
+            maxHeight: '100%',
             objectFit: 'contain',
+            display: 'block',
           }}
-          referrerPolicy="no-referrer"
+          className="pointer-events-none select-none"
         />
       </div>
     </div>

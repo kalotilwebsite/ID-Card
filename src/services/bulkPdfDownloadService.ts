@@ -1,6 +1,6 @@
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas-pro';
-import { EmployeeCardData } from '../types';
+import { EmployeeCardData, CARD_WIDTH, CARD_HEIGHT } from '../types';
 
 export interface BulkPdfProgressCallback {
   (current: number, total: number, message: string): void;
@@ -77,23 +77,35 @@ export async function generateBulkCardsPdf(
       throw new Error(`Could not find preview elements for card: ${emp.name || emp.enrollId || emp.id}`);
     }
 
-    // Capture front side at 3x scale for crisp print quality (>450 DPI)
+    // Capture front side at 3x scale for crisp print quality (>450 DPI) with strict boundary isolation
     const frontCanvas = await html2canvas(frontEl, {
       scale: 3,
       useCORS: true,
       allowTaint: true,
       backgroundColor: '#ffffff',
       logging: false,
+      width: CARD_WIDTH,
+      height: CARD_HEIGHT,
+      x: 0,
+      y: 0,
+      scrollX: 0,
+      scrollY: 0,
     });
     const frontImg = frontCanvas.toDataURL('image/jpeg', 0.96);
 
-    // Capture back side at 3x scale
+    // Capture back side at 3x scale with strict boundary isolation
     const backCanvas = await html2canvas(backEl, {
       scale: 3,
       useCORS: true,
       allowTaint: true,
       backgroundColor: '#ffffff',
       logging: false,
+      width: CARD_WIDTH,
+      height: CARD_HEIGHT,
+      x: 0,
+      y: 0,
+      scrollX: 0,
+      scrollY: 0,
     });
     const backImg = backCanvas.toDataURL('image/jpeg', 0.96);
 

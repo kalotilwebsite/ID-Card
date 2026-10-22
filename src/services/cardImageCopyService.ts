@@ -1,5 +1,5 @@
 import html2canvas from 'html2canvas-pro';
-import { EmployeeCardData } from '../types';
+import { EmployeeCardData, CARD_WIDTH, CARD_HEIGHT } from '../types';
 
 export interface CopyCardResult {
   success: boolean;
@@ -59,13 +59,19 @@ export async function copyCardSideBySideToClipboard(
     }
   }
 
-  // 3. Capture each side with html2canvas preserving exact appearance
+  // 3. Capture each side with html2canvas preserving exact appearance with strict boundary isolation
   const canvasFront = await html2canvas(frontEl, {
     scale,
     useCORS: true,
     allowTaint: true,
     backgroundColor: '#ffffff',
     logging: false,
+    width: CARD_WIDTH,
+    height: CARD_HEIGHT,
+    x: 0,
+    y: 0,
+    scrollX: 0,
+    scrollY: 0,
   });
 
   const canvasBack = await html2canvas(backEl, {
@@ -74,6 +80,12 @@ export async function copyCardSideBySideToClipboard(
     allowTaint: true,
     backgroundColor: '#ffffff',
     logging: false,
+    width: CARD_WIDTH,
+    height: CARD_HEIGHT,
+    x: 0,
+    y: 0,
+    scrollX: 0,
+    scrollY: 0,
   });
 
   // 3. Create a combined canvas side-by-side

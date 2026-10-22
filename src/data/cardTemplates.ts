@@ -76,9 +76,9 @@ export const BACK_TEMPLATE_SVG = `data:image/svg+xml;utf8,${encodeURIComponent(`
     <!-- VALID UNTILL REVOKED -->
     <text x="142" y="362" font-family="'Arial Black', Arial, sans-serif" font-weight="900" font-size="9.5" fill="#292524" text-anchor="middle" letter-spacing="0.8">VALID UNTILL REVOKED</text>
     
-    <!-- Disclaimer Notice -->
-    <text x="142" y="384" font-family="Georgia, 'Times New Roman', serif" font-size="8.5" fill="#1C1917" text-anchor="middle">In case of losing this identity card, please</text>
-    <text x="142" y="396" font-family="Georgia, 'Times New Roman', serif" font-size="8.5" fill="#1C1917" text-anchor="middle">notify your managing authortity promotly.</text>
+    <!-- Disclaimer Notice (Crisp Vector Sans-Serif Typography) -->
+    <text x="142" y="384" font-family="Arial, Helvetica, sans-serif" font-weight="700" font-size="9.2" fill="#111827" text-anchor="middle" letter-spacing="0.1">In case of losing this identity card, please</text>
+    <text x="142" y="398" font-family="Arial, Helvetica, sans-serif" font-weight="700" font-size="9.2" fill="#111827" text-anchor="middle" letter-spacing="0.1">notify your managing authority promptly.</text>
     
     <!-- Bottom Black Banner -->
     <rect x="0" y="438" width="284" height="62" fill="#000000"/>

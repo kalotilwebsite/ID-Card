@@ -53,6 +53,8 @@ export const CardFront: React.FC<CardFrontProps> = ({
         isolation: 'isolate',
         position: 'relative',
         backgroundColor: '#FFFFFF',
+        border: '1px solid #d1d5db',
+        borderRadius: 14,
       }}
       className={`relative rounded-[14px] overflow-hidden select-none shadow-sm border border-slate-300 bg-white ${className}`}
     >
@@ -92,14 +94,14 @@ export const CardFront: React.FC<CardFrontProps> = ({
         className="rounded-t-[14px]"
       />
 
-      {/* Exact ROSA Beyond Beauty PNG Logo (Horizontally Centered) */}
+      {/* Exact ROSA Beyond Beauty PNG Logo (Elegantly aligned toward the right side of header) */}
       <img
         src={ROSA_FRONT_LOGO_BASE64}
         alt="ROSA Beyond Beauty"
         style={{
           position: 'absolute',
           top: 26,
-          left: Math.round((CARD_WIDTH - 128) / 2), // 78px
+          left: 138,
           width: 128,
           height: 58,
           objectFit: 'contain',

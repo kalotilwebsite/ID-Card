@@ -76,6 +76,9 @@ export const CardBack: React.FC<CardBackProps> = ({
         overflow: 'hidden',
         isolation: 'isolate',
         position: 'relative',
+        backgroundColor: '#FFFFFF',
+        border: '1px solid #d1d5db',
+        borderRadius: 14,
       }}
       className={`relative rounded-[14px] overflow-hidden select-none shadow-sm border border-slate-300 bg-white ${className}`}
     >
@@ -267,7 +270,68 @@ export const CardBack: React.FC<CardBackProps> = ({
         </span>
       </div>
 
-      {/* 3. Footer Area: Exact Akij Bashir Group Base64 PNG logo directly over solid black footer background */}
+      {/* 3. Crisp Vector Disclaimer Notice under VALID UNTILL REVOKED */}
+      <div
+        style={{
+          position: 'absolute',
+          left: 10,
+          top: 374,
+          width: 264,
+          height: 44,
+          backgroundColor: '#FFFFFF',
+          zIndex: 8,
+        }}
+      />
+      <div
+        style={{
+          position: 'absolute',
+          left: 10,
+          top: 376,
+          width: 264,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          textAlign: 'center',
+          zIndex: 10,
+          pointerEvents: 'none',
+        }}
+      >
+        <span
+          style={{
+            fontFamily: 'Arial, Helvetica, sans-serif',
+            fontSize: '9.2px',
+            fontWeight: 700,
+            color: '#111827',
+            lineHeight: 1.35,
+            letterSpacing: '0.1px',
+            display: 'block',
+            textAlign: 'center',
+            textRendering: 'geometricPrecision',
+            WebkitFontSmoothing: 'antialiased',
+          }}
+        >
+          In case of losing this identity card, please
+        </span>
+        <span
+          style={{
+            fontFamily: 'Arial, Helvetica, sans-serif',
+            fontSize: '9.2px',
+            fontWeight: 700,
+            color: '#111827',
+            lineHeight: 1.35,
+            letterSpacing: '0.1px',
+            display: 'block',
+            textAlign: 'center',
+            textRendering: 'geometricPrecision',
+            WebkitFontSmoothing: 'antialiased',
+          }}
+        >
+          notify your managing authority promptly.
+        </span>
+      </div>
+
+      {/* 4. Footer Area: Exact Akij Bashir Group Base64 PNG logo directly over solid black footer background */}
       <div
         style={{
           position: 'absolute',

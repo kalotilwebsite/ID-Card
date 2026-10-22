@@ -92,6 +92,38 @@ async function request<T>(endpoint: string, options: RequestInit = {}, retryOn40
   return data as T;
 }
 
+// Case-insensitive client role normalizer with smart fallback
+export function normalizeUserRole(rawRole: any, username = '', employeeId = ''): UserRole {
+  const r = String(rawRole || '').trim().toLowerCase();
+  if (r === 'admin' || r === 'administrator' || r === 'superadmin' || r === 'super_admin') {
+    return 'admin';
+  }
+  if (r === 'supervisor' || r === 'sup') {
+    return 'supervisor';
+  }
+  if (
+    r === 'data_entry' ||
+    r === 'dataentry' ||
+    r === 'data-entry' ||
+    r === 'operator' ||
+    r === 'user' ||
+    r === 'staff'
+  ) {
+    return 'data_entry';
+  }
+
+  // Fallback inferred from username or employee ID
+  const u = String(username || '').trim().toLowerCase();
+  const e = String(employeeId || '').trim().toLowerCase();
+  if (u === 'admin' || e === 'admin' || u.includes('admin') || e.includes('admin')) {
+    return 'admin';
+  }
+  if (u.startsWith('sup') || e.startsWith('sup') || u.includes('supervisor') || e.includes('supervisor')) {
+    return 'supervisor';
+  }
+  return 'data_entry';
+}
+
 export const apiService = {
   // Auth
   async login(username: string, password: string): Promise<{ user: AuthUser; token: string }> {
@@ -100,21 +132,29 @@ export const apiService = {
       body: JSON.stringify({ username, password }),
     }, false);
 
-    const rawUser = res?.user || (res?.id && res?.role ? res : null);
-    if (!rawUser || !rawUser.role) {
-      throw new Error('Authentication succeeded but received invalid or missing user role.');
+    const rawUser = res?.user || (res?.id || res?.username ? res : null);
+    if (!rawUser) {
+      throw new Error('Authentication succeeded but received empty user payload.');
     }
+
+    const resolvedRole = normalizeUserRole(rawUser.role || res?.role, rawUser.username || username, rawUser.employeeId);
     const user: AuthUser = {
-      id: rawUser.id,
-      username: rawUser.username,
-      employeeId: rawUser.employeeId || rawUser.username,
-      name: rawUser.name || rawUser.username,
-      email: rawUser.email || '',
-      role: rawUser.role,
-      status: rawUser.status || 'active',
-      allowedTabs: Array.isArray(rawUser.allowedTabs) ? rawUser.allowedTabs : [],
+      id: String(rawUser.id || `user-${Date.now()}`),
+      username: String(rawUser.username || username),
+      employeeId: String(rawUser.employeeId || rawUser.username || username),
+      name: String(rawUser.name || rawUser.username || username),
+      email: String(rawUser.email || ''),
+      role: resolvedRole,
+      status: rawUser.status === 'inactive' ? 'inactive' : 'active',
+      allowedTabs: Array.isArray(rawUser.allowedTabs) && rawUser.allowedTabs.length > 0
+        ? rawUser.allowedTabs
+        : (resolvedRole === 'admin'
+            ? ['submissions', 'supervisor_submission', 'data_entry_form', 'employee_data', 'user_management', 'card_studio']
+            : resolvedRole === 'supervisor'
+            ? ['supervisor_submission']
+            : ['data_entry_form']),
     };
-    const token: string = res?.token || '';
+    const token: string = String(res?.token || '');
 
     setStoredToken(token);
     setStoredUser(user);
@@ -127,21 +167,25 @@ export const apiService = {
       body: JSON.stringify({ employeeId, password }),
     }, false);
 
-    const rawUser = res?.user || (res?.id && res?.role ? res : null);
-    if (!rawUser || !rawUser.role) {
-      throw new Error('Supervisor authentication succeeded but received invalid profile data.');
+    const rawUser = res?.user || (res?.id || res?.username ? res : null);
+    if (!rawUser) {
+      throw new Error('Supervisor authentication succeeded but received empty profile data.');
     }
+
+    const resolvedRole = normalizeUserRole(rawUser.role || res?.role || 'supervisor', rawUser.username, rawUser.employeeId || employeeId);
     const user: AuthUser = {
-      id: rawUser.id,
-      username: rawUser.username,
-      employeeId: rawUser.employeeId || rawUser.username,
-      name: rawUser.name || rawUser.username,
-      email: rawUser.email || '',
-      role: rawUser.role,
-      status: rawUser.status || 'active',
-      allowedTabs: Array.isArray(rawUser.allowedTabs) ? rawUser.allowedTabs : ['supervisor_submission'],
+      id: String(rawUser.id || `user-${Date.now()}`),
+      username: String(rawUser.username || employeeId),
+      employeeId: String(rawUser.employeeId || employeeId),
+      name: String(rawUser.name || rawUser.username || employeeId),
+      email: String(rawUser.email || ''),
+      role: resolvedRole,
+      status: rawUser.status === 'inactive' ? 'inactive' : 'active',
+      allowedTabs: Array.isArray(rawUser.allowedTabs) && rawUser.allowedTabs.length > 0
+        ? rawUser.allowedTabs
+        : ['supervisor_submission'],
     };
-    const token: string = res?.token || '';
+    const token: string = String(res?.token || '');
 
     setStoredToken(token);
     setStoredUser(user);
@@ -151,17 +195,24 @@ export const apiService = {
   async getCurrentUser(): Promise<AuthUser | null> {
     try {
       const res = await request<any>('/api/auth/me', {}, false);
-      const rawUser = res?.user || (res?.id && res?.role ? res : null);
-      if (rawUser && rawUser.role) {
+      const rawUser = res?.user || (res?.id || res?.username ? res : null);
+      if (rawUser) {
+        const resolvedRole = normalizeUserRole(rawUser.role || res?.role, rawUser.username, rawUser.employeeId);
         const user: AuthUser = {
-          id: rawUser.id,
-          username: rawUser.username,
-          employeeId: rawUser.employeeId || rawUser.username,
-          name: rawUser.name || rawUser.username,
-          email: rawUser.email || '',
-          role: rawUser.role,
-          status: rawUser.status || 'active',
-          allowedTabs: Array.isArray(rawUser.allowedTabs) ? rawUser.allowedTabs : [],
+          id: String(rawUser.id || `user-${Date.now()}`),
+          username: String(rawUser.username || ''),
+          employeeId: String(rawUser.employeeId || rawUser.username || ''),
+          name: String(rawUser.name || rawUser.username || ''),
+          email: String(rawUser.email || ''),
+          role: resolvedRole,
+          status: rawUser.status === 'inactive' ? 'inactive' : 'active',
+          allowedTabs: Array.isArray(rawUser.allowedTabs) && rawUser.allowedTabs.length > 0
+            ? rawUser.allowedTabs
+            : (resolvedRole === 'admin'
+                ? ['submissions', 'supervisor_submission', 'data_entry_form', 'employee_data', 'user_management', 'card_studio']
+                : resolvedRole === 'supervisor'
+                ? ['supervisor_submission']
+                : ['data_entry_form']),
         };
         setStoredUser(user);
         return user;

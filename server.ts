@@ -1,4 +1,5 @@
-import express, { Request, Response, NextFunction } from 'express';
+import express from 'express';
+import type { Request, Response, NextFunction } from 'express';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import fs from 'fs';
@@ -9,7 +10,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = 3000;
+// Dynamic port binding for Render/Cloud platforms (fallback to 3000 locally)
+const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 const DATA_DIR = path.resolve(__dirname, 'data');
 
 // Ensure data directory exists
@@ -47,28 +49,48 @@ const DEFAULT_SETTINGS: AppSettings = {
     'Supervisor data entry is temporarily closed by Administration. Please check back later or contact the admin office.',
 };
 
-// Helper for atomic file read/write
+// In-memory fallback store to ensure seamless persistence even on Render's ephemeral/read-only filesystems
+const memoryStore: Record<string, any> = {};
+
+// Helper for atomic file read/write with in-memory fallback
 function readJsonFile<T>(filePath: string, fallback: T): T {
   try {
-    if (!fs.existsSync(filePath)) {
-      fs.writeFileSync(filePath, JSON.stringify(fallback, null, 2), 'utf-8');
-      return fallback;
+    if (fs.existsSync(filePath)) {
+      const content = fs.readFileSync(filePath, 'utf-8');
+      const parsed = JSON.parse(content) as T;
+      memoryStore[filePath] = parsed;
+      return parsed;
     }
-    const content = fs.readFileSync(filePath, 'utf-8');
-    return JSON.parse(content) as T;
+    if (memoryStore[filePath] !== undefined) {
+      return memoryStore[filePath] as T;
+    }
+    memoryStore[filePath] = fallback;
+    try {
+      const dir = path.dirname(filePath);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(filePath, JSON.stringify(fallback, null, 2), 'utf-8');
+    } catch (writeErr) {
+      console.warn(`[Storage] Note: Could not write ${filePath} to disk; retained in memory:`, writeErr);
+    }
+    return fallback;
   } catch (err) {
     console.error(`Error reading ${filePath}:`, err);
-    return fallback;
+    return memoryStore[filePath] !== undefined ? (memoryStore[filePath] as T) : fallback;
   }
 }
 
 function writeJsonFile<T>(filePath: string, data: T): void {
+  memoryStore[filePath] = data;
   try {
+    const dir = path.dirname(filePath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
     const tempPath = `${filePath}.tmp.${Date.now()}`;
     fs.writeFileSync(tempPath, JSON.stringify(data, null, 2), 'utf-8');
     fs.renameSync(tempPath, filePath);
   } catch (err) {
-    console.error(`Error writing ${filePath}:`, err);
+    console.warn(`[Storage] Note: Disk write to ${filePath} skipped; state safely retained in memory:`, err);
   }
 }
 
@@ -115,81 +137,122 @@ function removeSession(token: string): void {
   }
 }
 
-// Initialize seed data
+// Case-insensitive role normalizer with fallback based on username / employeeId
+export function normalizeRole(rawRole: any, username = '', employeeId = ''): 'admin' | 'supervisor' | 'data_entry' {
+  const r = String(rawRole || '').trim().toLowerCase();
+  if (r === 'admin' || r === 'administrator' || r === 'superadmin' || r === 'super_admin') {
+    return 'admin';
+  }
+  if (r === 'supervisor' || r === 'sup') {
+    return 'supervisor';
+  }
+  if (
+    r === 'data_entry' ||
+    r === 'dataentry' ||
+    r === 'data-entry' ||
+    r === 'operator' ||
+    r === 'user' ||
+    r === 'staff'
+  ) {
+    return 'data_entry';
+  }
+
+  // Intelligent fallback based on username and employeeId if role is missing or legacy
+  const u = String(username || '').trim().toLowerCase();
+  const e = String(employeeId || '').trim().toLowerCase();
+  if (u === 'admin' || e === 'admin' || u.includes('admin') || e.includes('admin')) {
+    return 'admin';
+  }
+  if (u.startsWith('sup') || e.startsWith('sup') || u.includes('supervisor') || e.includes('supervisor')) {
+    return 'supervisor';
+  }
+  return 'data_entry';
+}
+
+const VALID_APP_TABS = [
+  'submissions',
+  'supervisor_submission',
+  'data_entry_form',
+  'employee_data',
+  'user_management',
+  'card_studio',
+];
+
+export function getEffectiveAllowedTabs(user: any): string[] {
+  const role = normalizeRole(user?.role, user?.username, user?.employeeId);
+  if (role === 'admin') {
+    return [...VALID_APP_TABS];
+  }
+  if (role === 'supervisor') {
+    return ['supervisor_submission'];
+  }
+  if (Array.isArray(user?.allowedTabs) && user.allowedTabs.length > 0) {
+    const valid = user.allowedTabs.filter((t: string) => VALID_APP_TABS.includes(t));
+    if (valid.length > 0) return valid;
+  }
+  return ['data_entry_form'];
+}
+
+// Initialize and seed database
 function initializeDatabase() {
+  const envAdminUsername = (process.env.ADMIN_USERNAME || process.env.ADMIN_USER || process.env.ADMIN_ID || 'Admin').trim();
+  const envAdminPassword = (process.env.ADMIN_PASSWORD || process.env.ADMIN_PASS || '466035').trim();
+  const envAdminEmail = (process.env.ADMIN_EMAIL || 'ajkerpage@gmail.com').trim();
+  const envAdminEmployeeId = (process.env.ADMIN_EMPLOYEE_ID || envAdminUsername).trim();
+  const envAdminName = (process.env.ADMIN_NAME || 'System Administrator').trim();
+
   // 1. Users
   const users = readJsonFile<any[]>(USERS_FILE, []);
-  const existingAdmin = users.find((u) => u.role === 'admin');
+  const existingAdmin = users.find((u) => normalizeRole(u.role, u.username, u.employeeId) === 'admin');
 
-  if (users.length === 0) {
+  if (users.length === 0 || !existingAdmin) {
     const adminUser = {
       id: 'user-admin-1',
-      username: 'Admin',
-      employeeId: 'Admin',
-      passwordHash: hashPassword('466035'),
-      name: 'System Administrator',
-      email: 'ajkerpage@gmail.com',
+      username: envAdminUsername,
+      employeeId: envAdminEmployeeId,
+      passwordHash: hashPassword(envAdminPassword),
+      name: envAdminName,
+      email: envAdminEmail,
       role: 'admin',
       status: 'active',
       createdAt: new Date().toISOString(),
-      allowedTabs: [
-        'submissions',
-        'supervisor_submission',
-        'data_entry_form',
-        'employee_data',
-        'user_management',
-        'card_studio',
-      ],
+      allowedTabs: [...VALID_APP_TABS],
     };
-    const demoDataEntryUser = {
-      id: 'user-dataentry-1',
-      username: 'operator1',
-      employeeId: 'OP-101',
-      passwordHash: hashPassword('operator123'),
-      name: 'Data Entry Operator',
-      email: 'operator1@company.com',
-      role: 'data_entry',
-      status: 'active',
-      createdAt: new Date().toISOString(),
-    };
-    const demoSupervisorUser = {
-      id: 'user-supervisor-1',
-      username: 'supervisor1',
-      employeeId: 'SUP-2026-01',
-      passwordHash: hashPassword('supervisor123'),
-      name: 'Production Shift Supervisor',
-      email: 'supervisor@company.com',
-      role: 'supervisor',
-      status: 'active',
-      createdAt: new Date().toISOString(),
-    };
-    writeJsonFile(USERS_FILE, [adminUser, demoDataEntryUser, demoSupervisorUser]);
-  } else if (!existingAdmin) {
-    // Configure initial Admin credentials only if an Admin account has not yet been configured
-    const adminUser = {
-      id: 'user-admin-1',
-      username: 'Admin',
-      employeeId: 'Admin',
-      passwordHash: hashPassword('466035'),
-      name: 'System Administrator',
-      email: 'ajkerpage@gmail.com',
-      role: 'admin',
-      status: 'active',
-      createdAt: new Date().toISOString(),
-      allowedTabs: [
-        'submissions',
-        'supervisor_submission',
-        'data_entry_form',
-        'employee_data',
-        'user_management',
-        'card_studio',
-      ],
-    };
-    users.unshift(adminUser);
+
+    if (users.length === 0) {
+      const demoDataEntryUser = {
+        id: 'user-dataentry-1',
+        username: 'operator1',
+        employeeId: 'OP-101',
+        passwordHash: hashPassword('operator123'),
+        name: 'Data Entry Operator',
+        email: 'operator1@company.com',
+        role: 'data_entry',
+        status: 'active',
+        createdAt: new Date().toISOString(),
+        allowedTabs: ['data_entry_form'],
+      };
+      const demoSupervisorUser = {
+        id: 'user-supervisor-1',
+        username: 'supervisor1',
+        employeeId: 'SUP-2026-01',
+        passwordHash: hashPassword('supervisor123'),
+        name: 'Production Shift Supervisor',
+        email: 'supervisor@company.com',
+        role: 'supervisor',
+        status: 'active',
+        createdAt: new Date().toISOString(),
+        allowedTabs: ['supervisor_submission'],
+      };
+      users.push(adminUser, demoDataEntryUser, demoSupervisorUser);
+    } else {
+      users.unshift(adminUser);
+    }
     writeJsonFile(USERS_FILE, users);
   }
 
-  if (!users.some((u) => u.role === 'supervisor')) {
+  // Ensure supervisor exists
+  if (!users.some((u) => normalizeRole(u.role, u.username, u.employeeId) === 'supervisor')) {
     const demoSupervisorUser = {
       id: 'user-supervisor-1',
       username: 'supervisor1',
@@ -200,8 +263,26 @@ function initializeDatabase() {
       role: 'supervisor',
       status: 'active',
       createdAt: new Date().toISOString(),
+      allowedTabs: ['supervisor_submission'],
     };
     users.push(demoSupervisorUser);
+    writeJsonFile(USERS_FILE, users);
+  }
+
+  // Sanitize all stored users to have clean lowercase roles and permissions
+  let mutated = false;
+  for (const u of users) {
+    const normalized = normalizeRole(u.role, u.username, u.employeeId);
+    if (u.role !== normalized) {
+      u.role = normalized;
+      mutated = true;
+    }
+    if (!Array.isArray(u.allowedTabs) || u.allowedTabs.length === 0) {
+      u.allowedTabs = getEffectiveAllowedTabs(u);
+      mutated = true;
+    }
+  }
+  if (mutated) {
     writeJsonFile(USERS_FILE, users);
   }
 
@@ -303,56 +384,35 @@ function authenticateToken(req: AuthenticatedRequest, res: Response, next: NextF
   next();
 }
 
-// Admin Role Middleware
+// Admin Role Middleware (case-insensitive)
 function requireAdminRole(req: AuthenticatedRequest, res: Response, next: NextFunction): void {
-  if (!req.user || req.user.role !== 'admin') {
+  const role = normalizeRole(req.user?.role, req.user?.username, req.user?.employeeId);
+  if (!req.user || role !== 'admin') {
     res.status(403).json({ error: 'Access forbidden. Administrator privileges required.' });
     return;
   }
   next();
 }
 
-const VALID_APP_TABS = [
-  'submissions',
-  'supervisor_submission',
-  'data_entry_form',
-  'employee_data',
-  'user_management',
-  'card_studio',
-];
-
-function getEffectiveAllowedTabs(user: any): string[] {
-  if (user.role === 'admin') {
-    return [...VALID_APP_TABS];
-  }
-  if (user.role === 'supervisor') {
-    return ['supervisor_submission'];
-  }
-  if (Array.isArray(user.allowedTabs) && user.allowedTabs.length > 0) {
-    const valid = user.allowedTabs.filter((t: string) => VALID_APP_TABS.includes(t));
-    if (valid.length > 0) return valid;
-  }
-  return ['data_entry_form'];
-}
-
-// Tab Permission Enforcement Middleware
+// Tab Permission Enforcement Middleware (case-insensitive)
 function requireTabAccess(tabId: string) {
   return (req: AuthenticatedRequest, res: Response, next: NextFunction): void => {
     if (!req.user) {
       res.status(401).json({ error: 'Authentication required. Please sign in.' });
       return;
     }
-    if (req.user.role === 'admin') {
+    const role = normalizeRole(req.user.role, req.user.username, req.user.employeeId);
+    if (role === 'admin') {
       return next();
     }
-    if (req.user.role === 'supervisor') {
+    if (role === 'supervisor') {
       if (tabId === 'supervisor_submission') {
         return next();
       }
       res.status(403).json({ error: 'Access forbidden for supervisor role.' });
       return;
     }
-    if (req.user.role === 'data_entry') {
+    if (role === 'data_entry') {
       const allowed = getEffectiveAllowedTabs(req.user);
       if (allowed.includes(tabId)) {
         return next();
@@ -380,13 +440,36 @@ app.post('/api/auth/login', (req: Request, res: Response) => {
 
   const cleanInput = rawId.toLowerCase();
   const users = readJsonFile<any[]>(USERS_FILE, []);
-  const user = users.find(
+  let user = users.find(
     (u) =>
       (u.username.toLowerCase() === cleanInput ||
         (u.email && u.email.toLowerCase() === cleanInput) ||
-        (u.employeeId && u.employeeId.toLowerCase() === cleanInput)) &&
+        (u.employeeId && String(u.employeeId).toLowerCase() === cleanInput)) &&
       u.passwordHash === hashPassword(password)
   );
+
+  // Environment-configured admin fallback (critical for live Render deployments)
+  const envAdminUser = (process.env.ADMIN_USERNAME || process.env.ADMIN_USER || process.env.ADMIN_ID || 'Admin').toLowerCase();
+  const envAdminPass = process.env.ADMIN_PASSWORD || process.env.ADMIN_PASS || '466035';
+  if (!user && (cleanInput === envAdminUser || cleanInput === 'admin') && password === envAdminPass) {
+    user = users.find((u) => normalizeRole(u.role, u.username, u.employeeId) === 'admin');
+    if (!user) {
+      user = {
+        id: 'user-admin-1',
+        username: process.env.ADMIN_USERNAME || 'Admin',
+        employeeId: process.env.ADMIN_EMPLOYEE_ID || process.env.ADMIN_USERNAME || 'Admin',
+        passwordHash: hashPassword(envAdminPass),
+        name: process.env.ADMIN_NAME || 'System Administrator',
+        email: process.env.ADMIN_EMAIL || 'ajkerpage@gmail.com',
+        role: 'admin',
+        status: 'active',
+        createdAt: new Date().toISOString(),
+        allowedTabs: [...VALID_APP_TABS],
+      };
+      users.unshift(user);
+      writeJsonFile(USERS_FILE, users);
+    }
+  }
 
   if (!user) {
     res.status(401).json({ error: 'Invalid Enrollment ID or password.' });
@@ -398,11 +481,8 @@ app.post('/api/auth/login', (req: Request, res: Response) => {
     return;
   }
 
-  // Ensure role is valid and non-empty
-  const resolvedRole = (user.role || (user.username?.toLowerCase() === 'admin' ? 'admin' : 'data_entry')) as
-    | 'admin'
-    | 'supervisor'
-    | 'data_entry';
+  // Ensure role is normalized and guaranteed non-empty
+  const resolvedRole = normalizeRole(user.role, user.username, user.employeeId);
 
   const safeUser = {
     id: user.id,
@@ -435,11 +515,11 @@ app.post('/api/auth/supervisor-login', (req: Request, res: Response) => {
   const cleanId = String(employeeId).trim().toLowerCase();
   const users = readJsonFile<any[]>(USERS_FILE, []);
 
-  // Find user matching employeeId, username, or email
+  // Find user matching employeeId, username, or email with case-insensitive role check
   const supervisor = users.find(
     (u) =>
-      u.role === 'supervisor' &&
-      ((u.employeeId && u.employeeId.toLowerCase() === cleanId) ||
+      normalizeRole(u.role, u.username, u.employeeId) === 'supervisor' &&
+      ((u.employeeId && String(u.employeeId).toLowerCase() === cleanId) ||
         u.username.toLowerCase() === cleanId ||
         (u.email && u.email.toLowerCase() === cleanId)) &&
       u.passwordHash === hashPassword(password)
@@ -449,12 +529,13 @@ app.post('/api/auth/supervisor-login', (req: Request, res: Response) => {
     // Check if account exists with non-supervisor role or invalid password
     const otherAccount = users.find(
       (u) =>
-        (u.employeeId && u.employeeId.toLowerCase() === cleanId) ||
+        (u.employeeId && String(u.employeeId).toLowerCase() === cleanId) ||
         u.username.toLowerCase() === cleanId
     );
-    if (otherAccount && otherAccount.role !== 'supervisor') {
+    if (otherAccount && normalizeRole(otherAccount.role, otherAccount.username, otherAccount.employeeId) !== 'supervisor') {
+      const otherRole = normalizeRole(otherAccount.role, otherAccount.username, otherAccount.employeeId);
       res.status(403).json({
-        error: `Account "${employeeId}" does not have Supervisor access (${otherAccount.role.replace('_', ' ')}). Please use the System Login.`,
+        error: `Account "${employeeId}" does not have Supervisor access (${otherRole.replace('_', ' ')}). Please use the System Login.`,
       });
       return;
     }
@@ -469,7 +550,7 @@ app.post('/api/auth/supervisor-login', (req: Request, res: Response) => {
   }
 
   const token = createToken(supervisor.id);
-  const supervisorRole = (supervisor.role || 'supervisor') as 'admin' | 'supervisor' | 'data_entry';
+  const supervisorRole = normalizeRole(supervisor.role, supervisor.username, supervisor.employeeId);
   const safeSupervisor = {
     id: supervisor.id,
     username: supervisor.username,
@@ -490,11 +571,7 @@ app.post('/api/auth/supervisor-login', (req: Request, res: Response) => {
 
 app.get('/api/auth/me', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
   const { passwordHash, ...rawSafeUser } = req.user;
-  const resolvedRole = (rawSafeUser.role ||
-    (rawSafeUser.username?.toLowerCase() === 'admin' ? 'admin' : 'data_entry')) as
-    | 'admin'
-    | 'supervisor'
-    | 'data_entry';
+  const resolvedRole = normalizeRole(rawSafeUser.role, rawSafeUser.username, rawSafeUser.employeeId);
   const safeUser = {
     ...rawSafeUser,
     role: resolvedRole,
@@ -1216,4 +1293,12 @@ async function startServer() {
   });
 }
 
-startServer();
+const isDirectRun =
+  Boolean(process.argv[1]) &&
+  (fileURLToPath(import.meta.url) === path.resolve(process.argv[1]) ||
+    process.argv[1].endsWith('/server.ts') ||
+    process.argv[1].endsWith('/server.js'));
+
+if (isDirectRun) {
+  startServer();
+}

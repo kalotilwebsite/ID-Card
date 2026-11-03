@@ -123,29 +123,56 @@ export async function normalizeEmployeeSignature(
   // Clear canvas (transparent)
   ctx.clearRect(0, 0, targetW, targetH);
 
-  // Fit signature with object-fit: contain so all strokes are preserved
-  const srcRatio = img.width / img.height;
-  const targetRatio = targetW / targetH;
+  // If the signature image was captured or uploaded in vertical (portrait) orientation (height > width),
+  // orient it horizontally (landscape) so it appears wider from left to right and shorter from top to bottom,
+  // preserving image strokes without distortion or quality loss.
+  const isPortrait = img.height > img.width;
 
   let dw = targetW;
   let dh = targetH;
   let dx = 0;
   let dy = 0;
 
-  if (srcRatio > targetRatio) {
-    dw = targetW;
-    dh = targetW / srcRatio;
-    dx = 0;
-    dy = (targetH - dh) / 2;
-  } else {
-    dh = targetH;
-    dw = targetH * srcRatio;
-    dx = (targetW - dw) / 2;
-    dy = 0;
-  }
+  if (isPortrait) {
+    const srcRatio = img.height / img.width;
+    const targetRatio = targetW / targetH;
 
-  // Draw signature centered with containment
-  ctx.drawImage(img, 0, 0, img.width, img.height, dx, dy, dw, dh);
+    if (srcRatio > targetRatio) {
+      dw = targetW;
+      dh = targetW / srcRatio;
+      dx = 0;
+      dy = (targetH - dh) / 2;
+    } else {
+      dh = targetH;
+      dw = targetH * srcRatio;
+      dx = (targetW - dw) / 2;
+      dy = 0;
+    }
+
+    ctx.save();
+    ctx.translate(targetW / 2, targetH / 2);
+    ctx.rotate(Math.PI / 2);
+    ctx.drawImage(img, -dh / 2, -dw / 2, dh, dw);
+    ctx.restore();
+  } else {
+    const srcRatio = img.width / img.height;
+    const targetRatio = targetW / targetH;
+
+    if (srcRatio > targetRatio) {
+      dw = targetW;
+      dh = targetW / srcRatio;
+      dx = 0;
+      dy = (targetH - dh) / 2;
+    } else {
+      dh = targetH;
+      dw = targetH * srcRatio;
+      dx = (targetW - dw) / 2;
+      dy = 0;
+    }
+
+    // Draw signature centered with containment
+    ctx.drawImage(img, 0, 0, img.width, img.height, dx, dy, dw, dh);
+  }
 
   // Export as high-resolution transparent PNG
   return canvas.toDataURL('image/png');

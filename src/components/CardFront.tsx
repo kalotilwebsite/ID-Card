@@ -17,6 +17,82 @@ interface CardFrontProps {
   id?: string;
 }
 
+/**
+ * Signature Image display component ensuring portrait (vertical) signatures are
+ * displayed in horizontal (landscape) orientation, wider from left to right and
+ * shorter from top to bottom, preserving original image quality and allocated space.
+ */
+const CardSignatureImage: React.FC<{
+  src: string;
+  alt: string;
+}> = ({ src, alt }) => {
+  const [orientedSrc, setOrientedSrc] = React.useState<string>(src);
+
+  React.useEffect(() => {
+    if (!src) {
+      setOrientedSrc('');
+      return;
+    }
+
+    let isMounted = true;
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      if (!isMounted) return;
+      // If signature image orientation is vertical (portrait: height > width),
+      // change it to horizontal (landscape) so it appears wider from left to right
+      // and shorter from top to bottom, keeping position, allocated space, and quality intact.
+      if (img.naturalHeight > img.naturalWidth) {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = img.naturalHeight;
+          canvas.height = img.naturalWidth;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+            ctx.translate(canvas.width / 2, canvas.height / 2);
+            ctx.rotate(Math.PI / 2);
+            ctx.drawImage(img, -img.naturalWidth / 2, -img.naturalHeight / 2);
+            setOrientedSrc(canvas.toDataURL('image/png'));
+            return;
+          }
+        } catch {
+          // If canvas cannot export, fallback to original
+        }
+      }
+      setOrientedSrc(src);
+    };
+    img.onerror = () => {
+      if (isMounted) setOrientedSrc(src);
+    };
+    img.src = src;
+
+    return () => {
+      isMounted = false;
+    };
+  }, [src]);
+
+  return (
+    <img
+      src={orientedSrc || src}
+      alt={alt}
+      style={{
+        width: '100%',
+        height: '100%',
+        maxWidth: '100%',
+        maxHeight: '100%',
+        objectFit: 'contain',
+        objectPosition: 'center',
+        display: 'block',
+        margin: 'auto',
+      }}
+      className="pointer-events-none select-none"
+      referrerPolicy="no-referrer"
+    />
+  );
+};
+
 export const CardFront: React.FC<CardFrontProps> = ({
   employee,
   templateUrl = FRONT_TEMPLATE_SVG,
@@ -539,21 +615,9 @@ export const CardFront: React.FC<CardFrontProps> = ({
         }}
       >
         {employee.signatureUrl ? (
-          <img
+          <CardSignatureImage
             src={employee.signatureUrl}
             alt={`${employee.name} Signature`}
-            style={{
-              width: '100%',
-              height: '100%',
-              maxWidth: '100%',
-              maxHeight: '100%',
-              objectFit: 'contain',
-              objectPosition: 'center',
-              display: 'block',
-              margin: 'auto',
-            }}
-            className="pointer-events-none select-none"
-            referrerPolicy="no-referrer"
           />
         ) : null}
       </div>

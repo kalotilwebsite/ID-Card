@@ -23,6 +23,13 @@ const DEFAULT_SIGNATURE_CROP: CropRect = {
   h: 60,
 };
 
+const DEFAULT_PHOTO_CROP: CropRect = {
+  x: 20,
+  y: 8,
+  w: 60,
+  h: 84,
+};
+
 export function CameraCaptureModal({
   isOpen,
   onClose,
@@ -38,7 +45,9 @@ export function CameraCaptureModal({
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [isCropping, setIsCropping] = useState(false);
-  const [crop, setCrop] = useState<CropRect>(DEFAULT_SIGNATURE_CROP);
+  const [crop, setCrop] = useState<CropRect>(() =>
+    type === 'photo' ? DEFAULT_PHOTO_CROP : DEFAULT_SIGNATURE_CROP
+  );
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
   const [isLoading, setIsLoading] = useState(true);
@@ -59,6 +68,7 @@ export function CameraCaptureModal({
       setCapturedImage(null);
       setIsCropping(false);
       setCameraError(null);
+      setCrop(type === 'photo' ? DEFAULT_PHOTO_CROP : DEFAULT_SIGNATURE_CROP);
       return;
     }
 
@@ -67,7 +77,7 @@ export function CameraCaptureModal({
     return () => {
       stopCamera();
     };
-  }, [isOpen, facingMode]);
+  }, [isOpen, facingMode, type]);
 
   // Global pointer listeners for smooth dragging and resizing
   useEffect(() => {
@@ -253,61 +263,20 @@ export function CameraCaptureModal({
 
     ctx.drawImage(video, 0, 0, width, height);
 
-    // If passport photo, crop or take clean center 3:4 portrait
-    if (type === 'photo') {
-      const targetAspect = 3 / 4;
-      let cropWidth = width;
-      let cropHeight = width / targetAspect;
-
-      if (cropHeight > height) {
-        cropHeight = height;
-        cropWidth = height * targetAspect;
-      }
-
-      const cropX = (width - cropWidth) / 2;
-      const cropY = (height - cropHeight) / 2;
-
-      const croppedCanvas = document.createElement('canvas');
-      croppedCanvas.width = 450;
-      croppedCanvas.height = 600;
-      const cropCtx = croppedCanvas.getContext('2d');
-      if (cropCtx) {
-        cropCtx.drawImage(
-          canvas,
-          cropX,
-          cropY,
-          cropWidth,
-          cropHeight,
-          0,
-          0,
-          croppedCanvas.width,
-          croppedCanvas.height
-        );
-        const dataUrl = croppedCanvas.toDataURL('image/jpeg', 0.92);
-        setCapturedImage(dataUrl);
-        return;
-      }
-    }
-
     const dataUrl = canvas.toDataURL('image/png');
     setCapturedImage(dataUrl);
 
-    // If signature photo, immediately open smooth image-cropping step
-    if (type === 'signature') {
+    // Immediately open smooth image-cropping step for Employee Photo or Signature
+    if (type === 'photo') {
+      setCrop(DEFAULT_PHOTO_CROP);
+      setIsCropping(true);
+    } else if (type === 'signature') {
       setCrop(DEFAULT_SIGNATURE_CROP);
       setIsCropping(true);
     }
   };
 
-  // User confirms un-cropped photo (type === 'photo')
-  const handleConfirmPhoto = () => {
-    if (capturedImage) {
-      onCapture(capturedImage);
-      onClose();
-    }
-  };
-
-  // User confirms cropped signature (type === 'signature')
+  // User confirms cropped photo or signature
   const handleConfirmCrop = () => {
     if (!capturedImage) return;
 
@@ -334,18 +303,24 @@ export function CameraCaptureModal({
       ctx.imageSmoothingQuality = 'high';
       ctx.drawImage(img, sx, sy, sw, sh, 0, 0, cropCanvas.width, cropCanvas.height);
 
-      const croppedDataUrl = cropCanvas.toDataURL('image/png');
+      const croppedDataUrl =
+        type === 'photo'
+          ? cropCanvas.toDataURL('image/jpeg', 0.95)
+          : cropCanvas.toDataURL('image/png');
+
       onCapture(croppedDataUrl);
       setIsCropping(false);
       setCapturedImage(null);
+      stopCamera();
       onClose();
     };
   };
 
-  // User cancels cropping: discard crop, preserve previously saved signature image
+  // User cancels cropping: discard crop, preserve previously saved image, close modal
   const handleCancelCrop = () => {
     setIsCropping(false);
     setCapturedImage(null);
+    stopCamera();
     onClose();
   };
 
@@ -353,7 +328,10 @@ export function CameraCaptureModal({
   const handleRetakeSnapshot = () => {
     setIsCropping(false);
     setCapturedImage(null);
-    setCrop(DEFAULT_SIGNATURE_CROP);
+    setCrop(type === 'photo' ? DEFAULT_PHOTO_CROP : DEFAULT_SIGNATURE_CROP);
+    if (!stream) {
+      startCamera(facingMode);
+    }
   };
 
   // Start dragging a handle or the box
@@ -376,8 +354,8 @@ export function CameraCaptureModal({
     const clickX = ((e.clientX - rect.left) / rect.width) * 100;
     const clickY = ((e.clientY - rect.top) / rect.height) * 100;
 
-    const w = 60;
-    const h = 40;
+    const w = type === 'photo' ? 50 : 60;
+    const h = type === 'photo' ? 66.7 : 40;
     const x = Math.max(0, Math.min(100 - w, clickX - w / 2));
     const y = Math.max(0, Math.min(100 - h, clickY - h / 2));
     const newCrop = {
@@ -410,11 +388,17 @@ export function CameraCaptureModal({
             </div>
             <div>
               <h3 className="text-sm font-bold text-slate-900">
-                {isCropping ? 'Crop Signature Image' : title}
+                {isCropping
+                  ? type === 'photo'
+                    ? 'Crop Employee Photo'
+                    : 'Crop Signature Image'
+                  : title}
               </h3>
               <p className="text-[11px] text-slate-500">
                 {isCropping
-                  ? 'Drag edges or corners to freely adjust the crop area around your signature'
+                  ? type === 'photo'
+                    ? 'Drag edges or corners to freely adjust the crop area around the employee photo'
+                    : 'Drag edges or corners to freely adjust the crop area around your signature'
                   : type === 'photo'
                   ? 'Align face within the passport framing guide'
                   : 'Capture clear signature against plain background'}
@@ -450,30 +434,67 @@ export function CameraCaptureModal({
               <div className="w-full flex items-center justify-between pb-2 mb-2 border-b border-slate-800 text-xs">
                 <div className="flex items-center gap-1.5 text-slate-300 font-medium">
                   <Crop className="w-3.5 h-3.5 text-emerald-400" />
-                  <span className="text-[11px]">Freeform Crop Area</span>
+                  <span className="text-[11px]">
+                    {type === 'photo' ? 'Photo Crop Presets' : 'Freeform Crop Area'}
+                  </span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setCrop({ x: 5, y: 15, w: 90, h: 70 })}
-                    className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-[11px] text-slate-300 rounded font-medium transition-colors"
-                  >
-                    Wide
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setCrop({ x: 0, y: 0, w: 100, h: 100 })}
-                    className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-[11px] text-slate-300 rounded font-medium transition-colors"
-                  >
-                    Full
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setCrop(DEFAULT_SIGNATURE_CROP)}
-                    className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-[11px] text-slate-300 rounded font-medium transition-colors"
-                  >
-                    Reset
-                  </button>
+                  {type === 'photo' ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setCrop({ x: 25, y: 10, w: 50, h: 66.7 })}
+                        className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-[11px] text-slate-300 rounded font-medium transition-colors"
+                      >
+                        Portrait (3:4)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCrop({ x: 20, y: 10, w: 60, h: 60 })}
+                        className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-[11px] text-slate-300 rounded font-medium transition-colors"
+                      >
+                        Square (1:1)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCrop({ x: 0, y: 0, w: 100, h: 100 })}
+                        className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-[11px] text-slate-300 rounded font-medium transition-colors"
+                      >
+                        Full
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCrop(DEFAULT_PHOTO_CROP)}
+                        className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-[11px] text-slate-300 rounded font-medium transition-colors"
+                      >
+                        Reset
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setCrop({ x: 5, y: 15, w: 90, h: 70 })}
+                        className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-[11px] text-slate-300 rounded font-medium transition-colors"
+                      >
+                        Wide
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCrop({ x: 0, y: 0, w: 100, h: 100 })}
+                        className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-[11px] text-slate-300 rounded font-medium transition-colors"
+                      >
+                        Full
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCrop(DEFAULT_SIGNATURE_CROP)}
+                        className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-[11px] text-slate-300 rounded font-medium transition-colors"
+                      >
+                        Reset
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -574,28 +595,24 @@ export function CameraCaptureModal({
                   <span className="text-[11px] font-semibold text-slate-300">
                     Live Preview:
                   </span>
-                  <div className="bg-white rounded px-2 py-0.5 flex items-center justify-center max-h-11 border border-slate-300 shadow-inner">
+                  <div
+                    className={`rounded px-2 py-0.5 flex items-center justify-center border shadow-inner ${
+                      type === 'photo'
+                        ? 'bg-slate-950 border-slate-700 max-h-16'
+                        : 'bg-white border-slate-300 max-h-11'
+                    }`}
+                  >
                     <canvas
                       ref={previewCanvasRef}
-                      className="max-h-9 max-w-[150px] object-contain"
+                      className={`${
+                        type === 'photo' ? 'max-h-14 max-w-[120px] rounded' : 'max-h-9 max-w-[150px]'
+                      } object-contain`}
                     />
                   </div>
                 </div>
                 <div className="text-[10px] text-slate-400 text-right">
                   <span>{Math.round(crop.w)}% &times; {Math.round(crop.h)}% area</span>
                 </div>
-              </div>
-            </div>
-          ) : capturedImage ? (
-            /* Uncropped Photo Preview (type === 'photo') */
-            <div className="relative w-full h-full flex items-center justify-center p-2 bg-slate-950">
-              <img
-                src={capturedImage}
-                alt="Captured"
-                className="max-h-[380px] max-w-full rounded-lg object-contain shadow-lg border border-slate-700"
-              />
-              <div className="absolute top-4 left-4 bg-emerald-500/90 text-white text-[11px] font-bold px-2.5 py-1 rounded-full shadow flex items-center gap-1.5 backdrop-blur-sm">
-                <Check className="w-3.5 h-3.5" /> Photo Captured
               </div>
             </div>
           ) : (
@@ -669,7 +686,7 @@ export function CameraCaptureModal({
         {/* Action Controls */}
         <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-3">
           {isCropping ? (
-            /* Controls for Signature Cropping Step */
+            /* Controls for Cropping Step (Photo or Signature) */
             <>
               <button
                 type="button"
@@ -694,24 +711,6 @@ export function CameraCaptureModal({
                   <Check className="w-3.5 h-3.5" /> Confirm Crop
                 </button>
               </div>
-            </>
-          ) : capturedImage ? (
-            /* Controls for Photo Preview (type === 'photo') */
-            <>
-              <button
-                type="button"
-                onClick={handleRetakeSnapshot}
-                className="px-4 py-2 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-colors"
-              >
-                <RefreshCw className="w-3.5 h-3.5" /> Retake
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmPhoto}
-                className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors shadow-xs"
-              >
-                <Check className="w-3.5 h-3.5" /> Use Photo
-              </button>
             </>
           ) : (
             /* Controls for Camera Capture */

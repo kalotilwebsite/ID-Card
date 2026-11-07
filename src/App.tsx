@@ -467,7 +467,7 @@ export default function App() {
         cardIssue: formatCardDate(getVal('cardIssue'), '19/10/2026'),
         photoUrl: photoUrl || undefined,
         permanentAddress: getVal('permanentAddress') || 'Mukkhopur, Trishal, Mymensingh',
-        emergencyContact: getVal('emergencyContact') || '01920-694100',
+        emergencyContact: getVal('emergencyContact') || '',
         nationalId: getVal('nationalId') || '',
         bloodGroup: getVal('bloodGroup') || 'O+',
         signatureUrl: signatureUrl || undefined,

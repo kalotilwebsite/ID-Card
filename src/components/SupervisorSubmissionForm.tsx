@@ -77,6 +77,8 @@ export function SupervisorSubmissionForm({
   const [nidWarning, setNidWarning] = useState<string | null>(null);
   const [photoUrl, setPhotoUrl] = useState('');
   const [signatureUrl, setSignatureUrl] = useState('');
+  const [selectedBloodGroup, setSelectedBloodGroup] = useState('O+');
+  const [contactNumber, setContactNumber] = useState('');
 
   // Modals & Capture State
   const [isCameraOpen, setIsCameraOpen] = useState(false);
@@ -172,6 +174,8 @@ export function SupervisorSubmissionForm({
       const res = await apiService.lookupEmployee(targetId);
       if (res.found && res.employee) {
         setEmployee(res.employee);
+        setSelectedBloodGroup(res.employee.bloodGroup || 'O+');
+        setContactNumber(res.employee.emergencyContact || '');
         setAlreadySubmitted(Boolean(res.alreadySubmitted));
         setSubmissionInfo(res.submissionInfo || null);
         if (res.employee.nationalId) {
@@ -290,6 +294,8 @@ export function SupervisorSubmissionForm({
     setNidWarning(null);
     setPhotoUrl('');
     setSignatureUrl('');
+    setSelectedBloodGroup('O+');
+    setContactNumber('');
     setLookupError(null);
     setSubmitError(null);
     setTimeout(() => {
@@ -345,6 +351,8 @@ export function SupervisorSubmissionForm({
         nationalId: nationalId.trim(),
         photoUrl,
         signatureUrl,
+        bloodGroup: selectedBloodGroup,
+        emergencyContact: contactNumber.trim() || employee.emergencyContact || '',
       });
 
       const empName = employee.name;
@@ -632,9 +640,23 @@ export function SupervisorSubmissionForm({
                 <div className="font-mono text-slate-700 mt-0.5">{employee.joiningDate}</div>
               </div>
 
-              <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200/80">
-                <div className="text-[10px] text-slate-500 font-medium">রক্তের গ্রুপ</div>
-                <div className="font-bold text-rose-700 mt-0.5">{employee.bloodGroup}</div>
+              <div className="p-2 bg-slate-50 rounded-lg border border-slate-200/80 flex flex-col justify-between">
+                <label htmlFor="supervisor-blood-group" className="text-[10px] text-slate-500 font-medium">
+                  রক্তের গ্রুপ (Blood Group)
+                </label>
+                <select
+                  id="supervisor-blood-group"
+                  value={selectedBloodGroup}
+                  onChange={(e) => setSelectedBloodGroup(e.target.value)}
+                  disabled={isEntryDisabled || alreadySubmitted}
+                  className="w-full mt-1 bg-white border border-slate-300 rounded px-2 py-1 text-xs font-bold text-rose-700 focus:outline-none focus:border-[#114b3e] focus:ring-1 focus:ring-[#114b3e] disabled:opacity-60 cursor-pointer"
+                >
+                  {['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map((bg) => (
+                    <option key={bg} value={bg}>
+                      {bg}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200/80">
@@ -644,9 +666,19 @@ export function SupervisorSubmissionForm({
                 </div>
               </div>
 
-              <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200/80">
-                <div className="text-[10px] text-slate-500 font-medium">জরুরি যোগাযোগ</div>
-                <div className="font-mono text-slate-700 mt-0.5">{employee.emergencyContact}</div>
+              <div className="p-2 bg-slate-50 rounded-lg border border-slate-200/80 flex flex-col justify-between">
+                <label htmlFor="supervisor-emergency-contact" className="text-[10px] text-slate-500 font-medium">
+                  জরুরি যোগাযোগ (Mobile)
+                </label>
+                <input
+                  id="supervisor-emergency-contact"
+                  type="text"
+                  value={contactNumber}
+                  onChange={(e) => setContactNumber(e.target.value)}
+                  disabled={isEntryDisabled || alreadySubmitted}
+                  placeholder="01XXXXXXXXX"
+                  className="w-full mt-1 bg-white border border-slate-300 rounded px-2 py-1 text-xs font-mono font-semibold text-slate-800 focus:outline-none focus:border-[#114b3e] focus:ring-1 focus:ring-[#114b3e] disabled:opacity-60"
+                />
               </div>
 
               <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200/80 col-span-2 sm:col-span-3 md:col-span-4">

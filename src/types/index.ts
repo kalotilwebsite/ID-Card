@@ -186,7 +186,7 @@ export const DEFAULT_CALIBRATION: CardCalibrationSettings = {
       fontWeight: 'bold',
       color: '#000000',
       textAlign: 'left',
-      whiteoutWidth: 195,
+      whiteoutWidth: 180,
       whiteoutHeight: 20,
     },
     nationalId: {

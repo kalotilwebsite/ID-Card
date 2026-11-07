@@ -123,7 +123,7 @@ export function EmployeeDatabaseSection({ onRefreshData }: EmployeeDatabaseSecti
           jobType: getVal('jobType') || 'Permanent',
           joiningDate: getVal('joiningDate') || '01/03/2026',
           cardIssue: getVal('cardIssue') || '19/10/2026',
-          emergencyContact: getVal('emergencyContact') || '01920-694100',
+          emergencyContact: getVal('emergencyContact') || '',
           permanentAddress: getVal('permanentAddress') || 'Mukkhopur, Trishal, Mymensingh',
           bloodGroup: getVal('bloodGroup') || 'O+',
           nationalId: getVal('nationalId') || '',

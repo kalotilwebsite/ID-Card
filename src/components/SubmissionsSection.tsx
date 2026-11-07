@@ -144,18 +144,23 @@ export function SubmissionsSection({
         photoUrl: sub.photoUrl || undefined,
         permanentAddress: emp.permanentAddress || 'Mukkhopur, Trishal, Mymensingh',
         emergencyContact:
+          (sub as any).emergencyContact ||
           emp.emergencyContact ||
           (emp as any).contactNumber ||
           (emp as any).phone ||
           (emp as any).contact ||
-          '01920-694100',
+          '',
         nationalId:
           sub.nationalId ||
           (sub as any).nid ||
           emp.nationalId ||
           (emp as any).nid ||
-          '01643970731',
-        bloodGroup: emp.bloodGroup || (emp as any).blood_group || 'O+',
+          '',
+        bloodGroup:
+          (sub as any).bloodGroup ||
+          emp.bloodGroup ||
+          (emp as any).blood_group ||
+          'O+',
         signatureUrl: sub.signatureUrl || undefined,
         isValid: true,
         printStatus: sub.printStatus,
@@ -274,18 +279,23 @@ export function SubmissionsSection({
       photoUrl: sub.photoUrl || undefined,
       permanentAddress: emp.permanentAddress || 'Mukkhopur, Trishal, Mymensingh',
       emergencyContact:
+        (sub as any).emergencyContact ||
         emp.emergencyContact ||
         (emp as any).contactNumber ||
         (emp as any).phone ||
         (emp as any).contact ||
-        '01920-694100',
+        '',
       nationalId:
         sub.nationalId ||
         (sub as any).nid ||
         emp.nationalId ||
         (emp as any).nid ||
-        '01643970731',
-      bloodGroup: emp.bloodGroup || (emp as any).blood_group || 'O+',
+        '',
+      bloodGroup:
+        (sub as any).bloodGroup ||
+        emp.bloodGroup ||
+        (emp as any).blood_group ||
+        'O+',
       signatureUrl: sub.signatureUrl || undefined,
       isValid: true,
     };

@@ -24,7 +24,9 @@
       "name": "Data Entry Operator",
       "username": "operator1"
     },
-    "submittedAt": "2026-10-20T06:52:03.489Z"
+    "submittedAt": "2026-10-20T06:52:03.489Z",
+    "emergencyContact": "01920-694100",
+    "bloodGroup": "O+"
   },
   "586666": {
     "id": "sub-1792482493086-393",
@@ -56,9 +58,11 @@
     "submittedAt": "2026-10-20T07:48:13.086Z"
   },
   "586667": {
-    "id": "sub-1792639099263-604",
+    "id": "sub-1794048239064-987",
     "enrollId": "586667",
     "nationalId": "123456789012345",
+    "emergencyContact": "01799-887766",
+    "bloodGroup": "AB+",
     "photoUrl": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
     "signatureUrl": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
     "employee": {
@@ -69,11 +73,12 @@
       "jobType": "Permanent",
       "joiningDate": "10/01/2024",
       "cardIssue": "19/10/2026",
-      "emergencyContact": "01819-876543",
+      "emergencyContact": "01799-887766",
       "permanentAddress": "Kotwali, Mymensingh",
-      "bloodGroup": "B+",
+      "bloodGroup": "AB+",
       "nationalId": "",
-      "importedAt": "2026-10-22T01:56:56.587Z"
+      "importedAt": "2026-11-05T04:58:47.110Z",
+      "updatedAt": "2026-11-07T10:43:42.080Z"
     },
     "submittedBy": {
       "id": "user-supervisor-1",
@@ -82,19 +87,19 @@
       "employeeId": "SUP-2026-01",
       "role": "supervisor"
     },
-    "submittedAt": "2026-10-22T03:18:19.263Z",
+    "submittedAt": "2026-11-07T10:43:59.064Z",
     "printStatus": "printed",
     "printCount": 2,
-    "printedAt": "2026-10-22T03:18:19.288Z",
+    "printedAt": "2026-11-07T10:43:59.090Z",
     "reprintHistory": [
       {
-        "printedAt": "2026-10-22T03:18:19.285Z",
+        "printedAt": "2026-11-07T10:43:59.088Z",
         "printedBy": "System Administrator",
         "action": "initial_print",
         "note": "Test initial print verification"
       },
       {
-        "printedAt": "2026-10-22T03:18:19.288Z",
+        "printedAt": "2026-11-07T10:43:59.090Z",
         "printedBy": "System Administrator",
         "action": "reprint",
         "note": "Card damaged in packaging; reprint requested"

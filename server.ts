@@ -859,6 +859,24 @@ app.put('/api/master-employees/:enrollId', authenticateToken, requireTabAccess('
   master[matchedKey].updatedAt = new Date().toISOString();
 
   writeJsonFile(MASTER_FILE, master);
+
+  // Keep any existing submissions in sync so their cards reflect updated mobile number & blood group
+  const submissions = readJsonFile<Record<string, any>>(SUBMISSIONS_FILE, {});
+  const subKey = Object.keys(submissions).find(
+    (k) =>
+      k.trim().toLowerCase() === targetId.toLowerCase() ||
+      String(submissions[k]?.enrollId || '').trim().toLowerCase() === targetId.toLowerCase()
+  );
+  if (subKey && submissions[subKey]) {
+    if (submissions[subKey].employee) {
+      submissions[subKey].employee.emergencyContact = master[matchedKey].emergencyContact;
+      submissions[subKey].employee.bloodGroup = master[matchedKey].bloodGroup;
+    }
+    submissions[subKey].emergencyContact = master[matchedKey].emergencyContact;
+    submissions[subKey].bloodGroup = master[matchedKey].bloodGroup;
+    writeJsonFile(SUBMISSIONS_FILE, submissions);
+  }
+
   res.json({
     success: true,
     message: `Employee ${master[matchedKey].enrollId} updated successfully (Contact Number & Blood Group).`,
@@ -944,7 +962,7 @@ app.get('/api/lookup-employee/:enrollId', authenticateToken, (req: Authenticated
 
 // Server-side duplicate protection & saving
 app.post('/api/submissions', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
-  const { enrollId, nationalId, photoUrl, signatureUrl } = req.body;
+  const { enrollId, nationalId, photoUrl, signatureUrl, bloodGroup, emergencyContact } = req.body;
 
   // Enforce Data Entry tab permissions
   if (req.user?.role === 'data_entry') {
@@ -1009,6 +1027,26 @@ app.post('/api/submissions', authenticateToken, (req: AuthenticatedRequest, res:
     return;
   }
 
+  // Update employee record with supervisor-entered blood group and mobile number if provided
+  let masterUpdated = false;
+  if (bloodGroup && typeof bloodGroup === 'string' && bloodGroup.trim()) {
+    const validBloodGroups = ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'];
+    const bgUpper = bloodGroup.trim().toUpperCase();
+    if (validBloodGroups.includes(bgUpper)) {
+      masterEmp.bloodGroup = bgUpper;
+      masterUpdated = true;
+    }
+  }
+  if (emergencyContact !== undefined && typeof emergencyContact === 'string' && emergencyContact.trim()) {
+    masterEmp.emergencyContact = emergencyContact.trim();
+    masterUpdated = true;
+  }
+  if (masterUpdated) {
+    masterEmp.updatedAt = new Date().toISOString();
+    master[cleanEnrollId] = masterEmp;
+    writeJsonFile(MASTER_FILE, master);
+  }
+
   // SERVER-SIDE DUPLICATE PROTECTION: Block if already submitted
   const submissions = readJsonFile<Record<string, any>>(SUBMISSIONS_FILE, {});
   if (submissions[cleanEnrollId]) {
@@ -1035,9 +1073,11 @@ app.post('/api/submissions', authenticateToken, (req: AuthenticatedRequest, res:
     id: `sub-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
     enrollId: cleanEnrollId,
     nationalId: String(nationalId).trim(),
+    emergencyContact: masterEmp.emergencyContact,
+    bloodGroup: masterEmp.bloodGroup,
     photoUrl: String(photoUrl).trim(),
     signatureUrl: String(signatureUrl).trim(),
-    employee: masterEmp,
+    employee: { ...masterEmp },
     submittedBy: {
       id: req.user.id,
       name: req.user.name,

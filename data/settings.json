@@ -1,5 +1,8 @@
 {
   "supervisorSuccessMessage": "Card data successfully recorded for Shift A! Admin office will print by 4:00 PM.",
   "loginBackgroundImage": "",
-  "supervisorEntryEnabled": true
+  "supervisorEntryEnabled": true,
+  "supervisorPhotoCameraEnabled": true,
+  "supervisorSignatureCameraEnabled": true,
+  "supervisorSignaturePadEnabled": true
 }

@@ -358,6 +358,8 @@ export const apiService = {
     nationalId: string;
     photoUrl: string;
     signatureUrl: string;
+    bloodGroup?: string;
+    emergencyContact?: string;
   }): Promise<{ success: boolean; message: string; submission: any }> {
     return request('/api/submissions', {
       method: 'POST',

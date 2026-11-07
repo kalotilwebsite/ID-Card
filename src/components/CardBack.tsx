@@ -44,7 +44,11 @@ export const CardBack: React.FC<CardBackProps> = ({
       (employee as any).phone ||
       (employee as any).contact ||
       (employee as any)?.employee?.emergencyContact ||
-      '01920-694100'
+      (employee as any)?.employee?.contactNumber ||
+      (employee as any)?.employee?.mobileNumber ||
+      (employee as any)?.mobileNumber ||
+      (employee as any)?.mobile ||
+      ''
   ).trim();
 
   const nid = String(
@@ -118,7 +122,9 @@ export const CardBack: React.FC<CardBackProps> = ({
           fontSize = Math.min(10.5, 10.5 * (13 / contactLength));
         }
 
-        const whiteoutW = Math.max(activeCalibration.emergencyContact.whiteoutWidth || 182, 195);
+        const whiteoutW = activeCalibration.emergencyContact.whiteoutWidth
+          ? Math.min(activeCalibration.emergencyContact.whiteoutWidth, 180)
+          : 180;
 
         return (
           <>
